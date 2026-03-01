@@ -5,6 +5,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatPrecio } from "@/lib/utils";
 import { Plus, Package, AlertTriangle } from "lucide-react";
+import ProductoAcciones from "@/components/productos/ProductoAcciones";
 
 export const metadata: Metadata = { title: "Productos" };
 
@@ -65,7 +66,7 @@ export default async function ProductosPage({
       </div>
 
       {/* Filtros */}
-      <div className="card p-4 flex flex-wrap gap-3">
+      <div className="card p-4">
         <form className="flex flex-wrap gap-3 w-full">
           <input
             type="search"
@@ -90,13 +91,16 @@ export default async function ProductosPage({
             />
             Solo stock bajo
           </label>
-          <button type="submit" className="rounded-lg bg-gray-100 dark:bg-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+          <button
+            type="submit"
+            className="rounded-lg bg-gray-100 dark:bg-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
             Filtrar
           </button>
         </form>
       </div>
 
-      {/* Tabla de productos */}
+      {/* Tabla */}
       {productosFiltrados.length === 0 ? (
         <div className="card py-20 text-center">
           <Package className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
@@ -129,7 +133,11 @@ export default async function ProductosPage({
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           {producto.imagen ? (
-                            <img src={producto.imagen} alt={producto.nombre} className="h-9 w-9 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
+                            <img
+                              src={producto.imagen}
+                              alt={producto.nombre}
+                              className="h-9 w-9 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
+                            />
                           ) : (
                             <div className="h-9 w-9 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
                               <Package className="h-4 w-4 text-gray-400" />
@@ -155,13 +163,11 @@ export default async function ProductosPage({
                           {producto.stock} {producto.unidad ?? "u."}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <Link
-                          href={`/productos/${producto.id}/editar`}
-                          className="text-xs font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400"
-                        >
-                          Editar
-                        </Link>
+                      <td className="px-4 py-3">
+                        <ProductoAcciones
+                          productoId={producto.id}
+                          productoNombre={producto.nombre}
+                        />
                       </td>
                     </tr>
                   );

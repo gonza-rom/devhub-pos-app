@@ -1,37 +1,57 @@
 // app/api/productos/route.ts
+// ⚠️  Este archivo REEMPLAZA al route.ts existente en el proyecto.
+//     Mantiene la lógica del JMR pero agrega multi-tenancy y TypeScript.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext, verificarLimiteProductos } from "@/lib/tenant";
 
-// GET /api/productos
-// Listar productos del tenant con búsqueda y filtros
+// Helper: string vacío → null
+function toNullIfEmpty(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+// ── GET /api/productos ─────────────────────────────────────────────────────
+
 export async function GET(req: NextRequest) {
   try {
     const { tenantId } = await getTenantContext();
     const { searchParams } = new URL(req.url);
 
-    const busqueda = searchParams.get("q") ?? "";
-    const categoriaId = searchParams.get("categoriaId");
-    const soloActivos = searchParams.get("activos") !== "false";
-    const stockBajo = searchParams.get("stockBajo") === "true";
-    const page = parseInt(searchParams.get("page") ?? "1");
-    const limit = parseInt(searchParams.get("limit") ?? "50");
-    const skip = (page - 1) * limit;
+    // Paginación
+    const page     = Math.max(1, parseInt(searchParams.get("page")     ?? "1"));
+    const pageSize = Math.min(50, parseInt(searchParams.get("pageSize") ?? "20"));
+    const skip     = (page - 1) * pageSize;
 
-    const where = {
-      tenantId,
-      ...(soloActivos && { activo: true }),
-      ...(categoriaId && { categoriaId }),
-      ...(stockBajo && { stock: { lte: prisma.producto.fields.stockMinimo } }),
-      ...(busqueda && {
-        OR: [
-          { nombre:         { contains: busqueda, mode: "insensitive" as const } },
-          { codigoProducto: { contains: busqueda, mode: "insensitive" as const } },
-          { codigoBarras:   { contains: busqueda, mode: "insensitive" as const } },
-        ],
-      }),
-    };
+    // Filtros (compatibles con JMR)
+    const busqueda    = searchParams.get("busqueda") ?? searchParams.get("q") ?? "";
+    const categoriaId = searchParams.get("categoria") ?? searchParams.get("categoriaId") ?? "";
+    const stockBajo   = searchParams.get("stockBajo") === "true";
+    const soloActivos = searchParams.get("activos") !== "false";
+    const ordenar     = searchParams.get("ordenar") ?? "nombre";
+
+    const where: any = { tenantId };
+
+    if (soloActivos) where.activo = true;
+    if (stockBajo) where.stock = { lte: 5 }; // Aproximación; el filtro exacto es post-query
+
+    if (busqueda.trim()) {
+      where.OR = [
+        { nombre:         { contains: busqueda, mode: "insensitive" } },
+        { descripcion:    { contains: busqueda, mode: "insensitive" } },
+        { codigoProducto: { contains: busqueda, mode: "insensitive" } },
+        { codigoBarras:   { contains: busqueda, mode: "insensitive" } },
+      ];
+    }
+
+    if (categoriaId) where.categoriaId = categoriaId; // cuid (string), no parseInt
+
+    let orderBy: any = { nombre: "asc" };
+    if (ordenar === "precio-asc")  orderBy = { precio: "asc" };
+    if (ordenar === "precio-desc") orderBy = { precio: "desc" };
+    if (ordenar === "recientes")   orderBy = { createdAt: "desc" };
 
     const [productos, total] = await Promise.all([
       prisma.producto.findMany({
@@ -40,17 +60,22 @@ export async function GET(req: NextRequest) {
           categoria: { select: { id: true, nombre: true } },
           proveedor:  { select: { id: true, nombre: true } },
         },
-        orderBy: { nombre: "asc" },
+        orderBy,
         skip,
-        take: limit,
+        take: pageSize,
       }),
       prisma.producto.count({ where }),
     ]);
 
+    const totalPages = Math.ceil(total / pageSize);
+
     return NextResponse.json({
       ok: true,
       data: productos,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      // Mantener "productos" para compatibilidad con código JMR que lo lea así
+      productos,
+      meta: { page, pageSize, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
+      pagination: { page, pageSize, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
     });
 
   } catch (error) {
@@ -59,46 +84,84 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/productos
-// Crear un nuevo producto
+// ── POST /api/productos ────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   try {
     const { tenantId, usuarioId } = await getTenantContext();
 
-    // Verificar límite del plan
+    // Verificar límite del plan (FREE = 50 productos)
     await verificarLimiteProductos(tenantId);
 
     const body = await req.json();
     const {
-      nombre, descripcion, codigoProducto, codigoBarras,
-      precio, costo, stock, stockMinimo, unidad,
+      nombre, descripcion, precio, stock, stockMinimo,
       imagen, imagenes, categoriaId, proveedorId,
+      codigoBarras, codigoProducto, costo, unidad,
     } = body;
 
     // Validaciones
-    if (!nombre || typeof nombre !== "string") {
-      return NextResponse.json({ ok: false, error: "El nombre es requerido" }, { status: 400 });
+    if (!nombre || precio === undefined || precio === "") {
+      return NextResponse.json(
+        { ok: false, error: "Nombre y precio son requeridos" },
+        { status: 400 }
+      );
     }
-    if (!precio || precio <= 0) {
-      return NextResponse.json({ ok: false, error: "El precio debe ser mayor a 0" }, { status: 400 });
+    if (parseFloat(precio) <= 0) {
+      return NextResponse.json(
+        { ok: false, error: "El precio debe ser mayor a 0" },
+        { status: 400 }
+      );
     }
+
+    const codigoProductoFinal = toNullIfEmpty(codigoProducto);
+    const codigoBarrasFinal   = toNullIfEmpty(codigoBarras);
+
+    // Verificar unicidad por tenant (no global)
+    if (codigoProductoFinal) {
+      const existente = await prisma.producto.findFirst({
+        where: { tenantId, codigoProducto: codigoProductoFinal },
+      });
+      if (existente) {
+        return NextResponse.json(
+          { ok: false, error: `El código "${codigoProductoFinal}" ya está en uso por: ${existente.nombre}` },
+          { status: 409 }
+        );
+      }
+    }
+
+    if (codigoBarrasFinal) {
+      const existente = await prisma.producto.findFirst({
+        where: { tenantId, codigoBarras: codigoBarrasFinal },
+      });
+      if (existente) {
+        return NextResponse.json(
+          { ok: false, error: `El código de barras "${codigoBarrasFinal}" ya está en uso por: ${existente.nombre}` },
+          { status: 409 }
+        );
+      }
+    }
+
+    const imagenPrincipal =
+      toNullIfEmpty(imagen) ??
+      (Array.isArray(imagenes) && imagenes.length > 0 ? imagenes[0] : null);
 
     const producto = await prisma.producto.create({
       data: {
         tenantId,
         nombre:         nombre.trim(),
-        descripcion:    descripcion?.trim(),
-        codigoProducto: codigoProducto?.trim() || null,
-        codigoBarras:   codigoBarras?.trim() || null,
+        descripcion:    toNullIfEmpty(descripcion),
         precio:         parseFloat(precio),
         costo:          costo ? parseFloat(costo) : null,
         stock:          parseInt(stock) || 0,
-        stockMinimo:    parseInt(stockMinimo) || 5,
-        unidad:         unidad?.trim() || null,
-        imagen:         imagen || null,
-        imagenes:       imagenes || [],
-        categoriaId:    categoriaId || null,
-        proveedorId:    proveedorId || null,
+        stockMinimo:    stockMinimo !== undefined && stockMinimo !== "" ? parseInt(stockMinimo) : 5,
+        unidad:         toNullIfEmpty(unidad),
+        imagen:         imagenPrincipal,
+        imagenes:       Array.isArray(imagenes) ? imagenes : [],
+        categoriaId:    toNullIfEmpty(categoriaId),
+        proveedorId:    toNullIfEmpty(proveedorId),
+        codigoProducto: codigoProductoFinal,
+        codigoBarras:   codigoBarrasFinal,
       },
       include: {
         categoria: { select: { id: true, nombre: true } },
@@ -106,7 +169,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Si tiene stock inicial, crear movimiento de entrada
+    // Registrar movimiento de stock inicial
     if (producto.stock > 0) {
       await prisma.movimiento.create({
         data: {
@@ -127,12 +190,18 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     if (error.code === "P2002") {
-      return NextResponse.json(
-        { ok: false, error: "Ya existe un producto con ese código" },
-        { status: 409 }
-      );
+      const field = error.meta?.target?.[0];
+      const msg =
+        field === "codigoBarras"   ? "El código de barras ya existe en otro producto" :
+        field === "codigoProducto" ? "El código interno ya existe en otro producto" :
+        "Ya existe un producto con ese código";
+      return NextResponse.json({ ok: false, error: msg }, { status: 409 });
+    }
+    // Error de límite de plan
+    if (error.message?.includes("Límite de productos")) {
+      return NextResponse.json({ ok: false, error: error.message }, { status: 403 });
     }
     console.error("[POST /api/productos]", error);
-    return NextResponse.json({ ok: false, error: error.message ?? "Error al crear producto" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Error al crear producto" }, { status: 500 });
   }
 }
