@@ -3,8 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, User, ChevronDown } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { LogOut, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RolTenant } from "@/types";
 
@@ -27,20 +26,21 @@ export default function Topbar({ nombreUsuario, emailUsuario, rolUsuario }: Prop
 
   async function handleLogout() {
     setCargandoLogout(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
+
+    // Llamamos al endpoint que cierra la sesión de Supabase
+    // Y borra la cookie de tenant firmada
+    await fetch("/api/auth/logout", { method: "POST" });
+
     router.push("/auth/login");
     router.refresh();
   }
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6">
-      {/* Título dinámico (mobile: logo) */}
       <div className="flex items-center gap-2 md:hidden">
         <span className="font-semibold text-gray-900 dark:text-gray-100">DevHub POS</span>
       </div>
 
-      {/* Espacio vacío en desktop para empujar el menú a la derecha */}
       <div className="hidden md:block" />
 
       {/* Menú de usuario */}
@@ -63,20 +63,14 @@ export default function Topbar({ nombreUsuario, emailUsuario, rolUsuario }: Prop
           <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", menuAbierto && "rotate-180")} />
         </button>
 
-        {/* Dropdown */}
         {menuAbierto && (
           <>
-            {/* Overlay invisible para cerrar al hacer click fuera */}
             <div className="fixed inset-0 z-10" onClick={() => setMenuAbierto(false)} />
-
             <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1">
-              {/* Info del usuario */}
               <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
                 <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{nombreUsuario}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{emailUsuario}</p>
               </div>
-
-              {/* Opciones */}
               <button
                 onClick={handleLogout}
                 disabled={cargandoLogout}

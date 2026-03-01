@@ -1,9 +1,11 @@
 // middleware.ts
+// Lee la cookie de sesión firmada (JWT) para inyectar tenantId y rol
+// sin necesidad de Prisma. Compatible con Edge Runtime.
+
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
-import { prisma } from "@/lib/prisma";
+import { getTenantSessionFromRequest } from "@/lib/session";
 
-// Rutas que NO necesitan auth
 const PUBLIC_PATHS = [
   "/auth/login",
   "/auth/registro",
@@ -21,52 +23,47 @@ function isPublic(pathname: string): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Dejar pasar archivos estáticos y rutas públicas sin procesar
   if (isPublic(pathname)) {
     const { supabaseResponse } = await updateSession(request);
     return supabaseResponse;
   }
 
-  // Refrescar sesión y obtener user
+  // 1. Verificar sesión de Supabase (refresca el token si hace falta)
   const { supabaseResponse, user } = await updateSession(request);
 
-  // Sin sesión → login
   if (!user) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
+    url.searchParams.set("redirect", pathname);
     return NextResponse.redirect(url);
   }
 
-  // Buscar el tenant del usuario
-  const usuarioTenant = await prisma.usuarioTenant.findUnique({
-    where: { supabaseId: user.id },
-    select: { tenantId: true, rol: true, activo: true, nombre: true },
-  });
+  // 2. Leer la cookie de tenant firmada (sin tocar la DB)
+  const tenantSession = await getTenantSessionFromRequest(request);
 
-  // Si no tiene tenant todavía (recién registrado, Prisma no terminó)
-  // devolvemos la response de supabase y dejamos que Next.js intente de nuevo
-  if (!usuarioTenant || !usuarioTenant.activo) {
-    // Solo redirigir a onboarding si no es ya esa ruta
-    if (!pathname.startsWith("/onboarding")) {
+  // Si no hay cookie de tenant → mandar a regenerarla
+  if (!tenantSession) {
+    if (!pathname.startsWith("/api/auth/refresh-session")) {
       const url = request.nextUrl.clone();
-      url.pathname = "/onboarding";
+      url.pathname = "/api/auth/refresh-session";
+      url.searchParams.set("redirect", pathname);
       return NextResponse.redirect(url);
     }
     return supabaseResponse;
   }
 
-  // Inyectar tenantId y datos del usuario en los headers
+  // 3. Inyectar datos del tenant en los headers (sin queries a DB 🎉)
   const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-tenant-id",   usuarioTenant.tenantId);
-  requestHeaders.set("x-user-id",     user.id);
-  requestHeaders.set("x-user-rol",    usuarioTenant.rol);
-  requestHeaders.set("x-user-nombre", usuarioTenant.nombre);
+  requestHeaders.set("x-tenant-id",   tenantSession.tenantId);
+  requestHeaders.set("x-user-id",     tenantSession.usuarioId);
+  requestHeaders.set("x-user-rol",    tenantSession.rol);
+  requestHeaders.set("x-user-nombre", tenantSession.nombre);
 
   const response = NextResponse.next({
     request: { headers: requestHeaders },
   });
 
-  // Pasar las cookies de Supabase a la respuesta
+  // Pasar cookies de Supabase
   supabaseResponse.cookies.getAll().forEach((cookie) => {
     response.cookies.set(cookie.name, cookie.value, cookie);
   });

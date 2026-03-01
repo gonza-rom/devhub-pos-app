@@ -1,19 +1,19 @@
 // app/(app)/dashboard/page.tsx
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { getTenantId } from "@/lib/tenant";
 import { formatPrecio } from "@/lib/utils";
 import { ShoppingCart, TrendingUp, Package, AlertTriangle } from "lucide-react";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
-  const headersList = await headers();
-  const tenantId = headersList.get("x-tenant-id");
-
-  // Si el middleware no inyectó el tenantId, redirigir al login
-  if (!tenantId) {
+  // getTenantId() resuelve el tenantId desde Prisma usando el supabaseId del header
+  let tenantId: string;
+  try {
+    tenantId = await getTenantId();
+  } catch {
     redirect("/auth/login");
   }
 

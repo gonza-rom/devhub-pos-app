@@ -1,13 +1,13 @@
 // app/api/auth/registro/route.ts
-// Crea el usuario en Supabase Auth + el Tenant y UsuarioTenant en Prisma
-// Es una transaction: si algo falla, todo se revierte
+// Crea el usuario en Supabase Auth + el Tenant y UsuarioTenant en Prisma,
+// y setea la cookie de sesión firmada.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
 import { toSlug } from "@/lib/utils";
+import { crearTenantSession, setTenantCookie } from "@/lib/session";
 
-// Usamos el service role para crear el user en Supabase desde el servidor
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { nombreComercio, nombreUsuario, email, password } = body;
 
-    // Validaciones básicas
     if (!nombreComercio || !nombreUsuario || !email || !password) {
       return NextResponse.json({ ok: false, error: "Todos los campos son requeridos" }, { status: 400 });
     }
@@ -31,7 +30,7 @@ export async function POST(req: NextRequest) {
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Sin verificación por email en desarrollo
+      email_confirm: true,
     });
 
     if (authError) {
@@ -42,12 +41,10 @@ export async function POST(req: NextRequest) {
     }
 
     const supabaseUserId = authData.user.id;
-
-    // 2. Crear Tenant + UsuarioTenant en Prisma (transacción)
     const slug = await generarSlugUnico(nombreComercio);
 
-    await prisma.$transaction(async (tx) => {
-      // Crear el tenant (el comercio)
+    // 2. Crear Tenant + UsuarioTenant en Prisma (transacción)
+    const { tenant, usuarioTenant } = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           nombre: nombreComercio,
@@ -57,28 +54,39 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Crear el usuario vinculado al tenant como PROPIETARIO
-      await tx.usuarioTenant.create({
+      const usuarioTenant = await tx.usuarioTenant.create({
         data: {
-          tenantId: tenant.id,
+          tenantId:  tenant.id,
           supabaseId: supabaseUserId,
-          nombre: nombreUsuario,
+          nombre:    nombreUsuario,
           email,
-          rol: "PROPIETARIO",
+          rol:       "PROPIETARIO",
         },
       });
 
-      // Crear la suscripción FREE inicial
       await tx.suscripcion.create({
         data: {
           tenantId: tenant.id,
-          plan: "FREE",
-          estado: "authorized",
+          plan:     "FREE",
+          estado:   "authorized",
         },
       });
+
+      return { tenant, usuarioTenant };
     });
 
-    return NextResponse.json({ ok: true }, { status: 201 });
+    // 3. Crear y setear la cookie de sesión firmada
+    const token = await crearTenantSession({
+      tenantId:  tenant.id,
+      usuarioId: supabaseUserId,
+      rol:       usuarioTenant.rol,
+      nombre:    usuarioTenant.nombre,
+    });
+
+    const response = NextResponse.json({ ok: true }, { status: 201 });
+    setTenantCookie(response, token);
+
+    return response;
 
   } catch (error) {
     console.error("[API /registro] Error:", error);
@@ -89,7 +97,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Genera un slug único. Si "jmr" ya existe, prueba "jmr-2", "jmr-3", etc.
 async function generarSlugUnico(nombre: string): Promise<string> {
   const base = toSlug(nombre);
   let slug = base;

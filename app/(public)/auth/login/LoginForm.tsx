@@ -4,7 +4,6 @@
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { Store, Eye, EyeOff } from "lucide-react";
 
 function LoginFormInner() {
@@ -22,21 +21,32 @@ function LoginFormInner() {
     setCargando(true);
     setError("");
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      // Llamamos al endpoint del servidor que hace el login de Supabase
+      // Y setea la cookie de tenant firmada en la misma respuesta
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (error) {
-      setError(
-        error.message === "Invalid login credentials"
-          ? "Email o contraseña incorrectos"
-          : "Error al iniciar sesión. Intentá de nuevo."
-      );
+      const data = await res.json();
+
+      if (!data.ok) {
+        setError(data.error ?? "Error al iniciar sesión");
+        setCargando(false);
+        return;
+      }
+
+      // Login OK → redirigir. router.refresh() hace que Next.js
+      // relea las cookies y el middleware pueda leer la nueva cookie de tenant.
+      router.push(redirectTo);
+      router.refresh();
+
+    } catch {
+      setError("Error de conexión. Intentá de nuevo.");
       setCargando(false);
-      return;
     }
-
-    router.push(redirectTo);
-    router.refresh();
   }
 
   return (
@@ -90,9 +100,7 @@ function LoginFormInner() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   tabIndex={-1}
                 >
-                  {verPassword
-                    ? <EyeOff className="h-4 w-4" />
-                    : <Eye className="h-4 w-4" />}
+                  {verPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
@@ -127,7 +135,6 @@ function LoginFormInner() {
   );
 }
 
-// Suspense requerido por useSearchParams en Next.js 15
 export default function LoginForm() {
   return (
     <Suspense>
