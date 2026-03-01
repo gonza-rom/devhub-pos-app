@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --sidebar-width: 256px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Scrollbar personalizado */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400 dark:bg-gray-500;
+  }
+}
+
+@layer components {
+  /* Input base */
+  .input-base {
+    @apply w-full rounded-lg border border-gray-300 dark:border-gray-600 
+           bg-white dark:bg-gray-800 
+           px-3 py-2 text-sm
+           text-gray-900 dark:text-gray-100
+           placeholder:text-gray-400 dark:placeholder:text-gray-500
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors;
+  }
+
+  /* Label base */
+  .label-base {
+    @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1;
+  }
+
+  /* Card base */
+  .card {
+    @apply bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm;
+  }
+
+  /* Badge de stock bajo */
+  .badge-danger {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+           bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400;
+  }
+
+  .badge-success {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+           bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400;
+  }
+
+  .badge-warning {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+           bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400;
+  }
+}

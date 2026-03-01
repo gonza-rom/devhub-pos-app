@@ -1,0 +1,271 @@
+// prisma/schema.prisma
+// DevHub POS — Schema Multi-Tenant
+// ──────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ══════════════════════════════════════════════════════════════
+// ENUMS
+// ══════════════════════════════════════════════════════════════
+
+// Planes disponibles en la plataforma
+enum PlanTipo {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+// Roles dentro de un tenant (comercio)
+enum RolTenant {
+  PROPIETARIO    // Puede gestionar plan, usuarios y todo
+  ADMINISTRADOR  // Acceso total al negocio
+  EMPLEADO       // Solo ventas y consultas
+}
+
+// Tipo de movimiento de stock
+enum TipoMovimiento {
+  ENTRADA   // Carga de stock manual
+  SALIDA    // Egreso manual de stock
+  VENTA     // Descuento automático por venta
+  AJUSTE    // Corrección de inventario
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODELOS DE PLATAFORMA (globales, sin tenantId)
+// ══════════════════════════════════════════════════════════════
+
+/// Representa un comercio suscripto a la plataforma
+model Tenant {
+  id        String   @id @default(cuid())
+  nombre    String
+  email     String   @unique
+  // slug único: usado para identificar al tenant en URLs o cookies
+  slug      String   @unique
+  logoUrl   String?
+  telefono  String?
+  direccion String?
+  ciudad    String?
+  plan      PlanTipo @default(FREE)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  suscripcion   Suscripcion?
+  usuarios      UsuarioTenant[]
+  productos     Producto[]
+  ventas        Venta[]
+  movimientos   Movimiento[]
+  categorias    Categoria[]
+  proveedores   Proveedor[]
+  precios       PrecioHistorico[]
+}
+
+/// Suscripción activa de un tenant con Mercado Pago
+model Suscripcion {
+  id                 String    @id @default(cuid())
+  tenantId           String    @unique
+  plan               PlanTipo
+  // Estado: authorized | paused | cancelled | pending
+  estado             String    @default("pending")
+  mpPreapprovalId    String?   // ID del Preapproval en Mercado Pago
+  mpSubscriptionId   String?
+  proximoVencimiento DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Usuario vinculado a un tenant (puede haber múltiples por comercio)
+model UsuarioTenant {
+  id         String    @id @default(cuid())
+  tenantId   String
+  // UUID del user en Supabase Auth (el id que devuelve session.user.id)
+  supabaseId String    @unique
+  nombre     String
+  email      String
+  rol        RolTenant @default(EMPLEADO)
+  activo     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([supabaseId])
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODELOS DE NEGOCIO (todos tienen tenantId)
+// ══════════════════════════════════════════════════════════════
+
+/// Categoría de productos del tenant
+model Categoria {
+  id          String     @id @default(cuid())
+  tenantId    String
+  nombre      String
+  descripcion String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productos Producto[]
+
+  @@unique([tenantId, nombre])
+  @@index([tenantId])
+}
+
+/// Proveedor del tenant
+model Proveedor {
+  id        String   @id @default(cuid())
+  tenantId  String
+  nombre    String
+  telefono  String?
+  email     String?
+  direccion String?
+  notas     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productos Producto[]
+
+  @@index([tenantId])
+}
+
+/// Producto del inventario del tenant
+model Producto {
+  id             String   @id @default(cuid())
+  tenantId       String                          // AISLAMIENTO MULTI-TENANT
+  nombre         String
+  descripcion    String?
+  codigoProducto String?                         // Código interno
+  codigoBarras   String?                         // EAN / código de barras
+  precio         Float
+  costo          Float?                          // Precio de costo (para margen)
+  stock          Int      @default(0)
+  stockMinimo    Int      @default(5)            // Alerta de stock bajo
+  unidad         String?                         // "kg", "litro", "unidad", etc.
+  imagen         String?                         // URL principal (Cloudinary)
+  imagenes       String[] @default([])           // URLs adicionales
+  activo         Boolean  @default(true)
+  categoriaId    String?
+  proveedorId    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoria Categoria?        @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  proveedor Proveedor?        @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  ventaItems VentaItem[]
+  movimientos Movimiento[]
+  precios    PrecioHistorico[]
+
+  @@unique([tenantId, codigoProducto])
+  @@unique([tenantId, codigoBarras])
+  @@index([tenantId])
+  @@index([tenantId, activo])
+  @@index([tenantId, categoriaId])
+}
+
+/// Historial de cambios de precio de un producto
+model PrecioHistorico {
+  id          String   @id @default(cuid())
+  tenantId    String
+  productoId  String
+  precioViejo Float
+  precioNuevo Float
+  motivo      String?
+  usuarioId   String?  // supabaseId del usuario que hizo el cambio
+  createdAt   DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([productoId])
+}
+
+/// Venta registrada en el POS
+model Venta {
+  id            String   @id @default(cuid())
+  tenantId      String                          // AISLAMIENTO MULTI-TENANT
+  total         Float
+  subtotal      Float?
+  descuento     Float?   @default(0)
+  metodoPago    String                          // "efectivo", "debito", "credito", "transferencia"
+  clienteNombre String?
+  clienteDni    String?
+  observaciones String?
+  usuarioId     String?                         // supabaseId del cajero
+  usuarioNombre String?                         // nombre del cajero (snapshot)
+  createdAt     DateTime @default(now())
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items  VentaItem[]
+  movimientos Movimiento[]
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, metodoPago])
+}
+
+/// Ítem individual dentro de una venta
+model VentaItem {
+  id         String @id @default(cuid())
+  ventaId    String
+  productoId String
+  // Snapshot del nombre por si el producto se elimina
+  nombre     String
+  cantidad   Int
+  precioUnit Float
+  subtotal   Float
+
+  venta    Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Restrict)
+
+  @@index([ventaId])
+  @@index([productoId])
+}
+
+/// Movimiento de stock (entrada, salida, venta, ajuste)
+model Movimiento {
+  id                String         @id @default(cuid())
+  tenantId          String                        // AISLAMIENTO MULTI-TENANT
+  productoId        String
+  productoNombre    String                        // Snapshot del nombre
+  tipo              TipoMovimiento
+  cantidad          Int
+  stockAnterior     Int?                          // Stock antes del movimiento
+  stockResultante   Int?                          // Stock después
+  motivo            String?
+  ventaId           String?                       // Si fue generado por una venta
+  usuarioId         String?                       // supabaseId del usuario
+  usuarioNombre     String?                       // Nombre del usuario (snapshot)
+  // Cancelación
+  cancelado         Boolean        @default(false)
+  motivoCancelacion String?
+  canceladoPor      String?        // supabaseId del que canceló
+  canceladoAt       DateTime?
+  createdAt         DateTime       @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  producto Producto @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  venta    Venta?   @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, productoId])
+  @@index([tenantId, tipo])
+}
