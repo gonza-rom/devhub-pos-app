@@ -66,8 +66,7 @@ export function toSlug(texto: string): string {
 
 // Limites por plan
 export const PLAN_LIMITES = {
-  FREE:       { productos: 50,       usuarios: 1,  imagenesPorProducto: 1,  historialDias: 7   },
-  STARTER:    { productos: 500,      usuarios: 3,  imagenesPorProducto: 3,  historialDias: 90  },
+  FREE:       { productos: 50,       usuarios: 1,  imagenesPorProducto: 3, historialDias: 14  },
   PRO:        { productos: Infinity, usuarios: 10, imagenesPorProducto: 10, historialDias: 365 },
   ENTERPRISE: { productos: Infinity, usuarios: Infinity, imagenesPorProducto: Infinity, historialDias: Infinity },
 } as const;

@@ -3,7 +3,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { LogOut, ChevronDown, Settings, Crown, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RolTenant } from "@/types";
 
@@ -20,17 +21,16 @@ type Props = {
 };
 
 export default function Topbar({ nombreUsuario, emailUsuario, rolUsuario }: Props) {
-  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [menuAbierto, setMenuAbierto]     = useState(false);
   const [cargandoLogout, setCargandoLogout] = useState(false);
   const router = useRouter();
 
+  const esAdmin       = rolUsuario === "ADMINISTRADOR" || rolUsuario === "PROPIETARIO";
+  const esPropietario = rolUsuario === "PROPIETARIO";
+
   async function handleLogout() {
     setCargandoLogout(true);
-
-    // Llamamos al endpoint que cierra la sesión de Supabase
-    // Y borra la cookie de tenant firmada
     await fetch("/api/auth/logout", { method: "POST" });
-
     router.push("/auth/login");
     router.refresh();
   }
@@ -66,19 +66,60 @@ export default function Topbar({ nombreUsuario, emailUsuario, rolUsuario }: Prop
         {menuAbierto && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenuAbierto(false)} />
-            <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1">
-              <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
-                <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{nombreUsuario}</p>
+            <div className="absolute right-0 top-full mt-1 z-20 w-60 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1 overflow-hidden">
+
+              {/* Info usuario */}
+              <div className="px-3 py-2.5 border-b border-gray-100 dark:border-gray-700">
+                <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">{nombreUsuario}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{emailUsuario}</p>
+                <span className="inline-block mt-1 text-xs px-1.5 py-0.5 rounded bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-medium">
+                  {ROL_LABEL[rolUsuario]}
+                </span>
               </div>
-              <button
-                onClick={handleLogout}
-                disabled={cargandoLogout}
-                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
-              >
-                <LogOut className="h-4 w-4" />
-                {cargandoLogout ? "Cerrando sesión..." : "Cerrar sesión"}
-              </button>
+
+              {/* Links de configuración — solo admin/propietario */}
+              {esAdmin && (
+                <div className="py-1 border-b border-gray-100 dark:border-gray-700">
+                  <Link
+                    href="/configuracion"
+                    onClick={() => setMenuAbierto(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                  >
+                    <Settings className="h-4 w-4 text-gray-400" />
+                    Mi comercio
+                  </Link>
+                  <Link
+                    href="/configuracion/plan"
+                    onClick={() => setMenuAbierto(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                  >
+                    <Crown className="h-4 w-4 text-amber-500" />
+                    Plan y suscripción
+                  </Link>
+                  {esPropietario && (
+                    <Link
+                      href="/configuracion/usuarios"
+                      onClick={() => setMenuAbierto(false)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                    >
+                      <Users className="h-4 w-4 text-gray-400" />
+                      Usuarios
+                    </Link>
+                  )}
+                </div>
+              )}
+
+              {/* Cerrar sesión */}
+              <div className="py-1">
+                <button
+                  onClick={handleLogout}
+                  disabled={cargandoLogout}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {cargandoLogout ? "Cerrando sesión..." : "Cerrar sesión"}
+                </button>
+              </div>
             </div>
           </>
         )}
