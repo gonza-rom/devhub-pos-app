@@ -45,6 +45,12 @@ model Tenant {
   logoUrl   String?
   telefono  String?
   direccion String?
+  descripcion String?
+  cuit        String?
+  sitioWeb    String?
+  instagram   String?
+  facebook    String?
+  provincia   String?
   ciudad    String?
   plan      PlanTipo @default(FREE)
   activo    Boolean  @default(true)
@@ -59,6 +65,7 @@ model Tenant {
   categorias    Categoria[]
   proveedores   Proveedor[]
   precios       PrecioHistorico[]
+  cajas Caja[]
 }
 
 model Suscripcion {
@@ -247,4 +254,58 @@ model Movimiento {
   @@index([tenantId, productoId])
   @@index([tenantId, tipo])
   @@index([tenantId, cancelado, createdAt])  // filtro cancelados
+}
+
+enum TipoMovimientoCaja {
+  APERTURA
+  VENTA_EFECTIVO
+  VENTA_VIRTUAL    // ← nuevo
+  INGRESO
+  EGRESO
+  CIERRE
+}
+
+/// Sesión de caja (una por día/turno)
+model Caja {
+  id              String    @id @default(cuid())
+  tenantId        String
+  usuarioId       String?
+  usuarioNombre   String?
+  saldoInicial    Float
+  saldoFinal      Float?    // null mientras está abierta
+  saldoContado    Float?    // lo que el cajero contó al cerrar
+  diferencia      Float?    // saldoFinal - saldoContado
+  observaciones   String?
+  abiertaAt       DateTime  @default(now())
+  cerradaAt       DateTime?
+  estado          String    @default("ABIERTA") // ABIERTA | CERRADA
+
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  movimientos     MovimientoCaja[]
+
+  @@index([tenantId])
+  @@index([tenantId, estado])
+  @@index([tenantId, abiertaAt])
+}
+
+/// Movimientos dentro de una sesión de caja
+model MovimientoCaja {
+  id            String              @id @default(cuid())
+  tenantId      String
+  cajaId        String
+  tipo          TipoMovimientoCaja
+  monto         Float
+  descripcion   String?
+  ventaId       String?             // referencia si es VENTA_EFECTIVO
+  usuarioId     String?
+  usuarioNombre String?
+  metodoPago String?
+  createdAt     DateTime            @default(now())
+
+  caja    Caja   @relation(fields: [cajaId], references: [id], onDelete: Cascade)
+
+
+  @@index([cajaId])
+  @@index([tenantId])
+  @@index([tenantId, createdAt])
 }

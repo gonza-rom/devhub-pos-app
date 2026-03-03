@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ShoppingCart, Package, ArrowLeftRight,
-  BarChart3, Tag, Truck, Settings, ChevronRight, Store, Crown, Users,
+  BarChart3, Tag, Truck, Settings, ChevronRight, Store, Crown, Users,DollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PlanTipo, RolTenant } from "@/types";
@@ -28,6 +28,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "Dashboard",    href: "/dashboard",    icon: LayoutDashboard },
   { label: "Ventas (POS)", href: "/ventas",       icon: ShoppingCart },
+  { label: "Caja",         href: "/caja",         icon: DollarSign },
   { label: "Productos",    href: "/productos",     icon: Package },
   { label: "Movimientos",  href: "/movimientos",   icon: ArrowLeftRight },
   { label: "Estadísticas", href: "/estadisticas",  icon: BarChart3, soloAdmin: true },

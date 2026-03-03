@@ -38,9 +38,11 @@ const METODOS_PAGO: { value: MetodoPago; label: string; icono: React.ElementType
 type Props = {
   productos: ProductoConCategoria[];
   categorias: Pick<Categoria, "id" | "nombre">[];
+  onVentaExitosa?: () => void;
+  isModal?: boolean;  // ← agregar
 };
 
-export default function POSClient({ productos, categorias }: Props) {
+export default function POSClient({ productos, categorias, onVentaExitosa, isModal }: Props) {
   const [busqueda, setBusqueda] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null);
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
@@ -162,7 +164,8 @@ export default function POSClient({ productos, categorias }: Props) {
         setTimeout(() => {
           limpiarCarrito();
           setResultado(null);
-        }, 2000);
+          onVentaExitosa?.();
+        }, 1500);
       }
     } catch {
       setMensajeError("Error de conexión");
@@ -175,7 +178,10 @@ export default function POSClient({ productos, categorias }: Props) {
   // ── Render ──────────────────────────────────────────────────
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] gap-0 -m-4 md:-m-6 overflow-hidden">
+    <div className={cn(
+      "flex gap-0 overflow-hidden",
+      isModal ? "h-full" : "h-[calc(100vh-3.5rem)] -m-4 md:-m-6"
+    )}>
 
       {/* ── Panel izquierdo: Catálogo ── */}
       <div className="flex flex-col flex-1 min-w-0 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800">

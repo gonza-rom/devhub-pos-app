@@ -140,6 +140,26 @@ export async function POST(req: NextRequest) {
         include: { items: true },
       });
 
+      // Reemplazar el bloque de caja existente por este:
+      const cajaAbierta = await tx.caja.findFirst({
+        where: { tenantId, estado: "ABIERTA" },
+      });
+      if (cajaAbierta) {
+        await tx.movimientoCaja.create({
+          data: {
+            tenantId,
+            cajaId:        cajaAbierta.id,
+            tipo: metodoPago?.toUpperCase() === "EFECTIVO" ? "VENTA_EFECTIVO" : "VENTA_VIRTUAL",
+            monto:         total,
+            descripcion:   `Venta #${ventaCreada.id.slice(-6).toUpperCase()}`,
+            ventaId:       ventaCreada.id,
+            metodoPago,                          // ← nuevo campo
+            usuarioId,
+            usuarioNombre: usuarioTenant?.nombre ?? null,
+          },
+        });
+      }
+      
       // Crear movimientos de stock por venta
       for (const item of itemsData) {
         const producto = await tx.producto.findUnique({ where: { id: item.productoId } });

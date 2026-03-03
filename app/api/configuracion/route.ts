@@ -16,6 +16,8 @@ export async function GET() {
       select: {
         id: true, nombre: true, email: true, slug: true,
         logoUrl: true, telefono: true, direccion: true, plan: true,
+        descripcion: true, cuit: true, sitioWeb: true,    // ← agregar
+        instagram: true, facebook: true, ciudad: true, provincia: true, // ← agregar
       },
     });
 
@@ -42,6 +44,13 @@ export async function PUT(req: NextRequest) {
     if (body.telefono  !== undefined) data.telefono  = body.telefono  || null;
     if (body.direccion !== undefined) data.direccion = body.direccion || null;
     if (body.logoUrl   !== undefined) data.logoUrl   = body.logoUrl   || null;
+    if (body.descripcion !== undefined) data.descripcion = body.descripcion || null;
+    if (body.cuit        !== undefined) data.cuit        = body.cuit        || null;
+    if (body.sitioWeb    !== undefined) data.sitioWeb    = body.sitioWeb    || null;
+    if (body.instagram   !== undefined) data.instagram   = body.instagram   || null;
+    if (body.facebook    !== undefined) data.facebook    = body.facebook    || null;
+    if (body.ciudad      !== undefined) data.ciudad      = body.ciudad      || null;
+    if (body.provincia   !== undefined) data.provincia   = body.provincia   || null;
 
     if (!data.nombre) return NextResponse.json({ ok: false, error: "El nombre es obligatorio" }, { status: 400 });
 
