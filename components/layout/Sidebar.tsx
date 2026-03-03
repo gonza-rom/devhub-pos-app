@@ -45,7 +45,6 @@ const navItems: NavItem[] = [
 
 const PLAN_BADGE: Record<PlanTipo, { label: string; color: string }> = {
   FREE:       { label: "Free",       color: "text-gray-500 bg-gray-100 dark:bg-gray-700 dark:text-gray-400" },
-  STARTER:    { label: "Starter",    color: "text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400" },
   PRO:        { label: "Pro",        color: "text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400" },
   ENTERPRISE: { label: "Enterprise", color: "text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400" },
 };

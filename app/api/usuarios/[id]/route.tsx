@@ -137,9 +137,9 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     });
 
     // Deshabilitar en Supabase Auth (no puede hacer login)
-    await supabaseAdmin.auth.admin.updateUser(existente.supabaseId, {
-      ban_duration: "876600h", // 100 años ≈ deshabilitado permanente
-    }).catch((e) => console.warn("[DELETE /api/usuarios] No se pudo deshabilitar en Supabase:", e));
+    // await supabaseAdmin.auth.admin.updateUser(existente.supabaseId, {
+    //   ban_duration: "876600h", // 100 años ≈ deshabilitado permanente
+    // }).catch((e) => console.warn("[DELETE /api/usuarios] No se pudo deshabilitar en Supabase:", e));
 
     return NextResponse.json({ ok: true });
   } catch (error) {

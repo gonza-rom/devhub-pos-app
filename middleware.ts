@@ -16,12 +16,30 @@ const PUBLIC_PATHS = [
   "/favicon.ico",
 ];
 
+// Rutas del super-admin — tienen su propio sistema de auth (cookie devhub-admin-session)
+const ADMIN_PATHS = [
+  "/admin",
+  "/api/admin",
+  "/api/tenants",
+];
+
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 }
 
+function isAdmin(pathname: string): boolean {
+  return ADMIN_PATHS.some((p) => pathname.startsWith(p));
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Rutas de admin: bypasear todo el sistema de Supabase/tenant.
+  // La verificación la hace requireAdmin() en cada Server Component
+  // y verifyAdminSecret() en cada API route.
+  if (isAdmin(pathname)) {
+    return NextResponse.next();
+  }
 
   if (isPublic(pathname)) {
     const { supabaseResponse } = await updateSession(request);
