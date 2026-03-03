@@ -72,7 +72,7 @@ model Suscripcion {
   id                 String    @id @default(cuid())
   tenantId           String    @unique
   plan               PlanTipo
-  estado             String    @default("pending")
+  estado             String    @default("pending")  // pending | authorized | paused | cancelled
   mpPreapprovalId    String?
   mpSubscriptionId   String?
   proximoVencimiento DateTime?
@@ -81,7 +81,6 @@ model Suscripcion {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
-
 model UsuarioTenant {
   id         String    @id @default(cuid())
   tenantId   String
