@@ -13,7 +13,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const tenant = await prisma.tenant.findUnique({
     where: { id },
     include: {
-      comercio: true,
+      suscripcion: true,
       _count: {
         select: { usuarios: true, productos: true, ventas: true },
       },

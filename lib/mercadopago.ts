@@ -44,7 +44,7 @@ export type MPWebhookBody = {
 };
 
 export const PLAN_PRO = {
-  monto: 35000,
+  monto: 20,
   moneda: "ARS",
   nombre: "Plan Pro — DevHub POS",
 };
