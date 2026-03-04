@@ -1,188 +1,173 @@
-// app/api/webhooks/mercadopago/route.ts
-// Recibe notificaciones de MercadoPago sobre pagos y suscripciones.
-//
-// Para probarlo en local:
-//   npx localtunnel --port 3000 --subdomain devhubpos
-//   Configurar la URL del webhook en MP: https://devhubpos.loca.lt/api/webhooks/mercadopago
+// lib/mercadopago.ts
 
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import {
-  verifyWebhookSignature,
-  getPreapproval,
-  getPayment,
-  calcularProximoVencimiento,
-  type MPWebhookBody,
-} from "@/lib/mercadopago";
+const MP_BASE = "https://api.mercadopago.com";
 
-// MP requiere que respondas 200 rápido, incluso si procesás en background
-export async function POST(req: Request) {
-  try {
-    const body = (await req.json()) as MPWebhookBody;
+function getAccessToken(): string {
+  const token = process.env.MP_ACCESS_TOKEN;
+  if (!token) throw new Error("MP_ACCESS_TOKEN no está definido en .env.local");
+  return token;
+}
 
-    // ── Verificar firma ──────────────────────────────────────
-    const xSignature = req.headers.get("x-signature") ?? "";
-    const xRequestId = req.headers.get("x-request-id") ?? "";
-    const dataId = body.data?.id ?? "";
+export type MPPreapprovalStatus = "pending" | "authorized" | "paused" | "cancelled";
 
-    const firmaValida = await verifyWebhookSignature(xSignature, xRequestId, dataId);
-    if (!firmaValida) {
-      console.warn("[Webhook MP] Firma inválida");
-      return NextResponse.json({ ok: false }, { status: 401 });
-    }
+export type MPPreapproval = {
+  id: string;
+  status: MPPreapprovalStatus;
+  payer_id?: number;
+  next_payment_date?: string;
+  init_point: string;
+  external_reference?: string;
+  auto_recurring: {
+    frequency: number;
+    frequency_type: "months" | "days";
+    transaction_amount: number;
+    currency_id: string;
+  };
+};
 
-    console.log(`[Webhook MP] type=${body.type} action=${body.action} id=${dataId}`);
+export type MPPayment = {
+  id: number;
+  status: "approved" | "rejected" | "pending" | "cancelled" | "in_process";
+  preapproval_id?: string;
+  transaction_amount: number;
+  date_approved?: string;
+};
 
-    // ── Procesar según el tipo ───────────────────────────────
+export type MPWebhookBody = {
+  type: "payment" | "subscription_preapproval" | string;
+  action?: string;
+  data: { id: string };
+};
 
-    if (body.type === "subscription_preapproval") {
-      await handlePreapproval(dataId);
-    } else if (body.type === "payment") {
-      await handlePayment(dataId);
-    }
+export const PLAN_PRO = {
+  monto: 20,
+  moneda: "ARS",
+  nombre: "Plan Pro — DevHub POS",
+};
 
-    // Siempre responder 200 a MP
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error("[Webhook MP] Error:", err);
-    // Igual devolvemos 200 para que MP no reintente infinitamente
-    return NextResponse.json({ ok: true });
+export type CreatePreapprovalInput = {
+  tenantId: string;
+  tenantNombre: string;
+  payerEmail: string;
+  backUrl: string;
+};
+
+export async function createPreapproval(input: CreatePreapprovalInput): Promise<MPPreapproval> {
+  const appUrl    = process.env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl) throw new Error("NEXT_PUBLIC_APP_URL no está definido en .env");
+
+  const startDate = new Date().toISOString();
+  const endDate   = new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 5).toISOString();
+
+  const body = {
+    reason:             `${PLAN_PRO.nombre} · ${input.tenantNombre}`,
+    external_reference: input.tenantId,
+    payer_email:        input.payerEmail,
+    auto_recurring: {
+      frequency:          1,
+      frequency_type:     "months",
+      transaction_amount: PLAN_PRO.monto,
+      currency_id:        PLAN_PRO.moneda,
+      start_date:         startDate,
+      end_date:           endDate,
+    },
+    // ✅ Usar siempre NEXT_PUBLIC_APP_URL — nunca hardcodear túneles locales
+    back_url:         `${appUrl}/configuracion/plan?suscripcion=resultado`,
+    notification_url: `${appUrl}/api/webhooks/mercadopago`,
+    status:           "pending",
+  };
+
+  console.log("[MP] Creando preapproval para tenant:", input.tenantId);
+  console.log("[MP] notification_url:", body.notification_url);
+
+  const res = await fetch(`${MP_BASE}/preapproval`, {
+    method:  "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization:  `Bearer ${getAccessToken()}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    console.error("[MP] Error creando preapproval:", data);
+    throw new Error(data.message ?? "Error al crear suscripción en MercadoPago");
+  }
+  return data as MPPreapproval;
+}
+
+export async function getPreapproval(id: string): Promise<MPPreapproval> {
+  const res = await fetch(`${MP_BASE}/preapproval/${id}`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+    cache:   "no-store",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message ?? "Error al obtener preapproval");
+  return data as MPPreapproval;
+}
+
+export async function cancelPreapproval(id: string): Promise<void> {
+  const res = await fetch(`${MP_BASE}/preapproval/${id}`, {
+    method:  "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization:  `Bearer ${getAccessToken()}`,
+    },
+    body: JSON.stringify({ status: "cancelled" }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.message ?? "Error al cancelar suscripción");
   }
 }
 
-// ── Handler: cambio de estado en el preapproval ───────────────────────────────
-
-async function handlePreapproval(preapprovalId: string) {
-  try {
-    const preapproval = await getPreapproval(preapprovalId);
-    const tenantId = preapproval.external_reference;
-
-    if (!tenantId) {
-      console.warn("[Webhook MP] Preapproval sin external_reference:", preapprovalId);
-      return;
-    }
-
-    console.log(`[Webhook MP] Preapproval ${preapprovalId} → status=${preapproval.status} tenant=${tenantId}`);
-
-    switch (preapproval.status) {
-      case "authorized": {
-        // ✅ Pago aprobado → activar Plan Pro
-        const proximoVencimiento = calcularProximoVencimiento();
-
-        await prisma.$transaction([
-          prisma.tenant.update({
-            where: { id: tenantId },
-            data: { plan: "PRO", activo: true },
-          }),
-          prisma.suscripcion.upsert({
-            where: { tenantId },
-            update: {
-              plan: "PRO",
-              estado: "authorized",
-              mpPreapprovalId: preapprovalId,
-              proximoVencimiento,
-            },
-            create: {
-              tenantId,
-              plan: "PRO",
-              estado: "authorized",
-              mpPreapprovalId: preapprovalId,
-              proximoVencimiento,
-            },
-          }),
-        ]);
-
-        console.log(`[Webhook MP] ✅ Tenant ${tenantId} activado en Plan Pro`);
-        break;
-      }
-
-      case "paused":
-        case "cancelled": {
-        // Sin gracia — cortar acceso inmediatamente
-        await prisma.$transaction([
-            prisma.tenant.update({
-            where: { id: tenantId },
-            data: { plan: "FREE" },
-            }),
-            prisma.suscripcion.update({
-            where: { tenantId },
-            data: {
-                estado: preapproval.status,
-                mpPreapprovalId: preapprovalId,
-            },
-            }),
-        ]);
-        console.log(`[Webhook MP] ⛔ Tenant ${tenantId} bajado a FREE inmediatamente`);
-        break;
-        }
-
-      default:
-        console.log(`[Webhook MP] Estado no manejado: ${preapproval.status}`);
-    }
-  } catch (err) {
-    console.error("[Webhook MP] handlePreapproval error:", err);
-    throw err;
-  }
+export async function getPayment(id: string): Promise<MPPayment> {
+  const res = await fetch(`${MP_BASE}/v1/payments/${id}`, {
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
+    cache:   "no-store",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message ?? "Error al obtener pago");
+  return data as MPPayment;
 }
 
-// ── Handler: pago individual (cada cobro mensual) ─────────────────────────────
-
-async function handlePayment(paymentId: string) {
+export async function verifyWebhookSignature(
+  xSignature: string,
+  xRequestId: string,
+  dataId: string
+): Promise<boolean> {
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if (!secret) {
+    console.warn("[MP] MP_WEBHOOK_SECRET no definido — saltando verificación");
+    return true;
+  }
   try {
-    const payment = await getPayment(paymentId);
+    const parts = xSignature.split(",");
+    const ts    = parts.find((p) => p.startsWith("ts="))?.replace("ts=", "").trim();
+    const v1    = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "").trim();
+    if (!ts || !v1) return false;
 
-    if (!payment.preapproval_id) return; // pago no relacionado a suscripción
-
-    const suscripcion = await prisma.suscripcion.findFirst({
-      where: { mpPreapprovalId: payment.preapproval_id },
-    });
-
-    if (!suscripcion) {
-      console.warn("[Webhook MP] No se encontró suscripción para preapproval:", payment.preapproval_id);
-      return;
-    }
-
-    console.log(
-      `[Webhook MP] Pago ${paymentId} → status=${payment.status} tenant=${suscripcion.tenantId}`
+    const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
     );
-
-    if (payment.status === "approved") {
-      // Renovación mensual exitosa → extender vencimiento
-      const proximoVencimiento = calcularProximoVencimiento();
-
-      await prisma.$transaction([
-        prisma.tenant.update({
-          where: { id: suscripcion.tenantId },
-          data: { plan: "PRO", activo: true },
-        }),
-        prisma.suscripcion.update({
-          where: { tenantId: suscripcion.tenantId },
-          data: {
-            estado: "authorized",
-            proximoVencimiento,
-          },
-        }),
-      ]);
-
-      console.log(
-        `[Webhook MP] ✅ Renovación exitosa. Tenant ${suscripcion.tenantId} activo hasta ${proximoVencimiento.toISOString()}`
-      );
-    } else if (payment.status === "rejected") {
-      // Pago rechazado → dejamos el estado pero no cortamos aún
-      // MP reintentará. Si definitivamente falla, vendrá un evento del preapproval.
-      await prisma.suscripcion.update({
-        where: { tenantId: suscripcion.tenantId },
-        data: { estado: "pending" },
-      });
-      console.warn(`[Webhook MP] ⚠️ Pago rechazado para tenant ${suscripcion.tenantId}`);
-    }
-  } catch (err) {
-    console.error("[Webhook MP] handlePayment error:", err);
-    throw err;
+    const buf      = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(manifest));
+    const computed = Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    return computed === v1;
+  } catch {
+    return false;
   }
 }
 
-// GET — para que MP pueda hacer health check del endpoint
-export async function GET() {
-  return NextResponse.json({ ok: true, service: "DevHub POS Webhook" });
+export function calcularProximoVencimiento(): Date {
+  const fecha = new Date();
+  fecha.setMonth(fecha.getMonth() + 1);
+  return fecha;
 }
