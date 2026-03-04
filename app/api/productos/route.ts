@@ -1,31 +1,26 @@
 // app/api/productos/route.ts
-// ⚠️  Este archivo REEMPLAZA al route.ts existente en el proyecto.
-//     Mantiene la lógica del JMR pero agrega multi-tenancy y TypeScript.
+// OPTIMIZADO: agrega revalidateTag("dashboard") en POST
 
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext, verificarLimiteProductos } from "@/lib/tenant";
 
-// Helper: string vacío → null
 function toNullIfEmpty(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const trimmed = String(value).trim();
   return trimmed === "" ? null : trimmed;
 }
 
-// ── GET /api/productos ─────────────────────────────────────────────────────
-
 export async function GET(req: NextRequest) {
   try {
     const { tenantId } = await getTenantContext();
     const { searchParams } = new URL(req.url);
 
-    // Paginación
     const page     = Math.max(1, parseInt(searchParams.get("page")     ?? "1"));
     const pageSize = Math.min(50, parseInt(searchParams.get("pageSize") ?? "20"));
     const skip     = (page - 1) * pageSize;
 
-    // Filtros (compatibles con JMR)
     const busqueda    = searchParams.get("busqueda") ?? searchParams.get("q") ?? "";
     const categoriaId = searchParams.get("categoria") ?? searchParams.get("categoriaId") ?? "";
     const stockBajo   = searchParams.get("stockBajo") === "true";
@@ -33,10 +28,8 @@ export async function GET(req: NextRequest) {
     const ordenar     = searchParams.get("ordenar") ?? "nombre";
 
     const where: any = { tenantId };
-
     if (soloActivos) where.activo = true;
-    if (stockBajo) where.stock = { lte: 5 }; // Aproximación; el filtro exacto es post-query
-
+    if (stockBajo)   where.stock  = { lte: 5 };
     if (busqueda.trim()) {
       where.OR = [
         { nombre:         { contains: busqueda, mode: "insensitive" } },
@@ -45,8 +38,7 @@ export async function GET(req: NextRequest) {
         { codigoBarras:   { contains: busqueda, mode: "insensitive" } },
       ];
     }
-
-    if (categoriaId) where.categoriaId = categoriaId; // cuid (string), no parseInt
+    if (categoriaId) where.categoriaId = categoriaId;
 
     let orderBy: any = { nombre: "asc" };
     if (ordenar === "precio-asc")  orderBy = { precio: "asc" };
@@ -60,9 +52,7 @@ export async function GET(req: NextRequest) {
           categoria: { select: { id: true, nombre: true } },
           proveedor:  { select: { id: true, nombre: true } },
         },
-        orderBy,
-        skip,
-        take: pageSize,
+        orderBy, skip, take: pageSize,
       }),
       prisma.producto.count({ where }),
     ]);
@@ -72,9 +62,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       data: productos,
-      // Mantener "productos" para compatibilidad con código JMR que lo lea así
       productos,
-      meta: { page, pageSize, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
+      meta:       { page, pageSize, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
       pagination: { page, pageSize, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
     });
 
@@ -84,13 +73,9 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// ── POST /api/productos ────────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
   try {
     const { tenantId, usuarioId } = await getTenantContext();
-
-    // Verificar límite del plan (FREE = 50 productos)
     await verificarLimiteProductos(tenantId);
 
     const body = await req.json();
@@ -100,46 +85,23 @@ export async function POST(req: NextRequest) {
       codigoBarras, codigoProducto, costo, unidad,
     } = body;
 
-    // Validaciones
-    if (!nombre || precio === undefined || precio === "") {
-      return NextResponse.json(
-        { ok: false, error: "Nombre y precio son requeridos" },
-        { status: 400 }
-      );
-    }
-    if (parseFloat(precio) <= 0) {
-      return NextResponse.json(
-        { ok: false, error: "El precio debe ser mayor a 0" },
-        { status: 400 }
-      );
-    }
+    if (!nombre || precio === undefined || precio === "")
+      return NextResponse.json({ ok: false, error: "Nombre y precio son requeridos" }, { status: 400 });
+    if (parseFloat(precio) <= 0)
+      return NextResponse.json({ ok: false, error: "El precio debe ser mayor a 0" }, { status: 400 });
 
     const codigoProductoFinal = toNullIfEmpty(codigoProducto);
     const codigoBarrasFinal   = toNullIfEmpty(codigoBarras);
 
-    // Verificar unicidad por tenant (no global)
     if (codigoProductoFinal) {
-      const existente = await prisma.producto.findFirst({
-        where: { tenantId, codigoProducto: codigoProductoFinal },
-      });
-      if (existente) {
-        return NextResponse.json(
-          { ok: false, error: `El código "${codigoProductoFinal}" ya está en uso por: ${existente.nombre}` },
-          { status: 409 }
-        );
-      }
+      const existente = await prisma.producto.findFirst({ where: { tenantId, codigoProducto: codigoProductoFinal } });
+      if (existente)
+        return NextResponse.json({ ok: false, error: `El código "${codigoProductoFinal}" ya está en uso por: ${existente.nombre}` }, { status: 409 });
     }
-
     if (codigoBarrasFinal) {
-      const existente = await prisma.producto.findFirst({
-        where: { tenantId, codigoBarras: codigoBarrasFinal },
-      });
-      if (existente) {
-        return NextResponse.json(
-          { ok: false, error: `El código de barras "${codigoBarrasFinal}" ya está en uso por: ${existente.nombre}` },
-          { status: 409 }
-        );
-      }
+      const existente = await prisma.producto.findFirst({ where: { tenantId, codigoBarras: codigoBarrasFinal } });
+      if (existente)
+        return NextResponse.json({ ok: false, error: `El código de barras "${codigoBarrasFinal}" ya está en uso por: ${existente.nombre}` }, { status: 409 });
     }
 
     const imagenPrincipal =
@@ -169,7 +131,6 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Registrar movimiento de stock inicial
     if (producto.stock > 0) {
       await prisma.movimiento.create({
         data: {
@@ -186,6 +147,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // ✅ Invalidar dashboard — "Productos activos" y "Stock bajo" pueden cambiar
+    revalidateTag("dashboard");
+    revalidateTag(`tenant-${tenantId}`);
+
     return NextResponse.json({ ok: true, data: producto }, { status: 201 });
 
   } catch (error: any) {
@@ -197,10 +162,8 @@ export async function POST(req: NextRequest) {
         "Ya existe un producto con ese código";
       return NextResponse.json({ ok: false, error: msg }, { status: 409 });
     }
-    // Error de límite de plan
-    if (error.message?.includes("Límite de productos")) {
+    if (error.message?.includes("Límite de productos"))
       return NextResponse.json({ ok: false, error: error.message }, { status: 403 });
-    }
     console.error("[POST /api/productos]", error);
     return NextResponse.json({ ok: false, error: "Error al crear producto" }, { status: 500 });
   }

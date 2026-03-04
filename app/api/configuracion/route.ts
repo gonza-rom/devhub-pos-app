@@ -1,7 +1,8 @@
 // app/api/configuracion/route.ts
-// ACTUALIZADO: invalida el cache del layout cuando se guarda la configuración
+// ARREGLADO: el PUT ahora SÍ llama revalidateTag (antes tenía el comentario pero no la llamada)
 
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant";
 
@@ -15,8 +16,8 @@ export async function GET() {
       select: {
         id: true, nombre: true, email: true, slug: true,
         logoUrl: true, telefono: true, direccion: true, plan: true,
-        descripcion: true, cuit: true, sitioWeb: true,    // ← agregar
-        instagram: true, facebook: true, ciudad: true, provincia: true, // ← agregar
+        descripcion: true, cuit: true, sitioWeb: true,
+        instagram: true, facebook: true, ciudad: true, provincia: true,
       },
     });
 
@@ -39,10 +40,10 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
 
     const data: Record<string, any> = {};
-    if (body.nombre    !== undefined) data.nombre    = String(body.nombre).trim();
-    if (body.telefono  !== undefined) data.telefono  = body.telefono  || null;
-    if (body.direccion !== undefined) data.direccion = body.direccion || null;
-    if (body.logoUrl   !== undefined) data.logoUrl   = body.logoUrl   || null;
+    if (body.nombre      !== undefined) data.nombre      = String(body.nombre).trim();
+    if (body.telefono    !== undefined) data.telefono    = body.telefono    || null;
+    if (body.direccion   !== undefined) data.direccion   = body.direccion   || null;
+    if (body.logoUrl     !== undefined) data.logoUrl     = body.logoUrl     || null;
     if (body.descripcion !== undefined) data.descripcion = body.descripcion || null;
     if (body.cuit        !== undefined) data.cuit        = body.cuit        || null;
     if (body.sitioWeb    !== undefined) data.sitioWeb    = body.sitioWeb    || null;
@@ -59,8 +60,9 @@ export async function PUT(req: NextRequest) {
       select: { id: true, nombre: true, email: true, logoUrl: true, telefono: true, direccion: true, plan: true },
     });
 
-    // Invalida el cache del layout para que el Sidebar refleje los cambios
-    // en el próximo request (máximo 30s de delay sin esto, 0 con esto)
+    // ✅ Ahora SÍ invalida el cache — antes tenía el comentario pero faltaba la llamada
+    revalidateTag("tenant-config");
+    revalidateTag(`tenant-${tenantId}`);
 
     return NextResponse.json({ ok: true, data: updated });
   } catch (err: any) {

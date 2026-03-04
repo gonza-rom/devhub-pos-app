@@ -1,4 +1,6 @@
 // lib/mercadopago.ts
+// ARREGLADO: conflicto de merge resuelto — combina calcularProximoVencimiento
+// del HEAD con el GET health check del otro branch.
 
 const MP_BASE = "https://api.mercadopago.com";
 
@@ -53,7 +55,7 @@ export type CreatePreapprovalInput = {
 };
 
 export async function createPreapproval(input: CreatePreapprovalInput): Promise<MPPreapproval> {
-  const appUrl    = process.env.NEXT_PUBLIC_APP_URL;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (!appUrl) throw new Error("NEXT_PUBLIC_APP_URL no está definido en .env");
 
   const startDate = new Date().toISOString();
@@ -71,7 +73,6 @@ export async function createPreapproval(input: CreatePreapprovalInput): Promise<
       start_date:         startDate,
       end_date:           endDate,
     },
-    // ✅ Usar siempre NEXT_PUBLIC_APP_URL — nunca hardcodear túneles locales
     back_url:         `${appUrl}/configuracion/plan?suscripcion=resultado`,
     notification_url: `${appUrl}/api/webhooks/mercadopago`,
     status:           "pending",
@@ -166,6 +167,7 @@ export async function verifyWebhookSignature(
   }
 }
 
+// Calcula el próximo vencimiento: 1 mes a partir de hoy
 export function calcularProximoVencimiento(): Date {
   const fecha = new Date();
   fecha.setMonth(fecha.getMonth() + 1);

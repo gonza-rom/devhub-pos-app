@@ -1,182 +1,144 @@
-// lib/mercadopago.ts
+// app/api/webhooks/mercadopago/route.ts
+// ARREGLADO: conflicto de merge resuelto
+// Este archivo es el webhook que MP llama cuando cambia el estado de una suscripción.
 
-const MP_BASE = "https://api.mercadopago.com";
+import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import {
+  getPreapproval,
+  getPayment,
+  verifyWebhookSignature,
+  calcularProximoVencimiento,
+  type MPWebhookBody,
+} from "@/lib/mercadopago";
 
-function getAccessToken(): string {
-  const token = process.env.MP_ACCESS_TOKEN;
-  if (!token) throw new Error("MP_ACCESS_TOKEN no está definido en .env.local");
-  return token;
-}
-
-export type MPPreapprovalStatus = "pending" | "authorized" | "paused" | "cancelled";
-
-export type MPPreapproval = {
-  id: string;
-  status: MPPreapprovalStatus;
-  payer_id?: number;
-  next_payment_date?: string;
-  init_point: string;
-  external_reference?: string;
-  auto_recurring: {
-    frequency: number;
-    frequency_type: "months" | "days";
-    transaction_amount: number;
-    currency_id: string;
-  };
-};
-
-export type MPPayment = {
-  id: number;
-  status: "approved" | "rejected" | "pending" | "cancelled" | "in_process";
-  preapproval_id?: string;
-  transaction_amount: number;
-  date_approved?: string;
-};
-
-export type MPWebhookBody = {
-  type: "payment" | "subscription_preapproval" | string;
-  action?: string;
-  data: { id: string };
-};
-
-export const PLAN_PRO = {
-  monto: 20,
-  moneda: "ARS",
-  nombre: "Plan Pro — DevHub POS",
-};
-
-export type CreatePreapprovalInput = {
-  tenantId: string;
-  tenantNombre: string;
-  payerEmail: string;
-  backUrl: string;
-};
-
-export async function createPreapproval(input: CreatePreapprovalInput): Promise<MPPreapproval> {
-  const appUrl    = process.env.NEXT_PUBLIC_APP_URL;
-  if (!appUrl) throw new Error("NEXT_PUBLIC_APP_URL no está definido en .env");
-
-  const startDate = new Date().toISOString();
-  const endDate   = new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 5).toISOString();
-
-  const body = {
-    reason:             `${PLAN_PRO.nombre} · ${input.tenantNombre}`,
-    external_reference: input.tenantId,
-    payer_email:        input.payerEmail,
-    auto_recurring: {
-      frequency:          1,
-      frequency_type:     "months",
-      transaction_amount: PLAN_PRO.monto,
-      currency_id:        PLAN_PRO.moneda,
-      start_date:         startDate,
-      end_date:           endDate,
-    },
-    // ✅ Usar siempre NEXT_PUBLIC_APP_URL — nunca hardcodear túneles locales
-    back_url:         `${appUrl}/configuracion/plan?suscripcion=resultado`,
-    notification_url: `${appUrl}/api/webhooks/mercadopago`,
-    status:           "pending",
-  };
-
-  console.log("[MP] Creando preapproval para tenant:", input.tenantId);
-  console.log("[MP] notification_url:", body.notification_url);
-
-  const res = await fetch(`${MP_BASE}/preapproval`, {
-    method:  "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization:  `Bearer ${getAccessToken()}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    console.error("[MP] Error creando preapproval:", data);
-    throw new Error(data.message ?? "Error al crear suscripción en MercadoPago");
-  }
-  return data as MPPreapproval;
-}
-
-export async function getPreapproval(id: string): Promise<MPPreapproval> {
-  const res = await fetch(`${MP_BASE}/preapproval/${id}`, {
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-    cache:   "no-store",
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Error al obtener preapproval");
-  return data as MPPreapproval;
-}
-
-export async function cancelPreapproval(id: string): Promise<void> {
-  const res = await fetch(`${MP_BASE}/preapproval/${id}`, {
-    method:  "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization:  `Bearer ${getAccessToken()}`,
-    },
-    body: JSON.stringify({ status: "cancelled" }),
-  });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.message ?? "Error al cancelar suscripción");
-  }
-}
-
-export async function getPayment(id: string): Promise<MPPayment> {
-  const res = await fetch(`${MP_BASE}/v1/payments/${id}`, {
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-    cache:   "no-store",
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message ?? "Error al obtener pago");
-  return data as MPPayment;
-}
-
-export async function verifyWebhookSignature(
-  xSignature: string,
-  xRequestId: string,
-  dataId: string
-): Promise<boolean> {
-  const secret = process.env.MP_WEBHOOK_SECRET;
-  if (!secret) {
-    console.warn("[MP] MP_WEBHOOK_SECRET no definido — saltando verificación");
-    return true;
-  }
+// POST — MP llama este endpoint cuando hay un evento de suscripción o pago
+export async function POST(req: NextRequest) {
   try {
-    const parts = xSignature.split(",");
-    const ts    = parts.find((p) => p.startsWith("ts="))?.replace("ts=", "").trim();
-    const v1    = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "").trim();
-    if (!ts || !v1) return false;
+    // Verificar firma HMAC si está configurada
+    const xSignature = req.headers.get("x-signature") ?? "";
+    const xRequestId = req.headers.get("x-request-id") ?? "";
 
-    const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const buf      = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(manifest));
-    const computed = Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    return computed === v1;
-  } catch {
-    return false;
+    const body: MPWebhookBody = await req.json();
+    const dataId = body.data?.id ?? "";
+
+    console.log("[MP Webhook] Recibido:", body.type, body.action, dataId);
+
+    if (xSignature) {
+      const valid = await verifyWebhookSignature(xSignature, xRequestId, dataId);
+      if (!valid) {
+        console.warn("[MP Webhook] Firma inválida");
+        return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+      }
+    }
+
+    // ── Evento de suscripción (preapproval) ──────────────────────────────
+    if (body.type === "subscription_preapproval") {
+      const preapproval = await getPreapproval(dataId);
+
+      const suscripcion = await prisma.suscripcion.findFirst({
+        where: { mpPreapprovalId: preapproval.id },
+      });
+
+      if (!suscripcion) {
+        // Buscar por external_reference (tenantId)
+        const byRef = preapproval.external_reference
+          ? await prisma.suscripcion.findFirst({
+              where: { tenantId: preapproval.external_reference },
+            })
+          : null;
+
+        if (!byRef) {
+          console.warn("[MP Webhook] Suscripción no encontrada para preapproval:", dataId);
+          return NextResponse.json({ ok: true }); // siempre 200 para que MP no reintente
+        }
+
+        // Asociar el preapprovalId si no estaba
+        await prisma.suscripcion.update({
+          where: { tenantId: byRef.tenantId },
+          data: { mpPreapprovalId: preapproval.id },
+        });
+      }
+
+      const tenantId = suscripcion?.tenantId ?? preapproval.external_reference;
+      if (!tenantId) {
+        console.warn("[MP Webhook] No se pudo determinar el tenantId");
+        return NextResponse.json({ ok: true });
+      }
+
+      const nuevoEstado = preapproval.status; // "authorized" | "paused" | "cancelled" | "pending"
+      const esPro = nuevoEstado === "authorized";
+
+      await prisma.$transaction([
+        prisma.suscripcion.update({
+          where: { tenantId },
+          data: {
+            estado:              nuevoEstado,
+            plan:                esPro ? "PRO" : "FREE",
+            proximoVencimiento:  esPro ? calcularProximoVencimiento() : null,
+          },
+        }),
+        prisma.tenant.update({
+          where: { id: tenantId },
+          data: { plan: esPro ? "PRO" : "FREE" },
+        }),
+      ]);
+
+      // ✅ Invalidar cache del layout y tenant-config para reflejar el nuevo plan
+      revalidateTag("tenant-config");
+      revalidateTag(`tenant-${tenantId}`);
+
+      console.log(`[MP Webhook] Tenant ${tenantId} actualizado a plan: ${esPro ? "PRO" : "FREE"} (estado: ${nuevoEstado})`);
+    }
+
+    // ── Evento de pago ────────────────────────────────────────────────────
+    if (body.type === "payment") {
+      const payment = await getPayment(dataId);
+      console.log("[MP Webhook] Pago recibido:", payment.id, payment.status);
+
+      if (payment.status === "approved" && payment.preapproval_id) {
+        const suscripcion = await prisma.suscripcion.findFirst({
+          where: { mpPreapprovalId: payment.preapproval_id },
+        });
+
+        if (suscripcion) {
+          await prisma.$transaction([
+            prisma.suscripcion.update({
+              where: { tenantId: suscripcion.tenantId },
+              data: {
+                estado:             "authorized",
+                plan:               "PRO",
+                proximoVencimiento: calcularProximoVencimiento(),
+              },
+            }),
+            prisma.tenant.update({
+              where: { id: suscripcion.tenantId },
+              data: { plan: "PRO" },
+            }),
+          ]);
+
+          revalidateTag("tenant-config");
+          revalidateTag(`tenant-${suscripcion.tenantId}`);
+
+          console.log(`[MP Webhook] Pago aprobado — tenant ${suscripcion.tenantId} activado PRO`);
+        }
+      }
+    }
+
+    // Siempre responder 200 — MP reintenta si recibe 4xx/5xx
+    return NextResponse.json({ ok: true });
+
+  } catch (error) {
+    console.error("[MP Webhook] Error:", error);
+    // Responder 200 igual para evitar reintentos de MP con el mismo payload roto
+    return NextResponse.json({ ok: true });
   }
 }
 
-<<<<<<< HEAD
-export function calcularProximoVencimiento(): Date {
-  const fecha = new Date();
-  fecha.setMonth(fecha.getMonth() + 1);
-  return fecha;
-}
-=======
-// GET — para que MP pueda hacer health check del endpoint
+// GET — health check para que MP pueda verificar que el endpoint existe
 export async function GET() {
   return NextResponse.json({ ok: true, service: "DevHub POS Webhook" });
 }
 
 export const dynamic = "force-dynamic";
->>>>>>> 526ab7e3bb448b38080adabc9905bc505564a5a0

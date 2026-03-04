@@ -1,12 +1,12 @@
 // app/api/productos/[id]/route.ts
+// OPTIMIZADO: agrega revalidateTag("dashboard") en PUT y DELETE
 
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant";
 
 type Params = { params: Promise<{ id: string }> };
-
-// ── GET /api/productos/:id ─────────────────────────────────
 
 export async function GET(_req: NextRequest, { params }: Params) {
   try {
@@ -21,9 +21,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
       },
     });
 
-    if (!producto) {
+    if (!producto)
       return NextResponse.json({ ok: false, error: "Producto no encontrado" }, { status: 404 });
-    }
 
     return NextResponse.json({ ok: true, data: producto });
   } catch (error) {
@@ -32,66 +31,33 @@ export async function GET(_req: NextRequest, { params }: Params) {
   }
 }
 
-// ── PUT /api/productos/:id ────────────────────────────────
-
 export async function PUT(req: NextRequest, { params }: Params) {
   try {
     const { tenantId, usuarioId } = await getTenantContext();
     const { id } = await params;
 
-    // Verificar que el producto pertenece al tenant
     const existente = await prisma.producto.findFirst({ where: { id, tenantId } });
-    if (!existente) {
+    if (!existente)
       return NextResponse.json({ ok: false, error: "Producto no encontrado" }, { status: 404 });
-    }
 
     const body = await req.json();
-    const {
-      nombre, descripcion, codigoProducto, codigoBarras,
-      precio, costo, stock, stockMinimo, unidad,
-      imagen, imagenes, categoriaId, proveedorId,
-    } = body;
+    const { nombre, descripcion, codigoProducto, codigoBarras, precio, costo, stock, stockMinimo, unidad, imagen, imagenes, categoriaId, proveedorId } = body;
 
-    if (!nombre || !precio || parseFloat(precio) <= 0) {
+    if (!nombre || !precio || parseFloat(precio) <= 0)
       return NextResponse.json({ ok: false, error: "Nombre y precio son requeridos" }, { status: 400 });
-    }
 
-    // Verificar unicidad de códigos (excluyendo el producto actual)
     if (codigoProducto?.trim()) {
-      const dup = await prisma.producto.findFirst({
-        where: { tenantId, codigoProducto: codigoProducto.trim(), NOT: { id } },
-      });
-      if (dup) {
-        return NextResponse.json(
-          { ok: false, error: `Código "${codigoProducto}" ya está en uso por: ${dup.nombre}` },
-          { status: 409 }
-        );
-      }
+      const dup = await prisma.producto.findFirst({ where: { tenantId, codigoProducto: codigoProducto.trim(), NOT: { id } } });
+      if (dup) return NextResponse.json({ ok: false, error: `Código "${codigoProducto}" ya está en uso por: ${dup.nombre}` }, { status: 409 });
     }
-
     if (codigoBarras?.trim()) {
-      const dup = await prisma.producto.findFirst({
-        where: { tenantId, codigoBarras: codigoBarras.trim(), NOT: { id } },
-      });
-      if (dup) {
-        return NextResponse.json(
-          { ok: false, error: `Código de barras ya está en uso por: ${dup.nombre}` },
-          { status: 409 }
-        );
-      }
+      const dup = await prisma.producto.findFirst({ where: { tenantId, codigoBarras: codigoBarras.trim(), NOT: { id } } });
+      if (dup) return NextResponse.json({ ok: false, error: `Código de barras ya está en uso por: ${dup.nombre}` }, { status: 409 });
     }
 
-    // Registrar cambio de precio si cambió
     if (existente.precio !== parseFloat(precio)) {
       await prisma.precioHistorico.create({
-        data: {
-          tenantId,
-          productoId:  id,
-          precioViejo: existente.precio,
-          precioNuevo: parseFloat(precio),
-          motivo:      "Actualización manual",
-          usuarioId,
-        },
+        data: { tenantId, productoId: id, precioViejo: existente.precio, precioNuevo: parseFloat(precio), motivo: "Actualización manual", usuarioId },
       });
     }
 
@@ -118,37 +84,36 @@ export async function PUT(req: NextRequest, { params }: Params) {
       },
     });
 
+    // ✅ Invalidar dashboard — stock puede cambiar ("Stock bajo")
+    revalidateTag("dashboard");
+    revalidateTag(`tenant-${tenantId}`);
+
     return NextResponse.json({ ok: true, data: producto });
   } catch (error: any) {
-    if (error.code === "P2002") {
+    if (error.code === "P2002")
       return NextResponse.json({ ok: false, error: "Ya existe un producto con ese código" }, { status: 409 });
-    }
     console.error("[PUT /api/productos/:id]", error);
     return NextResponse.json({ ok: false, error: "Error al actualizar producto" }, { status: 500 });
   }
 }
-
-// ── DELETE /api/productos/:id ─────────────────────────────
-// Soft delete: marca activo = false
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
     const { tenantId, rol } = await getTenantContext();
     const { id } = await params;
 
-    if (rol === "EMPLEADO") {
+    if (rol === "EMPLEADO")
       return NextResponse.json({ ok: false, error: "Sin permisos" }, { status: 403 });
-    }
 
     const existente = await prisma.producto.findFirst({ where: { id, tenantId } });
-    if (!existente) {
+    if (!existente)
       return NextResponse.json({ ok: false, error: "Producto no encontrado" }, { status: 404 });
-    }
 
-    await prisma.producto.update({
-      where: { id },
-      data:  { activo: false },
-    });
+    await prisma.producto.update({ where: { id }, data: { activo: false } });
+
+    // ✅ Invalidar dashboard — "Productos activos" bajó
+    revalidateTag("dashboard");
+    revalidateTag(`tenant-${tenantId}`);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

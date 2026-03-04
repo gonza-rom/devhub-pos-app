@@ -1,11 +1,12 @@
 // app/api/configuracion/logo/route.ts
-// Solo guarda la URL — el upload lo hace el cliente directo a Cloudinary
+// ARREGLADO: agrega revalidateTag para que el Sidebar refleje el nuevo logo
+
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant";
 
 // POST /api/configuracion/logo
-// Body: { url: string }  ← URL que devuelve Cloudinary al browser
 export async function POST(req: NextRequest) {
   try {
     const { tenantId, rol } = await getTenantContext();
@@ -22,6 +23,10 @@ export async function POST(req: NextRequest) {
       where: { id: tenantId },
       data:  { logoUrl: url },
     });
+
+    // ✅ Invalidar cache del layout — el Sidebar muestra el logo del tenant
+    revalidateTag("tenant-config");
+    revalidateTag(`tenant-${tenantId}`);
 
     return NextResponse.json({ ok: true, data: { url } });
   } catch (err: any) {
