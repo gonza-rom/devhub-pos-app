@@ -31,3 +31,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Error al guardar el logo" }, { status: 500 });
   }
 }
+
+export const dynamic = "force-dynamic";

@@ -156,3 +156,5 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: false, error: "Error al eliminar producto" }, { status: 500 });
   }
 }
+
+export const dynamic = "force-dynamic";

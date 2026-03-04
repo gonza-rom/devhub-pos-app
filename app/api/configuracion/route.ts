@@ -71,3 +71,5 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Error al guardar" }, { status: 500 });
   }
 }
+
+export const dynamic = "force-dynamic";

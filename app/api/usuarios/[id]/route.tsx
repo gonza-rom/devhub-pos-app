@@ -150,3 +150,5 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     );
   }
 }
+
+export const dynamic = "force-dynamic";

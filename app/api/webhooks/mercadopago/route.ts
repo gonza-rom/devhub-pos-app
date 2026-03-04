@@ -186,3 +186,5 @@ async function handlePayment(paymentId: string) {
 export async function GET() {
   return NextResponse.json({ ok: true, service: "DevHub POS Webhook" });
 }
+
+export const dynamic = "force-dynamic";
