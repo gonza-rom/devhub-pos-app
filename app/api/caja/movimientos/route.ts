@@ -25,3 +25,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Error al registrar movimiento" }, { status: 500 });
   }
 }
+
+export const dynamic = "force-dynamic";

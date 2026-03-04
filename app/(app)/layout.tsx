@@ -1,62 +1,57 @@
 // app/(app)/layout.tsx
-// OPTIMIZADO: caché de 30s en la query del layout para no ir a DB en cada navegación
-
-import { redirect } from "next/navigation";
+import { redirect }       from "next/navigation";
 import { unstable_cache } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import { prisma } from "@/lib/prisma";
-import Sidebar from "@/components/layout/Sidebar";
-import Topbar from "@/components/layout/Topbar";
+import { createClient }   from "@/lib/supabase/server";
+import { prisma }         from "@/lib/prisma";
+import Sidebar            from "@/components/layout/Sidebar";
+import Topbar             from "@/components/layout/Topbar";
 
-// Cache de 30 segundos por supabaseId
-// Se invalida automáticamente con revalidateTag("tenant-config") cuando el usuario guarda cambios
-const getTenantData = unstable_cache(
-  async (supabaseId: string) => {
-    return prisma.usuarioTenant.findUnique({
-      where: { supabaseId },
-      include: {
-        tenant: {
-          select: { id: true, nombre: true, plan: true, logoUrl: true },
-        },
+// Cache del tenant por supabaseId — ~0ms en cache hit.
+// Invalidar con: revalidateTag("tenant-config") al guardar configuración.
+const getTenantCached = unstable_cache(
+  async (supabaseId: string) =>
+    prisma.usuarioTenant.findUnique({
+      where:  { supabaseId },
+      select: {
+        nombre: true,
+        rol:    true,
+        activo: true,
+        tenant: { select: { nombre: true, plan: true, logoUrl: true } },
       },
-    });
-  },
-  ["tenant-layout"],
-  {
-    revalidate: 30,
-    tags:       ["tenant-config"],
-  }
+    }),
+  ["layout-tenant"],
+  { revalidate: 60, tags: ["tenant-config"] }
 );
 
-export default async function AppLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
+  // getUser() verifica el JWT localmente (sin red) cuando la cookie es reciente.
+  // Solo va a Supabase si el token necesita refresh (~cada 1h).
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const usuarioTenant = await getTenantData(user.id);
-
-  if (!usuarioTenant) redirect("/onboarding");
+  const ut = await getTenantCached(user.id);
+  if (!ut?.activo) redirect("/onboarding");
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
+    <div className="flex h-screen overflow-hidden" style={{ background: "#0f0f0f" }}>
       <Sidebar
-        nombreTenant={usuarioTenant.tenant.nombre}
-        plan={usuarioTenant.tenant.plan}
-        logoUrl={usuarioTenant.tenant.logoUrl}
-        rol={usuarioTenant.rol}
+        nombreTenant={ut.tenant.nombre}
+        plan={ut.tenant.plan}
+        logoUrl={ut.tenant.logoUrl}
+        rol={ut.rol}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
-          nombreUsuario={usuarioTenant.nombre}
+          nombreUsuario={ut.nombre}
           emailUsuario={user.email ?? ""}
-          rolUsuario={usuarioTenant.rol}
+          rolUsuario={ut.rol}
+          nombreTenant={ut.tenant.nombre}
+          plan={ut.tenant.plan}
+          logoUrl={ut.tenant.logoUrl}
         />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6" style={{ background: "#0f0f0f" }}>
           {children}
         </main>
       </div>

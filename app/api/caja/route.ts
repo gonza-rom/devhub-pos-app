@@ -114,3 +114,5 @@ function calcularTotales(movimientos: any[]) {
     saldoActual: saldoInicial + totalEfectivo + totalIngresos - totalEgresos,
   };
 }
+
+export const dynamic = "force-dynamic";

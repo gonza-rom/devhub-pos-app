@@ -166,8 +166,17 @@ export async function verifyWebhookSignature(
   }
 }
 
+<<<<<<< HEAD
 export function calcularProximoVencimiento(): Date {
   const fecha = new Date();
   fecha.setMonth(fecha.getMonth() + 1);
   return fecha;
 }
+=======
+// GET — para que MP pueda hacer health check del endpoint
+export async function GET() {
+  return NextResponse.json({ ok: true, service: "DevHub POS Webhook" });
+}
+
+export const dynamic = "force-dynamic";
+>>>>>>> 526ab7e3bb448b38080adabc9905bc505564a5a0

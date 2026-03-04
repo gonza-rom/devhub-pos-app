@@ -4,7 +4,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant";
-import { revalidateTag } from "next/cache";
 
 // GET /api/configuracion
 export async function GET() {
@@ -62,7 +61,6 @@ export async function PUT(req: NextRequest) {
 
     // Invalida el cache del layout para que el Sidebar refleje los cambios
     // en el próximo request (máximo 30s de delay sin esto, 0 con esto)
-    revalidateTag("tenant-config");
 
     return NextResponse.json({ ok: true, data: updated });
   } catch (err: any) {
@@ -71,3 +69,5 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Error al guardar" }, { status: 500 });
   }
 }
+
+export const dynamic = "force-dynamic";

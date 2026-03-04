@@ -109,3 +109,5 @@ async function generarSlugUnico(nombre: string): Promise<string> {
 
   return slug;
 }
+
+export const dynamic = "force-dynamic";

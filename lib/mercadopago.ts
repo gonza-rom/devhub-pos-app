@@ -1,8 +1,4 @@
 // lib/mercadopago.ts
-// AGREGAR AL .env.local:
-//   MP_ACCESS_TOKEN=APP_USR-xxxx   (de developers.mercadopago.com)
-//   MP_WEBHOOK_SECRET=tu-secret
-//   NEXT_PUBLIC_APP_URL=https://app.devhubpos.com
 
 const MP_BASE = "https://api.mercadopago.com";
 
@@ -44,7 +40,7 @@ export type MPWebhookBody = {
 };
 
 export const PLAN_PRO = {
-  monto: 35000,
+  monto: 20,
   moneda: "ARS",
   nombre: "Plan Pro — DevHub POS",
 };
@@ -56,41 +52,39 @@ export type CreatePreapprovalInput = {
   backUrl: string;
 };
 
-
-
 export async function createPreapproval(input: CreatePreapprovalInput): Promise<MPPreapproval> {
-  
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const startDate = new Date().toISOString();
-  const endDate = new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 5).toISOString();
+  const appUrl    = process.env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl) throw new Error("NEXT_PUBLIC_APP_URL no está definido en .env");
 
-  console.log("[MP] Input recibido:", JSON.stringify(input));
-  console.log("[MP] appUrl:", appUrl);
-  console.log("[MP] startDate:", startDate);
-  console.log("[MP] endDate:", endDate);
+  const startDate = new Date().toISOString();
+  const endDate   = new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 5).toISOString();
 
   const body = {
-    reason: `${PLAN_PRO.nombre} · ${input.tenantNombre}`,
-    external_reference: input.tenantId, // ← clave: usamos esto en el webhook
-    payer_email: input.payerEmail,
+    reason:             `${PLAN_PRO.nombre} · ${input.tenantNombre}`,
+    external_reference: input.tenantId,
+    payer_email:        input.payerEmail,
     auto_recurring: {
-      frequency: 1,
-      frequency_type: "months",
+      frequency:          1,
+      frequency_type:     "months",
       transaction_amount: PLAN_PRO.monto,
-      currency_id: PLAN_PRO.moneda,
-      start_date: startDate,
-      end_date: endDate,
+      currency_id:        PLAN_PRO.moneda,
+      start_date:         startDate,
+      end_date:           endDate,
     },
-    back_url: "https://sad-frogs-follow.loca.lt/configuracion/plan?suscripcion=resultado",
-    notification_url: "https://sad-frogs-follow.loca.lt/api/webhooks/mercadopago",
-    status: "pending",
+    // ✅ Usar siempre NEXT_PUBLIC_APP_URL — nunca hardcodear túneles locales
+    back_url:         `${appUrl}/configuracion/plan?suscripcion=resultado`,
+    notification_url: `${appUrl}/api/webhooks/mercadopago`,
+    status:           "pending",
   };
-  console.log("[MP] Body preapproval:", JSON.stringify(body, null, 2));
+
+  console.log("[MP] Creando preapproval para tenant:", input.tenantId);
+  console.log("[MP] notification_url:", body.notification_url);
+
   const res = await fetch(`${MP_BASE}/preapproval`, {
-    method: "POST",
+    method:  "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${getAccessToken()}`,
+      Authorization:  `Bearer ${getAccessToken()}`,
     },
     body: JSON.stringify(body),
   });
@@ -106,7 +100,7 @@ export async function createPreapproval(input: CreatePreapprovalInput): Promise<
 export async function getPreapproval(id: string): Promise<MPPreapproval> {
   const res = await fetch(`${MP_BASE}/preapproval/${id}`, {
     headers: { Authorization: `Bearer ${getAccessToken()}` },
-    cache: "no-store",
+    cache:   "no-store",
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.message ?? "Error al obtener preapproval");
@@ -115,10 +109,10 @@ export async function getPreapproval(id: string): Promise<MPPreapproval> {
 
 export async function cancelPreapproval(id: string): Promise<void> {
   const res = await fetch(`${MP_BASE}/preapproval/${id}`, {
-    method: "PUT",
+    method:  "PUT",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${getAccessToken()}`,
+      Authorization:  `Bearer ${getAccessToken()}`,
     },
     body: JSON.stringify({ status: "cancelled" }),
   });
@@ -131,7 +125,7 @@ export async function cancelPreapproval(id: string): Promise<void> {
 export async function getPayment(id: string): Promise<MPPayment> {
   const res = await fetch(`${MP_BASE}/v1/payments/${id}`, {
     headers: { Authorization: `Bearer ${getAccessToken()}` },
-    cache: "no-store",
+    cache:   "no-store",
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.message ?? "Error al obtener pago");
@@ -150,8 +144,8 @@ export async function verifyWebhookSignature(
   }
   try {
     const parts = xSignature.split(",");
-    const ts = parts.find((p) => p.startsWith("ts="))?.replace("ts=", "").trim();
-    const v1 = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "").trim();
+    const ts    = parts.find((p) => p.startsWith("ts="))?.replace("ts=", "").trim();
+    const v1    = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "").trim();
     if (!ts || !v1) return false;
 
     const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
@@ -162,7 +156,7 @@ export async function verifyWebhookSignature(
       false,
       ["sign"]
     );
-    const buf = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(manifest));
+    const buf      = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(manifest));
     const computed = Array.from(new Uint8Array(buf))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
@@ -172,7 +166,6 @@ export async function verifyWebhookSignature(
   }
 }
 
-// Próximo vencimiento = hoy + 1 mes + 3 días de gracia
 export function calcularProximoVencimiento(): Date {
   const fecha = new Date();
   fecha.setMonth(fecha.getMonth() + 1);

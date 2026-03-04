@@ -2,7 +2,7 @@
 // Extiende el cliente Prisma para inyectar tenantId automáticamente
 // en todas las operaciones, garantizando aislamiento entre comercios.
 
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export function getPrismaForTenant(tenantId: string) {
   return prisma.$extends({

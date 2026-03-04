@@ -191,3 +191,5 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     );
   }
 }
+
+export const dynamic = "force-dynamic";

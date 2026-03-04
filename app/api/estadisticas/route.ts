@@ -250,3 +250,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Error al obtener estadísticas" }, { status: 500 });
   }
 }
+
+export const dynamic = "force-dynamic";
