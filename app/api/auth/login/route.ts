@@ -55,3 +55,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Error interno" }, { status: 500 });
   }
 }
+
+export const dynamic = "force-dynamic";
