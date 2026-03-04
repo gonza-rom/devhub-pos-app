@@ -1,17 +1,6 @@
 // app/api/auth/registro/route.ts
-// ACTUALIZADO: incluye plan y planVenceAt en la cookie de sesión
-
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { createClient } from "@supabase/supabase-js";
-import { toSlug } from "@/lib/utils";
-import { crearTenantSession, setTenantCookie } from "@/lib/session";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+import { createClient as createServerClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,10 +12,14 @@ export async function POST(req: NextRequest) {
     if (password.length < 8)
       return NextResponse.json({ ok: false, error: "La contraseña debe tener al menos 8 caracteres" }, { status: 400 });
 
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const supabase = await createServerClient();
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
-      email_confirm: true,
+      options: {
+        data: { nombre: nombreUsuario, nombreComercio },  // ← ambos en metadata
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+      },
     });
 
     if (authError) {
@@ -35,51 +28,17 @@ export async function POST(req: NextRequest) {
       throw authError;
     }
 
-    const supabaseUserId = authData.user.id;
-    const slug = await generarSlugUnico(nombreComercio);
+    if (!authData.user?.identities?.length) {
+      return NextResponse.json({ ok: false, error: "Ya existe una cuenta con ese email" }, { status: 409 });
+    }
 
-    const { tenant, usuarioTenant } = await prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({
-        data: { nombre: nombreComercio, email, slug, plan: "FREE" },
-      });
-      const usuarioTenant = await tx.usuarioTenant.create({
-        data: { tenantId: tenant.id, supabaseId: supabaseUserId, nombre: nombreUsuario, email, rol: "PROPIETARIO" },
-      });
-      await tx.suscripcion.create({
-        data: { tenantId: tenant.id, plan: "FREE", estado: "authorized" },
-      });
-      return { tenant, usuarioTenant };
-    });
-
-    // ✅ FREE nunca vence — planVenceAt = null
-    const token = await crearTenantSession({
-      tenantId:   tenant.id,
-      usuarioId:  supabaseUserId,
-      rol:        usuarioTenant.rol,
-      nombre:     usuarioTenant.nombre,
-      plan:       "FREE",
-      planVenceAt: null,
-    });
-
-    const response = NextResponse.json({ ok: true }, { status: 201 });
-    setTenantCookie(response, token);
-    return response;
+    // Tenant se crea en /auth/callback después de confirmar el email
+    return NextResponse.json({ ok: true }, { status: 201 });
 
   } catch (error) {
     console.error("[API /registro] Error:", error);
     return NextResponse.json({ ok: false, error: "Error interno del servidor" }, { status: 500 });
   }
-}
-
-async function generarSlugUnico(nombre: string): Promise<string> {
-  const base = toSlug(nombre);
-  let slug = base;
-  let contador = 2;
-  while (await prisma.tenant.findUnique({ where: { slug } })) {
-    slug = `${base}-${contador}`;
-    contador++;
-  }
-  return slug;
 }
 
 export const dynamic = "force-dynamic";

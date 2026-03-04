@@ -29,6 +29,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ← Agregar esto:
+    if (!data.user.email_confirmed_at) {
+      return NextResponse.json(
+        { ok: false, error: "Confirmá tu email antes de ingresar. Revisá tu bandeja de entrada." },
+        { status: 401 }
+      );
+    }
+
     // ✅ Nada más. Supabase ya seteó la cookie de sesión.
     // El layout hace getTenantCached(user.id) que estará en cache
     // desde el primer load, o tarda ~50ms si es primera vez.
