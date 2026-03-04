@@ -1,21 +1,36 @@
-import { requireAdmin } from "@/lib/admin-auth";
-import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
-import TenantActions from "./TenantActions";
+// app/admin/(protected)/tenants/[id]/page.tsx
 
-export default async function TenantDetailPage({ params }: { params: Promise<{ id: string }> }) {
+import { requireAdmin } from "@/lib/admin-auth";
+import { prisma }        from "@/lib/prisma";
+import { notFound }      from "next/navigation";
+import TenantActions     from "./TenantActions";
+
+export default async function TenantDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   await requireAdmin();
   const { id } = await params;
 
   const tenant = await prisma.tenant.findUnique({
-    where: { id },
+    where:   { id },
     include: {
       suscripcion: true,
-      _count: { select: { usuarios: true, productos: true, ventas: true, movimientos: true } },
+      _count: {
+        select: { usuarios: true, productos: true, ventas: true, movimientos: true },
+      },
       usuarios: {
         orderBy: { createdAt: "desc" },
-        take: 10,
-        select: { id: true, nombre: true, email: true, rol: true, activo: true, createdAt: true },
+        select: {
+          id:         true,
+          supabaseId: true,   // ← necesario para Supabase Admin API
+          nombre:     true,
+          email:      true,
+          rol:        true,
+          activo:     true,
+          createdAt:  true,
+        },
       },
     },
   });
@@ -23,23 +38,25 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
   if (!tenant) notFound();
 
   const stats = [
-    { label: "Usuarios", value: tenant._count.usuarios },
-    { label: "Productos", value: tenant._count.productos },
-    { label: "Ventas", value: tenant._count.ventas },
-    { label: "Movimientos", value: tenant._count.movimientos },
+    { label: "Usuarios",     value: tenant._count.usuarios },
+    { label: "Productos",    value: tenant._count.productos },
+    { label: "Ventas",       value: tenant._count.ventas },
+    { label: "Movimientos",  value: tenant._count.movimientos },
   ];
 
   return (
     <div className="max-w-4xl">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex items-start justify-between mb-8 flex-wrap gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">
-            {tenant.nombre}
-          </h1>
+          <h1 className="text-xl font-semibold text-zinc-100">{tenant.nombre}</h1>
           <p className="text-sm text-zinc-500 mt-0.5 font-mono">{tenant.slug}</p>
         </div>
-        <TenantActions tenant={{ id: tenant.id, plan: tenant.plan, activo: tenant.activo }} />
+        {/* Controles de plan/estado (sin tabla de usuarios, esa va abajo) */}
+        <TenantActions
+          tenant={{ id: tenant.id, plan: tenant.plan, activo: tenant.activo }}
+          usuarios={tenant.usuarios}
+        />
       </div>
 
       {/* Stats */}
@@ -61,6 +78,10 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
             <dd className="text-zinc-200 font-mono text-xs">{tenant.id}</dd>
           </div>
           <div>
+            <dt className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Email</dt>
+            <dd className="text-zinc-200">{tenant.email}</dd>
+          </div>
+          <div>
             <dt className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Plan</dt>
             <dd className="text-zinc-200">{tenant.plan}</dd>
           </div>
@@ -74,36 +95,29 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
             <dt className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Registrado</dt>
             <dd className="text-zinc-200">
               {new Date(tenant.createdAt).toLocaleDateString("es-AR", {
-                day: "2-digit", month: "short", year: "numeric"
+                day: "2-digit", month: "short", year: "numeric",
               })}
             </dd>
           </div>
-        </dl>
-      </div>
-
-      {/* Usuarios recientes */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-zinc-800">
-          <h2 className="text-sm font-medium text-zinc-300">Usuarios recientes</h2>
-        </div>
-        <table className="w-full text-sm">
-          <tbody className="divide-y divide-zinc-800">
-            {tenant.usuarios.map((u) => (
-              <tr key={u.id} className="px-5">
-                <td className="px-5 py-3">
-                  <p className="text-zinc-200 font-medium">{u.nombre}</p>
-                  <p className="text-zinc-500 text-xs">{u.email}</p>
-                </td>
-                <td className="px-5 py-3 text-zinc-400 text-xs uppercase">{u.rol}</td>
-                <td className="px-5 py-3">
-                  <span className={`text-xs ${u.activo ? "text-green-400" : "text-zinc-500"}`}>
-                    {u.activo ? "Activo" : "Inactivo"}
+          {tenant.suscripcion && (
+            <div>
+              <dt className="text-zinc-500 text-xs uppercase tracking-wider mb-1">
+                Suscripción
+              </dt>
+              <dd className="text-zinc-200">
+                {tenant.suscripcion.estado}
+                {tenant.suscripcion.proximoVencimiento && (
+                  <span className="text-zinc-500 ml-1.5 text-xs">
+                    vence{" "}
+                    {new Date(tenant.suscripcion.proximoVencimiento).toLocaleDateString("es-AR", {
+                      day: "2-digit", month: "short", year: "numeric",
+                    })}
                   </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                )}
+              </dd>
+            </div>
+          )}
+        </dl>
       </div>
     </div>
   );

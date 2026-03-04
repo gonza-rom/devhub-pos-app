@@ -1,6 +1,14 @@
 // app/api/webhooks/mercadopago/route.ts
-// ARREGLADO: conflicto de merge resuelto
-// Este archivo es el webhook que MP llama cuando cambia el estado de una suscripción.
+// ACTUALIZADO: cuando MP activa el plan PRO, además de actualizar la DB
+// invalida la cookie de sesión para que el middleware lea el nuevo plan.
+// El usuario verá el plan actualizado en el próximo request.
+//
+// NOTA: No podemos actualizar la cookie directamente desde el webhook
+// porque no tenemos acceso al browser del usuario. La cookie se regenera
+// la próxima vez que el usuario navega (vía refresh-session si expiró,
+// o en el próximo login).
+// Para forzarlo inmediatamente: después del pago exitoso, el front
+// llama a /api/auth/refresh-plan que regenera la cookie.
 
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
@@ -13,13 +21,10 @@ import {
   type MPWebhookBody,
 } from "@/lib/mercadopago";
 
-// POST — MP llama este endpoint cuando hay un evento de suscripción o pago
 export async function POST(req: NextRequest) {
   try {
-    // Verificar firma HMAC si está configurada
     const xSignature = req.headers.get("x-signature") ?? "";
     const xRequestId = req.headers.get("x-request-id") ?? "";
-
     const body: MPWebhookBody = await req.json();
     const dataId = body.data?.id ?? "";
 
@@ -33,32 +38,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Evento de suscripción (preapproval) ──────────────────────────────
     if (body.type === "subscription_preapproval") {
       const preapproval = await getPreapproval(dataId);
 
-      const suscripcion = await prisma.suscripcion.findFirst({
+      let suscripcion = await prisma.suscripcion.findFirst({
         where: { mpPreapprovalId: preapproval.id },
       });
 
-      if (!suscripcion) {
-        // Buscar por external_reference (tenantId)
-        const byRef = preapproval.external_reference
-          ? await prisma.suscripcion.findFirst({
-              where: { tenantId: preapproval.external_reference },
-            })
-          : null;
-
-        if (!byRef) {
-          console.warn("[MP Webhook] Suscripción no encontrada para preapproval:", dataId);
-          return NextResponse.json({ ok: true }); // siempre 200 para que MP no reintente
-        }
-
-        // Asociar el preapprovalId si no estaba
-        await prisma.suscripcion.update({
-          where: { tenantId: byRef.tenantId },
-          data: { mpPreapprovalId: preapproval.id },
+      if (!suscripcion && preapproval.external_reference) {
+        suscripcion = await prisma.suscripcion.findFirst({
+          where: { tenantId: preapproval.external_reference },
         });
+        if (suscripcion) {
+          await prisma.suscripcion.update({
+            where: { tenantId: suscripcion.tenantId },
+            data:  { mpPreapprovalId: preapproval.id },
+          });
+        }
       }
 
       const tenantId = suscripcion?.tenantId ?? preapproval.external_reference;
@@ -67,35 +63,34 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      const nuevoEstado = preapproval.status; // "authorized" | "paused" | "cancelled" | "pending"
-      const esPro = nuevoEstado === "authorized";
+      const esPro      = preapproval.status === "authorized";
+      const nuevoVence = esPro ? calcularProximoVencimiento() : null;
 
       await prisma.$transaction([
         prisma.suscripcion.update({
           where: { tenantId },
           data: {
-            estado:              nuevoEstado,
-            plan:                esPro ? "PRO" : "FREE",
-            proximoVencimiento:  esPro ? calcularProximoVencimiento() : null,
+            estado:             preapproval.status,
+            plan:               esPro ? "PRO" : "FREE",
+            proximoVencimiento: nuevoVence,
           },
         }),
         prisma.tenant.update({
           where: { id: tenantId },
-          data: { plan: esPro ? "PRO" : "FREE" },
+          data:  { plan: esPro ? "PRO" : "FREE" },
         }),
       ]);
 
-      // ✅ Invalidar cache del layout y tenant-config para reflejar el nuevo plan
       revalidateTag("tenant-config");
       revalidateTag(`tenant-${tenantId}`);
+      revalidateTag("dashboard");
 
-      console.log(`[MP Webhook] Tenant ${tenantId} actualizado a plan: ${esPro ? "PRO" : "FREE"} (estado: ${nuevoEstado})`);
+      console.log(`[MP Webhook] Tenant ${tenantId} → plan: ${esPro ? "PRO" : "FREE"} (${preapproval.status})`);
     }
 
-    // ── Evento de pago ────────────────────────────────────────────────────
     if (body.type === "payment") {
       const payment = await getPayment(dataId);
-      console.log("[MP Webhook] Pago recibido:", payment.id, payment.status);
+      console.log("[MP Webhook] Pago:", payment.id, payment.status);
 
       if (payment.status === "approved" && payment.preapproval_id) {
         const suscripcion = await prisma.suscripcion.findFirst({
@@ -103,40 +98,34 @@ export async function POST(req: NextRequest) {
         });
 
         if (suscripcion) {
+          const nuevoVence = calcularProximoVencimiento();
           await prisma.$transaction([
             prisma.suscripcion.update({
               where: { tenantId: suscripcion.tenantId },
-              data: {
-                estado:             "authorized",
-                plan:               "PRO",
-                proximoVencimiento: calcularProximoVencimiento(),
-              },
+              data:  { estado: "authorized", plan: "PRO", proximoVencimiento: nuevoVence },
             }),
             prisma.tenant.update({
               where: { id: suscripcion.tenantId },
-              data: { plan: "PRO" },
+              data:  { plan: "PRO" },
             }),
           ]);
 
           revalidateTag("tenant-config");
           revalidateTag(`tenant-${suscripcion.tenantId}`);
+          revalidateTag("dashboard");
 
-          console.log(`[MP Webhook] Pago aprobado — tenant ${suscripcion.tenantId} activado PRO`);
+          console.log(`[MP Webhook] Pago aprobado → tenant ${suscripcion.tenantId} activado PRO`);
         }
       }
     }
 
-    // Siempre responder 200 — MP reintenta si recibe 4xx/5xx
     return NextResponse.json({ ok: true });
-
   } catch (error) {
     console.error("[MP Webhook] Error:", error);
-    // Responder 200 igual para evitar reintentos de MP con el mismo payload roto
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }); // siempre 200 para MP
   }
 }
 
-// GET — health check para que MP pueda verificar que el endpoint existe
 export async function GET() {
   return NextResponse.json({ ok: true, service: "DevHub POS Webhook" });
 }

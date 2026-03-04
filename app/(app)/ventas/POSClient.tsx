@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatPrecio } from "@/lib/utils";
 import type { Producto, Categoria } from "@/types";
+import TicketPrint from "@/components/ventas/TicketPrint";
 
 type ProductoConCategoria = Producto & {
   categoria: Pick<Categoria, "id" | "nombre"> | null;
@@ -39,10 +40,13 @@ type Props = {
   productos: ProductoConCategoria[];
   categorias: Pick<Categoria, "id" | "nombre">[];
   onVentaExitosa?: () => void;
-  isModal?: boolean;  // ← agregar
+  isModal?: boolean;
+  nombreTenant?: string;
+  telefonoTenant?: string | null;
+  direccionTenant?: string | null;
 };
 
-export default function POSClient({ productos, categorias, onVentaExitosa, isModal }: Props) {
+export default function POSClient({ productos, categorias, onVentaExitosa, isModal, nombreTenant = "Mi comercio", telefonoTenant, direccionTenant }: Props) {
   const [busqueda, setBusqueda] = useState("");
   const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null);
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
@@ -53,8 +57,8 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
   const [resultado, setResultado] = useState<"exito" | "error" | null>(null);
   const [mensajeError, setMensajeError] = useState("");
   const [efectivoRecibido, setEfectivoRecibido] = useState("");
-
-  // ── Filtrado de productos ───────────────────────────────────
+  const [ticketVenta, setTicketVenta] = useState<any | null>(null);
+  const [imprimirTicket, setImprimirTicket] = useState(true);
 
   const productosFiltrados = useMemo(() => {
     return productos.filter((p) => {
@@ -68,13 +72,11 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
     });
   }, [productos, busqueda, categoriaActiva]);
 
-  // ── Operaciones del carrito ─────────────────────────────────
-
   const agregarAlCarrito = useCallback((producto: ProductoConCategoria) => {
     setCarrito((prev) => {
       const existente = prev.find((i) => i.productoId === producto.id);
       if (existente) {
-        if (existente.cantidad >= producto.stock) return prev; // Sin stock extra
+        if (existente.cantidad >= producto.stock) return prev;
         return prev.map((i) =>
           i.productoId === producto.id
             ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precio }
@@ -121,16 +123,12 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
     setEfectivoRecibido("");
   }, []);
 
-  // ── Totales ─────────────────────────────────────────────────
-
   const subtotal = carrito.reduce((acc, i) => acc + i.subtotal, 0);
   const total = Math.max(0, subtotal - descuento);
   const vuelto =
     metodoPago === "efectivo" && efectivoRecibido
       ? parseFloat(efectivoRecibido) - total
       : 0;
-
-  // ── Registrar venta ─────────────────────────────────────────
 
   async function handleVenta() {
     if (carrito.length === 0) return;
@@ -161,11 +159,30 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
         setResultado("error");
       } else {
         setResultado("exito");
+        // Mostrar ticket solo si el checkbox está activo
+        if (imprimirTicket) {
+          setTicketVenta({
+            id:            data.data?.id ?? "000000",
+            createdAt:     data.data?.createdAt ?? new Date().toISOString(),
+            total,
+            subtotal,
+            descuento,
+            metodoPago,
+            clienteNombre: clienteNombre.trim() || null,
+            usuarioNombre: data.data?.usuarioNombre ?? null,
+            items: carrito.map(i => ({
+              nombre:    i.nombre,
+              cantidad:  i.cantidad,
+              precioUnit: i.precio,
+              subtotal:  i.subtotal,
+            })),
+          });
+        }
         setTimeout(() => {
           limpiarCarrito();
           setResultado(null);
           onVentaExitosa?.();
-        }, 1500);
+        }, 1200);
       }
     } catch {
       setMensajeError("Error de conexión");
@@ -175,8 +192,6 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
     }
   }
 
-  // ── Render ──────────────────────────────────────────────────
-
   return (
     <div className={cn(
       "flex gap-0 overflow-hidden",
@@ -184,24 +199,26 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
     )}>
 
       {/* ── Panel izquierdo: Catálogo ── */}
-      <div className="flex flex-col flex-1 min-w-0 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800">
-
+      <div
+        className="flex flex-col flex-1 min-w-0 border-r"
+        style={{ background: "#111111", borderColor: "rgba(255,255,255,0.07)" }}
+      >
         {/* Buscador */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <div className="p-4 border-b" style={{ background: "#161616", borderColor: "rgba(255,255,255,0.07)" }}>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
             <input
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar producto o código..."
-              className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="input-base pl-9 pr-4"
               autoFocus
             />
             {busqueda && (
               <button
                 onClick={() => setBusqueda("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -211,15 +228,19 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
 
         {/* Categorías */}
         {categorias.length > 0 && (
-          <div className="flex gap-2 px-4 py-3 overflow-x-auto border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 scrollbar-hide">
+          <div
+            className="flex gap-2 px-4 py-3 overflow-x-auto border-b scrollbar-hide"
+            style={{ background: "#161616", borderColor: "rgba(255,255,255,0.07)" }}
+          >
             <button
               onClick={() => setCategoriaActiva(null)}
               className={cn(
                 "flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
                 !categoriaActiva
-                  ? "bg-primary-600 text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                  ? "bg-red-600 text-white"
+                  : "text-zinc-300 hover:text-white"
               )}
+              style={!categoriaActiva ? {} : { background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}
             >
               Todos
             </button>
@@ -230,9 +251,10 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
                 className={cn(
                   "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
                   categoriaActiva === cat.id
-                    ? "bg-primary-600 text-white"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                    ? "bg-red-600 text-white"
+                    : "text-zinc-300 hover:text-white"
                 )}
+                style={categoriaActiva === cat.id ? {} : { background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}
               >
                 <Tag className="h-3 w-3" />
                 {cat.nombre}
@@ -245,9 +267,9 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
         <div className="flex-1 overflow-y-auto p-4">
           {productosFiltrados.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center py-20">
-              <Package className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-3" />
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Sin productos</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              <Package className="h-12 w-12 text-zinc-700 mb-3" />
+              <p className="text-sm font-medium text-zinc-400">Sin productos</p>
+              <p className="text-xs text-zinc-400 mt-1">
                 {busqueda ? "Probá con otro término" : "No hay productos con stock disponible"}
               </p>
             </div>
@@ -261,15 +283,25 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
                   <button
                     key={producto.id}
                     onClick={() => agregarAlCarrito(producto)}
-                    className={cn(
-                      "relative flex flex-col rounded-xl border bg-white dark:bg-gray-800 p-3 text-left transition-all hover:shadow-md hover:-translate-y-0.5 active:translate-y-0",
-                      enCarrito
-                        ? "border-primary-400 dark:border-primary-600 ring-1 ring-primary-400 dark:ring-primary-600"
-                        : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
-                    )}
+                    className="relative flex flex-col rounded-xl p-3 text-left transition-all hover:-translate-y-0.5 active:translate-y-0"
+                    style={{
+                      background: enCarrito ? "rgba(220,38,38,0.12)" : "#1a1a1a",
+                      border: enCarrito
+                        ? "1px solid rgba(220,38,38,0.4)"
+                        : "1px solid rgba(255,255,255,0.08)",
+                    }}
+                    onMouseEnter={e => {
+                      if (!enCarrito) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.15)";
+                    }}
+                    onMouseLeave={e => {
+                      if (!enCarrito) (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.08)";
+                    }}
                   >
                     {/* Imagen o ícono */}
-                    <div className="mb-2 flex items-center justify-center h-16 rounded-lg bg-gray-50 dark:bg-gray-700/50 overflow-hidden">
+                    <div
+                      className="mb-2 flex items-center justify-center h-16 rounded-lg overflow-hidden"
+                      style={{ background: "rgba(255,255,255,0.04)" }}
+                    >
                       {producto.imagen ? (
                         <img
                           src={producto.imagen}
@@ -277,28 +309,31 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
                           className="h-full w-full object-cover rounded-lg"
                         />
                       ) : (
-                        <Package className="h-7 w-7 text-gray-300 dark:text-gray-600" />
+                        <Package className="h-7 w-7 text-zinc-400" />
                       )}
                     </div>
 
                     {/* Info */}
-                    <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight mb-1">
+                    <p className="text-xs font-semibold text-zinc-100 line-clamp-2 leading-tight mb-1">
                       {producto.nombre}
                     </p>
-                    <p className="text-sm font-bold text-primary-600 dark:text-primary-400 mt-auto">
+                    <p className="text-sm font-bold text-red-400 mt-auto">
                       {formatPrecio(producto.precio)}
                     </p>
 
-                    {/* Stock badge */}
+                    {/* Stock bajo */}
                     {stockBajo && (
-                      <span className="absolute top-2 right-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                      <span
+                        className="absolute top-2 right-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                        style={{ background: "rgba(245,158,11,0.15)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.3)" }}
+                      >
                         {producto.stock}
                       </span>
                     )}
 
                     {/* Cantidad en carrito */}
                     {enCarrito && (
-                      <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-[10px] font-bold text-white shadow">
+                      <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white shadow">
                         {enCarrito.cantidad}
                       </span>
                     )}
@@ -311,17 +346,23 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
       </div>
 
       {/* ── Panel derecho: Carrito ── */}
-      <div className="flex flex-col w-80 xl:w-96 bg-white dark:bg-gray-900 flex-shrink-0">
-
+      <div
+        className="flex flex-col w-80 xl:w-96 flex-shrink-0"
+        style={{ background: "#161616", borderLeft: "1px solid rgba(255,255,255,0.07)" }}
+      >
         {/* Header carrito */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+        <div
+          className="flex items-center justify-between px-4 py-3 border-b"
+          style={{ borderColor: "rgba(255,255,255,0.07)" }}
+        >
           <div className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-            <span className="font-semibold text-gray-900 dark:text-gray-100">
-              Carrito
-            </span>
+            <ShoppingCart className="h-5 w-5 text-zinc-400" />
+            <span className="font-semibold text-zinc-100">Carrito</span>
             {carrito.length > 0 && (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30 text-xs font-bold text-primary-700 dark:text-primary-400">
+              <span
+                className="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
+                style={{ background: "rgba(220,38,38,0.8)" }}
+              >
                 {carrito.reduce((a, i) => a + i.cantidad, 0)}
               </span>
             )}
@@ -329,7 +370,7 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
           {carrito.length > 0 && (
             <button
               onClick={limpiarCarrito}
-              className="text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+              className="text-xs text-zinc-400 hover:text-red-400 transition-colors"
             >
               Limpiar
             </button>
@@ -340,58 +381,52 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
         <div className="flex-1 overflow-y-auto">
           {carrito.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full py-16 text-center px-6">
-              <div className="h-16 w-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
-                <ShoppingCart className="h-7 w-7 text-gray-300 dark:text-gray-600" />
+              <div
+                className="h-16 w-16 rounded-full flex items-center justify-center mb-4"
+                style={{ background: "rgba(255,255,255,0.04)" }}
+              >
+                <ShoppingCart className="h-7 w-7 text-zinc-400" />
               </div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                El carrito está vacío
-              </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                Tocá un producto para agregarlo
-              </p>
+              <p className="text-sm font-medium text-zinc-400">El carrito está vacío</p>
+              <p className="text-xs text-zinc-400 mt-1">Tocá un producto para agregarlo</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
               {carrito.map((item) => (
                 <div key={item.productoId} className="flex items-center gap-3 px-4 py-3">
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                      {item.nombre}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {formatPrecio(item.precio)} c/u
-                    </p>
+                    <p className="text-sm font-medium text-zinc-100 truncate">{item.nombre}</p>
+                    <p className="text-xs text-zinc-500">{formatPrecio(item.precio)} c/u</p>
                   </div>
 
-                  {/* Controles cantidad */}
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => cambiarCantidad(item.productoId, -1)}
-                      className="flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-300 hover:text-white transition-colors"
+                      style={{ border: "1px solid rgba(255,255,255,0.1)" }}
                     >
                       <Minus className="h-3 w-3" />
                     </button>
-                    <span className="w-6 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    <span className="w-6 text-center text-sm font-semibold text-zinc-100">
                       {item.cantidad}
                     </span>
                     <button
                       onClick={() => cambiarCantidad(item.productoId, 1)}
                       disabled={item.cantidad >= item.stock}
-                      className="flex h-6 w-6 items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-300 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      style={{ border: "1px solid rgba(255,255,255,0.1)" }}
                     >
                       <Plus className="h-3 w-3" />
                     </button>
                   </div>
 
-                  {/* Subtotal + eliminar */}
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-gray-900 dark:text-gray-100 w-20 text-right">
+                    <span className="text-sm font-bold text-zinc-100 w-20 text-right">
                       {formatPrecio(item.subtotal)}
                     </span>
                     <button
                       onClick={() => eliminarDelCarrito(item.productoId)}
-                      className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      className="text-zinc-400 hover:text-red-400 transition-colors"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -404,24 +439,22 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
 
         {/* Footer: totales + pago */}
         {carrito.length > 0 && (
-          <div className="border-t border-gray-200 dark:border-gray-800 p-4 space-y-4">
-
-            {/* Cliente (opcional) */}
-            <div>
-              <input
-                type="text"
-                value={clienteNombre}
-                onChange={(e) => setClienteNombre(e.target.value)}
-                placeholder="Nombre del cliente (opcional)"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
+          <div
+            className="border-t p-4 space-y-4"
+            style={{ borderColor: "rgba(255,255,255,0.07)" }}
+          >
+            {/* Cliente */}
+            <input
+              type="text"
+              value={clienteNombre}
+              onChange={(e) => setClienteNombre(e.target.value)}
+              placeholder="Nombre del cliente (opcional)"
+              className="input-base"
+            />
 
             {/* Descuento */}
             <div className="flex items-center gap-2">
-              <label className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                Descuento $
-              </label>
+              <label className="text-xs font-medium text-zinc-400 whitespace-nowrap">Descuento $</label>
               <input
                 type="number"
                 min="0"
@@ -429,26 +462,27 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
                 value={descuento || ""}
                 onChange={(e) => setDescuento(Math.max(0, parseFloat(e.target.value) || 0))}
                 placeholder="0"
-                className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="input-base flex-1"
               />
             </div>
 
             {/* Método de pago */}
             <div>
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Método de pago</p>
+              <p className="text-xs font-medium text-zinc-400 mb-2">Método de pago</p>
               <div className="grid grid-cols-5 gap-1.5">
                 {METODOS_PAGO.map((mp) => {
                   const Icon = mp.icono;
+                  const activo = metodoPago === mp.value;
                   return (
                     <button
                       key={mp.value}
                       onClick={() => setMetodoPago(mp.value)}
-                      className={cn(
-                        "flex flex-col items-center gap-1 py-2 rounded-lg border text-center transition-colors",
-                        metodoPago === mp.value
-                          ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400"
-                          : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
-                      )}
+                      className="flex flex-col items-center gap-1 py-2 rounded-lg text-center transition-colors"
+                      style={{
+                        background: activo ? "rgba(220,38,38,0.15)" : "rgba(255,255,255,0.04)",
+                        border: activo ? "1px solid rgba(220,38,38,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                        color: activo ? "#f87171" : "#a1a1aa",
+                      }}
                     >
                       <Icon className="h-4 w-4" />
                       <span className="text-[10px] font-medium leading-tight">{mp.label}</span>
@@ -461,60 +495,86 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
             {/* Efectivo recibido */}
             {metodoPago === "efectivo" && (
               <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                  Recibido $
-                </label>
+                <label className="text-xs font-medium text-zinc-400 whitespace-nowrap">Recibido $</label>
                 <input
                   type="number"
                   min={total}
                   value={efectivoRecibido}
                   onChange={(e) => setEfectivoRecibido(e.target.value)}
                   placeholder={String(total)}
-                  className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input-base flex-1"
                 />
               </div>
             )}
 
             {/* Totales */}
-            <div className="space-y-1 pt-1 border-t border-gray-100 dark:border-gray-800">
+            <div
+              className="space-y-1 pt-2 border-t"
+              style={{ borderColor: "rgba(255,255,255,0.07)" }}
+            >
               {descuento > 0 && (
-                <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex justify-between text-sm text-zinc-500">
                   <span>Subtotal</span>
                   <span>{formatPrecio(subtotal)}</span>
                 </div>
               )}
               {descuento > 0 && (
-                <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                <div className="flex justify-between text-sm text-green-400">
                   <span>Descuento</span>
                   <span>- {formatPrecio(descuento)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-bold text-lg text-gray-900 dark:text-gray-100">
+              <div className="flex justify-between font-bold text-lg text-zinc-100">
                 <span>Total</span>
-                <span className="text-primary-600 dark:text-primary-400">{formatPrecio(total)}</span>
+                <span className="text-red-400">{formatPrecio(total)}</span>
               </div>
               {metodoPago === "efectivo" && vuelto > 0 && (
-                <div className="flex justify-between text-sm font-semibold text-blue-600 dark:text-blue-400">
+                <div className="flex justify-between text-sm font-semibold text-zinc-300">
                   <span>Vuelto</span>
                   <span>{formatPrecio(vuelto)}</span>
                 </div>
               )}
             </div>
 
-            {/* Feedback de resultado */}
+            {/* Generar ticket */}
+            <label
+              className="flex items-center gap-2.5 cursor-pointer select-none py-1"
+              onClick={() => setImprimirTicket(v => !v)}
+            >
+              <div
+                className="flex h-4 w-4 items-center justify-center rounded flex-shrink-0 transition-colors"
+                style={{
+                  background:  imprimirTicket ? "#DC2626" : "transparent",
+                  border:      imprimirTicket ? "1px solid #DC2626" : "1px solid rgba(255,255,255,0.2)",
+                }}
+              >
+                {imprimirTicket && (
+                  <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 12 12" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2 6l3 3 5-5" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-xs text-zinc-400">Generar ticket de venta</span>
+            </label>
+
+            {/* Feedback */}
             {resultado === "error" && (
-              <div className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2.5">
-                <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-red-600 dark:text-red-400">{mensajeError}</p>
+              <div
+                className="flex items-start gap-2 rounded-lg px-3 py-2.5"
+                style={{ background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.2)" }}
+              >
+                <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-red-300">{mensajeError}</p>
               </div>
             )}
 
             {resultado === "exito" && (
-              <div className="flex items-center gap-2 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-3 py-2.5">
-                <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                <p className="text-xs font-medium text-green-600 dark:text-green-400">
-                  ¡Venta registrada!
-                </p>
+              <div
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5"
+                style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}
+              >
+                <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
+                <p className="text-xs font-medium text-green-300">¡Venta registrada!</p>
               </div>
             )}
 
@@ -522,7 +582,10 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
             <button
               onClick={handleVenta}
               disabled={cargando || carrito.length === 0 || resultado === "exito"}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-3 text-sm font-bold text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
+              className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: "#DC2626" }}
+              onMouseEnter={e => { if (!cargando) (e.currentTarget as HTMLElement).style.background = "#B91C1C"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "#DC2626"; }}
             >
               {cargando ? (
                 <>
@@ -539,6 +602,17 @@ export default function POSClient({ productos, categorias, onVentaExitosa, isMod
           </div>
         )}
       </div>
+
+      {/* ── Ticket de impresión ── */}
+      {ticketVenta && (
+        <TicketPrint
+          venta={ticketVenta}
+          nombreTenant={nombreTenant}
+          telefonoTenant={telefonoTenant}
+          direccionTenant={direccionTenant}
+          onClose={() => setTicketVenta(null)}
+        />
+      )}
     </div>
   );
 }

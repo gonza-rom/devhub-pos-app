@@ -1,91 +1,96 @@
 "use client";
-// app/(public)/auth/registro/RegistroForm.tsx
-// Con confirmación de email — muestra pantalla "revisá tu correo" después del registro
+// app/(public)/auth/nueva-password/page.tsx
+// Supabase redirige aquí después del link de recuperación
+// El usuario ingresa y confirma su nueva contraseña
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, ArrowRight, Store, AlertCircle, Mail } from "lucide-react";
+import { Eye, EyeOff, Store, AlertCircle, CheckCircle2, ArrowRight } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
-export default function RegistroForm() {
-  const [nombreUsuario,  setNombreUsuario]  = useState("");
-  const [nombreComercio, setNombreComercio] = useState("");
-  const [email,          setEmail]          = useState("");
-  const [password,       setPassword]       = useState("");
-  const [showPass,       setShowPass]       = useState(false);
-  const [cargando,       setCargando]       = useState(false);
-  const [error,          setError]          = useState("");
-  const [esperandoEmail, setEsperandoEmail] = useState(false);
+export default function NuevaPasswordPage() {
+  const [password,   setPassword]   = useState("");
+  const [confirmar,  setConfirmar]  = useState("");
+  const [showPass,   setShowPass]   = useState(false);
+  const [showConf,   setShowConf]   = useState(false);
+  const [cargando,   setCargando]   = useState(false);
+  const [error,      setError]      = useState("");
+  const [listo,      setListo]      = useState(false);
+  const [sesionOk,   setSesionOk]   = useState(false);
+  const router = useRouter();
 
-  const passLen      = password.length >= 8;
-  const passUpper    = /[A-Z]/.test(password);
-  const passNum      = /[0-9]/.test(password);
+  const passLen    = password.length >= 8;
+  const passUpper  = /[A-Z]/.test(password);
+  const passNum    = /[0-9]/.test(password);
   const passStrength = [passLen, passUpper, passNum].filter(Boolean).length;
+  const coinciden  = password === confirmar && confirmar.length > 0;
+
+  // Supabase maneja el token automáticamente via el hash de la URL
+  // Solo verificamos que haya sesión activa
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) setSesionOk(true);
+      else {
+        // No hay sesión — el link es inválido o expiró
+        router.replace("/auth/login?error=Link+expirado,+solicitá+uno+nuevo");
+      }
+    });
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!passLen) { setError("La contraseña debe tener al menos 8 caracteres."); return; }
+    if (!passLen)    { setError("La contraseña debe tener al menos 8 caracteres."); return; }
+    if (!coinciden)  { setError("Las contraseñas no coinciden."); return; }
     setCargando(true);
     try {
-      const res  = await fetch("/api/auth/registro", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ nombreComercio, nombreUsuario, email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error ?? "Error al crear la cuenta"); return; }
-      // Supabase mandó el email de confirmación → mostrar pantalla de espera
-      setEsperandoEmail(true);
-    } catch {
-      setError("Error de conexión. Intentá de nuevo.");
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      setListo(true);
+      setTimeout(() => router.push("/dashboard"), 2000);
+    } catch (err: any) {
+      setError(err.message ?? "Error al actualizar la contraseña");
     } finally {
       setCargando(false);
     }
   }
 
-  // ── Pantalla "revisá tu correo" ──────────────────────────────
-  if (esperandoEmail) {
+  if (!sesionOk) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-glow" />
+        <div className="auth-card" style={{ display: "flex", justifyContent: "center", padding: "3rem" }}>
+          <span className="auth-spinner" />
+        </div>
+        <style>{authStyles}</style>
+      </div>
+    );
+  }
+
+  if (listo) {
     return (
       <div className="auth-shell">
         <div className="auth-glow" />
         <div className="auth-card" style={{ textAlign: "center", padding: "2.5rem 2rem" }}>
           <div style={{
             width: 64, height: 64, borderRadius: "50%", margin: "0 auto 1.25rem",
-            background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.25)",
+            background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            <Mail className="h-7 w-7" style={{ color: "#DC2626" }} />
+            <CheckCircle2 className="h-7 w-7" style={{ color: "#22c55e" }} />
           </div>
           <h2 style={{
             fontFamily: "'Syne', sans-serif", fontSize: "1.375rem",
             fontWeight: 700, color: "#fff", margin: "0 0 0.5rem",
           }}>
-            Revisá tu correo
+            ¡Contraseña actualizada!
           </h2>
-          <p style={{ fontSize: "0.875rem", color: "#71717a", margin: "0 0 0.25rem", lineHeight: 1.6 }}>
-            Te enviamos un link de confirmación a
+          <p style={{ fontSize: "0.875rem", color: "#71717a", margin: 0 }}>
+            Redirigiendo a tu dashboard...
           </p>
-          <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "#f4f4f5", margin: "0 0 1.25rem" }}>
-            {email}
-          </p>
-          <p style={{ fontSize: "0.8125rem", color: "#52525b", lineHeight: 1.7, margin: "0 0 1.5rem" }}>
-            Hacé click en el link del email para activar tu cuenta.<br />
-            Si no lo encontrás, revisá la carpeta de spam.
-          </p>
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: "1.25rem" }}>
-            <p style={{ fontSize: "0.8125rem", color: "#52525b" }}>
-              ¿Email incorrecto?{" "}
-              <button
-                onClick={() => setEsperandoEmail(false)}
-                style={{
-                  color: "#DC2626", background: "none", border: "none",
-                  cursor: "pointer", fontWeight: 600, fontSize: "0.8125rem",
-                }}
-              >
-                Volver al registro
-              </button>
-            </p>
-          </div>
         </div>
         <style>{authStyles}</style>
       </div>
@@ -105,8 +110,8 @@ export default function RegistroForm() {
         </div>
 
         <div className="auth-heading">
-          <h1>Crear cuenta gratis</h1>
-          <p>Tu comercio digital en minutos</p>
+          <h1>Nueva contraseña</h1>
+          <p>Elegí una contraseña segura para tu cuenta</p>
         </div>
 
         {error && (
@@ -117,34 +122,15 @@ export default function RegistroForm() {
         )}
 
         <form onSubmit={handleSubmit} className="auth-form">
-          <div className="auth-row">
-            <div className="auth-field">
-              <label htmlFor="nombreUsuario">Tu nombre</label>
-              <input id="nombreUsuario" type="text" autoComplete="given-name"
-                placeholder="Juan García" value={nombreUsuario}
-                onChange={e => setNombreUsuario(e.target.value)} required disabled={cargando} />
-            </div>
-            <div className="auth-field">
-              <label htmlFor="nombreComercio">Nombre del comercio</label>
-              <input id="nombreComercio" type="text" placeholder="Mi Tienda"
-                value={nombreComercio} onChange={e => setNombreComercio(e.target.value)}
-                required disabled={cargando} />
-            </div>
-          </div>
-
           <div className="auth-field">
-            <label htmlFor="email">Correo electrónico</label>
-            <input id="email" type="email" autoComplete="email" placeholder="tu@correo.com"
-              value={email} onChange={e => setEmail(e.target.value)} required disabled={cargando} />
-          </div>
-
-          <div className="auth-field">
-            <label htmlFor="password">Contraseña</label>
+            <label htmlFor="password">Nueva contraseña</label>
             <div className="auth-pass-wrap">
-              <input id="password" type={showPass ? "text" : "password"}
+              <input
+                id="password" type={showPass ? "text" : "password"}
                 autoComplete="new-password" placeholder="Mínimo 8 caracteres"
                 value={password} onChange={e => setPassword(e.target.value)}
-                required disabled={cargando} />
+                required disabled={cargando}
+              />
               <button type="button" className="auth-eye" onClick={() => setShowPass(!showPass)} tabIndex={-1}>
                 {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -174,24 +160,44 @@ export default function RegistroForm() {
             </div>
           </div>
 
-          <button type="submit" className="auth-submit" disabled={cargando}>
+          <div className="auth-field">
+            <label htmlFor="confirmar">Confirmar contraseña</label>
+            <div className="auth-pass-wrap">
+              <input
+                id="confirmar" type={showConf ? "text" : "password"}
+                autoComplete="new-password" placeholder="Repetí la contraseña"
+                value={confirmar} onChange={e => setConfirmar(e.target.value)}
+                required disabled={cargando}
+                style={{
+                  borderColor: confirmar.length > 0
+                    ? coinciden ? "rgba(34,197,94,0.4)" : "rgba(220,38,38,0.4)"
+                    : undefined
+                }}
+              />
+              <button type="button" className="auth-eye" onClick={() => setShowConf(!showConf)} tabIndex={-1}>
+                {showConf ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {confirmar.length > 0 && (
+              <span style={{
+                fontSize: "0.6875rem", fontWeight: 500,
+                color: coinciden ? "#4ade80" : "#f87171",
+              }}>
+                {coinciden ? "✓ Las contraseñas coinciden" : "✗ Las contraseñas no coinciden"}
+              </span>
+            )}
+          </div>
+
+          <button type="submit" className="auth-submit" disabled={cargando || !coinciden || !passLen}>
             {cargando
               ? <span className="auth-spinner" />
-              : <><ArrowRight className="h-4 w-4" />Crear cuenta gratis</>
+              : <><ArrowRight className="h-4 w-4" />Guardar nueva contraseña</>
             }
           </button>
-
-          <p className="auth-terms">
-            Al registrarte aceptás los{" "}
-            <a href="/terminos" target="_blank" rel="noopener noreferrer">Términos de servicio</a>
-            {" "}y la{" "}
-            <a href="/privacidad" target="_blank" rel="noopener noreferrer">Política de privacidad</a>.
-          </p>
         </form>
 
         <p className="auth-footer">
-          ¿Ya tenés cuenta?{" "}
-          <Link href="/auth/login">Iniciar sesión</Link>
+          <Link href="/auth/login">Volver al login</Link>
         </p>
       </div>
       <style>{authStyles}</style>
@@ -211,7 +217,7 @@ const authStyles = `
     pointer-events: none; z-index: 0;
   }
   .auth-card {
-    position: relative; z-index: 1; width: 100%; max-width: 460px;
+    position: relative; z-index: 1; width: 100%; max-width: 420px;
     background: #111111; border: 1px solid rgba(255,255,255,0.08);
     border-radius: 20px; padding: 2rem;
     box-shadow: 0 0 0 1px rgba(255,255,255,0.03), 0 32px 64px rgba(0,0,0,0.6);
@@ -235,8 +241,6 @@ const authStyles = `
     border-radius: 10px; color: #f87171; font-size: 0.8125rem; margin-bottom: 1.25rem;
   }
   .auth-form { display: flex; flex-direction: column; gap: 1rem; }
-  .auth-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 480px) { .auth-row { grid-template-columns: 1fr; } }
   .auth-field { display: flex; flex-direction: column; gap: 6px; }
   .auth-field label { font-size: 0.75rem; font-weight: 600; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.05em; }
   .auth-field input {
@@ -261,7 +265,7 @@ const authStyles = `
   .auth-strength-bar { height: 3px; flex: 1; border-radius: 99px; transition: background 0.3s; }
   .auth-strength-label { font-size: 0.6875rem; font-weight: 600; color: #52525b; white-space: nowrap; }
   .auth-hints { display: flex; gap: 8px; flex-wrap: wrap; }
-  .hint-ok, .hint-no { font-size: 0.6875rem; font-weight: 500; padding: 2px 8px; border-radius: 99px; transition: all 0.2s; }
+  .hint-ok, .hint-no { font-size: 0.6875rem; font-weight: 500; padding: 2px 8px; border-radius: 99px; }
   .hint-ok { background: rgba(34,197,94,0.1); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
   .hint-no { background: rgba(255,255,255,0.04); color: #52525b; border: 1px solid rgba(255,255,255,0.06); }
   .auth-submit {
@@ -280,8 +284,6 @@ const authStyles = `
     border-radius: 50%; animation: auth-spin 0.7s linear infinite;
   }
   @keyframes auth-spin { to { transform: rotate(360deg); } }
-  .auth-terms { text-align: center; font-size: 0.75rem; color: #3f3f46; margin: 0; line-height: 1.5; }
-  .auth-terms a { color: #52525b; text-decoration: underline; }
   .auth-footer { margin-top: 1.5rem; text-align: center; font-size: 0.8125rem; color: #52525b; }
   .auth-footer a { color: #DC2626; text-decoration: none; font-weight: 600; }
   .auth-footer a:hover { color: #ef4444; }

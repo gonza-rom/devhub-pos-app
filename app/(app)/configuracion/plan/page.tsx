@@ -1,11 +1,13 @@
 "use client";
 // app/(app)/configuracion/plan/page.tsx
+// ACTUALIZADO: agrega sección "Uso actual" para plan FREE
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Zap, CheckCircle, Crown, Rocket, MessageCircle, Mail,
   Calendar, AlertTriangle, RefreshCw, Loader2, XCircle,
+  Package, Users, Clock, Image,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -20,6 +22,22 @@ type Suscripcion = {
   mpPreapprovalId: string | null;
   puedeRenovar: boolean;
 };
+
+type UsoData = {
+  plan: Plan;
+  uso: { productos: number; usuarios: number };
+  limites: {
+    productos: number | null;
+    usuarios: number | null;
+    historialDias: number | null;
+    imagenesPorProducto: number | null;
+  };
+  trial: {
+    diasRestantes: number | null;
+    vencidoAt: string | null;
+    vencido: boolean;
+  };
+} | null;
 
 const PLANES = [
   {
@@ -72,26 +90,88 @@ const PLANES = [
   },
 ];
 
+// ── Componente barra de uso ───────────────────────────────────
+
+function ItemUso({
+  icon: Icon, label, uso, limite, sufijo = "",
+}: {
+  icon: React.ElementType;
+  label: string;
+  uso: number;
+  limite: number | null;
+  sufijo?: string;
+}) {
+  const ilimitado = limite === null;
+  const pct       = ilimitado ? 0 : Math.min(100, Math.round((uso / limite!) * 100));
+  const critico   = !ilimitado && pct >= 90;
+  const warning   = !ilimitado && pct >= 70 && !critico;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className={cn(
+            "p-1.5 rounded-lg",
+            critico ? "bg-red-100 dark:bg-red-900/20" :
+            warning ? "bg-amber-100 dark:bg-amber-900/20" :
+            "bg-gray-100 dark:bg-gray-700"
+          )}>
+            <Icon className={cn(
+              "h-3.5 w-3.5",
+              critico ? "text-red-500" : warning ? "text-amber-500" : "text-gray-500"
+            )} />
+          </div>
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+        </div>
+        <span className={cn(
+          "text-sm font-semibold tabular-nums",
+          critico ? "text-red-500" : warning ? "text-amber-500" : "text-gray-600 dark:text-gray-400"
+        )}>
+          {ilimitado ? (
+            <span className="text-green-600 dark:text-green-400">Ilimitado</span>
+          ) : (
+            <>{uso}<span className="text-gray-400 font-normal">/{limite}{sufijo}</span></>
+          )}
+        </span>
+      </div>
+
+      {!ilimitado && (
+        <div className="h-1.5 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-700",
+              critico ? "bg-red-500" : warning ? "bg-amber-500" : "bg-primary-500"
+            )}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────
+
 export default function PlanPage() {
   const searchParams = useSearchParams();
   const [suscripcion, setSuscripcion] = useState<Suscripcion | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingPago, setLoadingPago] = useState(false);
+  const [uso,         setUso]         = useState<UsoData>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [loadingPago,     setLoadingPago]     = useState(false);
   const [loadingCancelar, setLoadingCancelar] = useState(false);
-  const [error, setError] = useState("");
-  const [toast, setToast] = useState<{ tipo: "ok" | "error"; msg: string } | null>(null);
+  const [error,    setError]    = useState("");
+  const [toast,    setToast]    = useState<{ tipo: "ok" | "error"; msg: string } | null>(null);
   const [confirmarCancelar, setConfirmarCancelar] = useState(false);
 
-  // Resultado al volver de MP
   const resultado = searchParams.get("suscripcion");
 
   useEffect(() => {
     fetchEstado();
+    fetchUso();
   }, []);
 
   useEffect(() => {
     if (resultado === "resultado") {
-      // Esperar un poco para que el webhook procese
       setTimeout(() => fetchEstado(), 2000);
       mostrarToast("ok", "Procesando tu suscripción... puede tardar unos segundos.");
     }
@@ -99,7 +179,7 @@ export default function PlanPage() {
 
   const fetchEstado = async () => {
     try {
-      const res = await fetch("/api/suscripcion/estado");
+      const res  = await fetch("/api/suscripcion/estado");
       const data = await res.json();
       if (data.ok) setSuscripcion(data.data);
     } catch {
@@ -109,6 +189,13 @@ export default function PlanPage() {
     }
   };
 
+  const fetchUso = async () => {
+    try {
+      const res  = await fetch("/api/plan/uso");
+      const data = await res.json();
+      if (data.ok) setUso(data.data);
+    } catch {}
+  };
   const mostrarToast = (tipo: "ok" | "error", msg: string) => {
     setToast({ tipo, msg });
     setTimeout(() => setToast(null), 5000);
@@ -118,20 +205,17 @@ export default function PlanPage() {
     setLoadingPago(true);
     setError("");
     try {
-      // Obtener email del usuario actual
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) throw new Error("No se pudo obtener tu email");
 
-      const res = await fetch("/api/suscripcion/crear", {
+      const res  = await fetch("/api/suscripcion/crear", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: user.email }),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
-
-      // Redirigir a MercadoPago
       window.location.href = data.initPoint;
     } catch (err: any) {
       setError(err.message ?? "Error al iniciar el pago");
@@ -142,7 +226,7 @@ export default function PlanPage() {
   const handleCancelar = async () => {
     setLoadingCancelar(true);
     try {
-      const res = await fetch("/api/suscripcion/cancelar", { method: "POST" });
+      const res  = await fetch("/api/suscripcion/cancelar", { method: "POST" });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
       mostrarToast("ok", "Suscripción cancelada. Seguís con acceso hasta el próximo vencimiento.");
@@ -163,10 +247,11 @@ export default function PlanPage() {
     );
   }
 
-  const planActual = PLANES.find((p) => p.key === suscripcion?.plan);
-  const esPro = suscripcion?.plan === "PRO";
-  const estaActivo = suscripcion?.estado === "authorized";
-  const cancelado = suscripcion?.estado === "cancelled";
+  const planActual  = PLANES.find((p) => p.key === suscripcion?.plan);
+  const estaActivo = suscripcion?.estado === "authorized" || suscripcion?.estado === "pending";
+  const cancelado   = suscripcion?.estado === "cancelled";
+  const esFree = !suscripcion || suscripcion.plan === "FREE";
+  const esPro  = suscripcion?.plan === "PRO" || suscripcion?.plan === "ENTERPRISE";
 
   return (
     <div className="space-y-8 max-w-4xl">
@@ -192,12 +277,103 @@ export default function PlanPage() {
         </p>
       </div>
 
+      {esFree && uso && (
+        <div className="card p-6 space-y-5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Uso actual del plan Free</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Actualizá al plan Pro para remover todos los límites</p>
+            </div>
+            {/* Badge días restantes del trial */}
+            {uso.trial && (
+              <span className={cn(
+                "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border",
+                uso.trial.vencido
+                  ? "text-red-600 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                  : uso.trial.diasRestantes! <= 2
+                  ? "text-amber-600 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
+                  : "text-blue-600 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
+              )}>
+                <Clock className="h-3.5 w-3.5" />
+                {uso.trial.vencido
+                  ? "Trial vencido"
+                  : uso.trial.diasRestantes === 1
+                  ? "1 día de trial restante"
+                  : `${uso.trial.diasRestantes} días de trial restantes`}
+              </span>
+            )}
+            {/* Alerta límite productos */}
+            {uso.uso.productos >= 45 && (
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-1.5 rounded-full">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Cerca del límite
+              </span>
+            )}
+          </div>
+
+          {/* Fecha vencimiento trial */}
+          {uso.trial && !uso.trial.vencido && uso.trial.vencidoAt && (
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
+              <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+              Tu período de prueba vence el{" "}
+              <strong className="text-gray-700 dark:text-gray-300">
+                {new Date(uso.trial.vencidoAt).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" })}
+              </strong>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <ItemUso
+              icon={Package}
+              label="Productos activos"
+              uso={uso.uso.productos}
+              limite={uso.limites.productos}
+            />
+            <ItemUso
+              icon={Users}
+              label="Usuarios"
+              uso={uso.uso.usuarios}
+              limite={uso.limites.usuarios}
+            />
+            <ItemUso
+              icon={Clock}
+              label="Historial de ventas"
+              uso={0}
+              limite={uso.limites.historialDias}
+              sufijo=" días"
+            />
+            <ItemUso
+              icon={Image}
+              label="Imágenes por producto"
+              uso={0}
+              limite={uso.limites.imagenesPorProducto}
+            />
+          </div>
+
+          <div className="pt-1 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Con el plan <strong className="text-gray-700 dark:text-gray-300">Pro</strong> tenés productos ilimitados, hasta 10 usuarios y 365 días de historial.
+            </p>
+            <button
+              onClick={handleSuscribir}
+              disabled={loadingPago}
+              className="flex-shrink-0 flex items-center gap-2 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white px-5 py-2.5 text-sm font-semibold transition-colors"
+            >
+              {loadingPago
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> Redirigiendo...</>
+                : <><Crown className="h-4 w-4" /> Actualizar al Pro</>
+              }
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Estado actual */}
       {suscripcion && (
         <div className={cn(
           "card p-6 border-l-4",
           esPro && estaActivo ? "border-green-500" :
-          esPro && cancelado ? "border-amber-500" :
+          esPro && cancelado  ? "border-amber-500" :
           "border-gray-400"
         )}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -207,7 +383,7 @@ export default function PlanPage() {
                 <span className={cn(
                   "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
                   esPro && estaActivo ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300" :
-                  esPro && cancelado ? "bg-amber-100 text-amber-700" :
+                  esPro && cancelado  ? "bg-amber-100 text-amber-700" :
                   "bg-gray-100 text-gray-600"
                 )}>
                   {esPro && estaActivo ? "✅ Activa" : esPro && cancelado ? "⚠️ Cancelada" : "Free"}
@@ -216,7 +392,6 @@ export default function PlanPage() {
               <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {planActual?.nombre ?? suscripcion.plan}
               </p>
-
               {suscripcion.proximoVencimiento && (
                 <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
                   <Calendar className="h-3.5 w-3.5" />
@@ -235,24 +410,19 @@ export default function PlanPage() {
               )}
             </div>
 
-            {/* Acciones */}
             <div className="flex flex-wrap gap-2">
-              {/* Botón suscribirse */}
               {(!esPro || cancelado) && (
                 <button
                   onClick={handleSuscribir}
                   disabled={loadingPago}
                   className="flex items-center gap-2 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white px-5 py-2.5 text-sm font-semibold transition-colors"
                 >
-                  {loadingPago ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Redirigiendo a MP...</>
-                  ) : (
-                    <><Crown className="h-4 w-4" /> Suscribirme al Pro</>
-                  )}
+                  {loadingPago
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Redirigiendo a MP...</>
+                    : <><Crown className="h-4 w-4" /> Suscribirme al Pro</>
+                  }
                 </button>
               )}
-
-              {/* Botón cancelar */}
               {esPro && estaActivo && !cancelado && (
                 <button
                   onClick={() => setConfirmarCancelar(true)}
@@ -264,7 +434,6 @@ export default function PlanPage() {
             </div>
           </div>
 
-          {/* Alerta próximo vencimiento */}
           {suscripcion.diasRestantes !== null && suscripcion.diasRestantes <= 7 && esPro && estaActivo && (
             <div className="mt-4 flex items-start gap-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3">
               <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -274,7 +443,6 @@ export default function PlanPage() {
             </div>
           )}
 
-          {/* Alerta cancelado */}
           {cancelado && suscripcion.diasRestantes !== null && suscripcion.diasRestantes > 0 && (
             <div className="mt-4 flex items-start gap-3 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
               <RefreshCw className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
@@ -320,7 +488,6 @@ export default function PlanPage() {
                     </span>
                   </div>
                 )}
-
                 <div>
                   <div className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold mb-3", plan.badge)}>
                     {plan.icon} {plan.nombre}
@@ -342,7 +509,6 @@ export default function PlanPage() {
                     )}
                   </div>
                 </div>
-
                 <ul className="space-y-2 flex-1">
                   {plan.features.map((f) => (
                     <li key={f} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
@@ -351,7 +517,6 @@ export default function PlanPage() {
                     </li>
                   ))}
                 </ul>
-
                 <div className="pt-2">
                   {plan.key === "ENTERPRISE" ? (
                     <div className="flex flex-col gap-2">

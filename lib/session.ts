@@ -1,26 +1,15 @@
 // lib/session.ts
-// Firma y verifica la cookie de sesión del tenant.
-// Usa `jose` (JWT puro) que es compatible con Edge Runtime.
-//
-// ¿Por qué una cookie propia y no solo la de Supabase?
-// La cookie de Supabase solo tiene el supabaseId.
-// Nosotros necesitamos tenantId + rol en el middleware (Edge Runtime)
-// sin poder hacer queries a Prisma. Entonces los guardamos firmados en
-// una cookie JWT separada que el middleware puede leer y verificar.
+// ACTUALIZADO: agrega `plan` y `planVenceAt` al payload del JWT
+// para que el middleware pueda bloquear tenants vencidos sin queries a DB.
 
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import type { RolTenant } from "@/types";
 
-// ── Constantes ────────────────────────────────────────────────
+const COOKIE_NAME  = "devhub-tenant-session";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 días
 
-const COOKIE_NAME = "devhub-tenant-session";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 días en segundos
-
-// La clave secreta para firmar el JWT.
-// IMPORTANTE: agregar SESSION_SECRET al .env con un string random largo.
-// Generalo con: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 function getSecret(): Uint8Array {
   const secret = process.env.SESSION_SECRET;
   if (!secret) throw new Error("SESSION_SECRET no está definido en .env");
@@ -30,10 +19,13 @@ function getSecret(): Uint8Array {
 // ── Tipos ─────────────────────────────────────────────────────
 
 export type TenantSessionPayload = {
-  tenantId: string;
-  usuarioId: string;   // supabaseId
-  rol: RolTenant;
-  nombre: string;
+  tenantId:    string;
+  usuarioId:   string;
+  rol:         RolTenant;
+  nombre:      string;
+  // ✅ Nuevos campos para bloqueo de plan en middleware (sin queries a DB)
+  plan:        "FREE" | "PRO" | "ENTERPRISE";
+  planVenceAt: number | null; // unix timestamp en ms, null = sin vencimiento
 };
 
 // ── Crear y firmar el JWT ─────────────────────────────────────
@@ -57,23 +49,19 @@ export async function verificarTenantSession(
     const { payload } = await jwtVerify(token, getSecret());
     return payload as unknown as TenantSessionPayload;
   } catch {
-    // Token inválido, expirado o corrupto
     return null;
   }
 }
 
-// ── Setear la cookie en una Response (para API Routes) ────────
+// ── Setear la cookie en una Response ─────────────────────────
 
-export function setTenantCookie(
-  response: NextResponse,
-  token: string
-): void {
+export function setTenantCookie(response: NextResponse, token: string): void {
   response.cookies.set(COOKIE_NAME, token, {
-    httpOnly: true,       // No accesible desde JavaScript del browser
-    secure: process.env.NODE_ENV === "production",
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: COOKIE_MAX_AGE,
-    path: "/",
+    maxAge:   COOKIE_MAX_AGE,
+    path:     "/",
   });
 }
 
@@ -82,15 +70,14 @@ export function setTenantCookie(
 export function deleteTenantCookie(response: NextResponse): void {
   response.cookies.set(COOKIE_NAME, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:   process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 0,
-    path: "/",
+    maxAge:   0,
+    path:     "/",
   });
 }
 
-// ── Leer la cookie desde Server Components ────────────────────
-// (No usar en middleware — ahí se lee directo del request)
+// ── Leer desde Server Components ─────────────────────────────
 
 export async function getTenantSessionFromCookies(): Promise<TenantSessionPayload | null> {
   const cookieStore = await cookies();
@@ -99,7 +86,7 @@ export async function getTenantSessionFromCookies(): Promise<TenantSessionPayloa
   return verificarTenantSession(token);
 }
 
-// ── Leer la cookie desde el middleware (Edge Runtime) ─────────
+// ── Leer desde el middleware (Edge Runtime) ───────────────────
 
 export async function getTenantSessionFromRequest(
   request: NextRequest

@@ -200,7 +200,7 @@ export default function Topbar({
                            style={{ background: "rgba(220,38,38,0.85)" }}>{initials}</div>
                       <div className="min-w-0">
                         <p className="text-[13px] font-semibold text-white truncate">{nombreUsuario}</p>
-                        <p className="text-[11px] text-zinc-500 truncate mt-0.5">{emailUsuario}</p>
+                        <p className="text-[11px] text-zinc-300 truncate mt-0.5">{emailUsuario}</p>
                       </div>
                     </div>
                     <span className={cn("inline-flex items-center mt-2.5 text-[10px] px-2 py-0.5 rounded font-semibold tracking-wide uppercase border", ROL_COLOR[rolUsuario])}>
@@ -209,7 +209,7 @@ export default function Topbar({
                   </div>
 
                   {esAdmin && (
-                    <div className="py-1.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div className="py-1.5" style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.32)" }}>
                       <DDItem href="/configuracion"        icon={Settings} label="Mi comercio"        onClick={() => setMenuAbierto(false)} />
                       <DDItem href="/configuracion/plan"   icon={Crown}    label="Plan y suscripción" onClick={() => setMenuAbierto(false)} iconColor="text-amber-500" />
                       {esPropietario && <DDItem href="/configuracion/usuarios" icon={Users} label="Usuarios" onClick={() => setMenuAbierto(false)} />}
@@ -389,9 +389,9 @@ function DDItem({ href, icon: Icon, label, onClick, iconColor }: {
     <Link
       href={href}
       onClick={onClick}
-      className="flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium text-zinc-400 transition-colors"
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "#a1a1aa"; }}
+      className="flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium text-zinc-200 transition-colors"
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255, 255, 255, 0.2)"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "#d4d4d8"; }}
     >
       <Icon className={cn("h-4 w-4 flex-shrink-0 text-zinc-600", iconColor)} />
       {label}

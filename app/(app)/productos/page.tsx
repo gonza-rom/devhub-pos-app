@@ -93,7 +93,7 @@ export default async function ProductosPage({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Productos</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">{productosFiltrados.length} productos</p>
+          <p className="text-sm text-zinc-400 mt-0.5">{productosFiltrados.length} productos</p>
         </div>
         <Link
           href="/productos/nuevo"
@@ -144,7 +144,7 @@ export default async function ProductosPage({
         <div className="card py-20 text-center">
           <Package className="h-12 w-12 mx-auto text-zinc-700 mb-4" />
           <h3 className="text-lg font-medium text-white mb-1">Sin productos</h3>
-          <p className="text-sm text-zinc-500 mb-4">
+          <p className="text-sm text-zinc-400 mb-4">
             {busqueda
               ? "No encontramos productos con ese criterio"
               : "Empezá agregando tu primer producto"}
@@ -166,7 +166,7 @@ export default async function ProductosPage({
                   {["Producto", "Categoría", "Precio", "Stock", "Acciones"].map((h) => (
                     <th
                       key={h}
-                      className={`px-4 py-3 text-xs font-semibold text-zinc-600 uppercase tracking-wider
+                      className={`px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider
                         ${h === "Precio" || h === "Stock" ? "text-right" : h === "Acciones" ? "text-center" : "text-left"}`}
                     >
                       {h}
@@ -196,13 +196,13 @@ export default async function ProductosPage({
                               className="h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0"
                               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
                             >
-                              <Package className="h-4 w-4 text-zinc-600" />
+                              <Package className="h-4 w-4 text-zinc-400" />
                             </div>
                           )}
                           <div>
                             <p className="font-medium text-white">{producto.nombre}</p>
                             {producto.codigoProducto && (
-                              <p className="text-xs text-zinc-600">{producto.codigoProducto}</p>
+                              <p className="text-xs text-zinc-400">{producto.codigoProducto}</p>
                             )}
                           </div>
                         </div>

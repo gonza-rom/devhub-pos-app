@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   LockOpen, Lock, Plus, Minus, RefreshCw, ShoppingCart,
-  AlertTriangle, CheckCircle, Clock, Banknote, Smartphone, CreditCard, X, Search, Landmark
+  AlertTriangle, CheckCircle, Clock, Banknote, Smartphone, CreditCard, X, Search, Landmark, History
 } from "lucide-react";
 import POSClient from "@/app/(app)/ventas/POSClient";
+import Link from "next/link";
 
 type TipoMov = "APERTURA" | "VENTA_EFECTIVO" | "VENTA_VIRTUAL" | "INGRESO" | "EGRESO" | "CIERRE";
 type MetodoPago = "EFECTIVO" | "TRANSFERENCIA" | "MERCADO_PAGO" | "TARJETA_CREDITO" | "TARJETA_DEBITO";
@@ -156,7 +157,7 @@ export default function CajaPage() {
 
   if (estado === "loading") return (
     <div className="flex items-center justify-center min-h-[400px]">
-      <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+      <RefreshCw className="w-8 h-8 animate-spin text-gray-600" />
     </div>
   );
 
@@ -165,22 +166,22 @@ export default function CajaPage() {
     <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="text-center mb-8">
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
-          <Lock className="w-8 h-8 text-gray-400" />
+          <Lock className="w-8 h-8 text-gray-600" />
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Caja cerrada</h1>
-        <p className="text-gray-500 mt-1">No hay ninguna sesión activa</p>
+        <p className="text-gray-600 mt-1">No hay ninguna sesión activa</p>
       </div>
 
       {ultima && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Última sesión</h2>
+          <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-4">Última sesión</h2>
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div><p className="text-gray-500">Apertura</p><p className="font-medium">{fmtFecha(ultima.abiertaAt)}</p></div>
-            <div><p className="text-gray-500">Cierre</p><p className="font-medium">{fmtFecha(ultima.cerradaAt)}</p></div>
-            <div><p className="text-gray-500">Saldo esperado</p><p className="font-medium">{fmt(ultima.saldoFinal)}</p></div>
-            <div><p className="text-gray-500">Saldo contado</p><p className="font-medium">{fmt(ultima.saldoContado)}</p></div>
+            <div><p className="text-gray-600">Apertura</p><p className="font-medium">{fmtFecha(ultima.abiertaAt)}</p></div>
+            <div><p className="text-gray-600">Cierre</p><p className="font-medium">{fmtFecha(ultima.cerradaAt)}</p></div>
+            <div><p className="text-gray-600">Saldo esperado</p><p className="font-medium">{fmt(ultima.saldoFinal)}</p></div>
+            <div><p className="text-gray-600">Saldo contado</p><p className="font-medium">{fmt(ultima.saldoContado)}</p></div>
             <div className="col-span-2">
-              <p className="text-gray-500">Diferencia</p>
+              <p className="text-gray-600">Diferencia</p>
               <p className={`font-semibold text-lg ${ultima.diferencia === 0 ? "text-green-600" : ultima.diferencia > 0 ? "text-blue-600" : "text-red-600"}`}>
                 {ultima.diferencia >= 0 ? "+" : ""}{fmt(ultima.diferencia)}
               </p>
@@ -190,10 +191,19 @@ export default function CajaPage() {
       )}
 
       {error && <ErrorBanner mensaje={error} />}
+
       <button onClick={() => { setError(null); setModalApertura(true); }}
         className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-4 rounded-xl transition-colors text-lg">
         <LockOpen className="w-5 h-5" /> Abrir caja
       </button>
+
+      <Link
+        href="/caja/historial"
+        className="w-full flex items-center justify-center gap-2 text-sm font-medium text-gray-800 hover:text-gray-700 dark:text-zinc-500 dark:hover:text-zinc-300 py-3 transition-colors"
+      >
+        <History className="w-4 h-4" />
+        Ver historial de cierres
+      </Link>
 
       {modalApertura && (
         <Modal title="Abrir caja" onClose={() => setModalApertura(false)}>
@@ -203,7 +213,7 @@ export default function CajaPage() {
               <InputMoneda value={saldoInicial} onChange={setSaldoInicial} autoFocus />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-400">(opcional)</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-600">(opcional)</span></label>
               <input type="text" value={obsApertura} onChange={(e) => setObsApertura(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="Ej: Turno mañana" />
@@ -230,7 +240,7 @@ export default function CajaPage() {
             <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse inline-block" />
             <h1 className="text-2xl font-bold text-gray-900">Caja abierta</h1>
           </div>
-          <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1">
+          <p className="text-sm text-gray-600 mt-0.5 flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />
             Desde {caja ? fmtFecha(caja.abiertaAt) : ""}
             {caja?.usuarioNombre && ` · ${caja.usuarioNombre}`}
@@ -261,8 +271,8 @@ export default function CajaPage() {
       <div className="border-t border-gray-200 pt-3 mt-1">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs text-gray-500 font-medium">4. (=) En caja</p>
-            <p className="text-xs text-gray-400">Saldo esperado actual</p>
+            <p className="text-xs text-gray-600 font-medium">4. (=) En caja</p>
+            <p className="text-xs text-gray-600">Saldo esperado actual</p>
           </div>
           <p className="text-2xl font-bold text-green-700">{fmt(caja?.saldoActual ?? 0)}</p>
         </div>
@@ -283,9 +293,9 @@ export default function CajaPage() {
       <div className="border-t border-gray-200 pt-3">
         <div className="bg-gray-50 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-2">
-            <CreditCard className="w-4 h-4 text-gray-500" />
+            <CreditCard className="w-4 h-4 text-gray-600" />
             <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Tarjetas</p>
-            <span className="text-xs text-gray-400 ml-auto">Acred. diferida</span>
+            <span className="text-xs text-gray-600 ml-auto">Acred. diferida</span>
           </div>
           <FilaCaja label="Débito"  valor={fmt(caja?.totalTarjetaDebito  ?? 0)} color="text-blue-700" icon={<CreditCard className="w-3.5 h-3.5" />} />
           <FilaCaja label="Crédito" valor={fmt(caja?.totalTarjetaCredito ?? 0)} color="text-blue-700" icon={<CreditCard className="w-3.5 h-3.5" />} />
@@ -324,11 +334,11 @@ export default function CajaPage() {
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Movimientos del día</h2>
-          <span className="text-sm text-gray-500">{caja?.movimientos.length ?? 0} registros</span>
+          <span className="text-sm text-gray-600">{caja?.movimientos.length ?? 0} registros</span>
         </div>
         <div className="divide-y divide-gray-50 max-h-72 overflow-y-auto">
           {!caja?.movimientos.length ? (
-            <p className="text-center text-gray-400 py-8 text-sm">Sin movimientos aún</p>
+            <p className="text-center text-gray-600 py-8 text-sm">Sin movimientos aún</p>
           ) : caja.movimientos.map((mov) => (
             <div key={mov.id} className="flex items-center gap-3 px-6 py-3">
               <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${tipoColor[mov.tipo]}`}>
@@ -337,14 +347,14 @@ export default function CajaPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-gray-700 truncate">{mov.descripcion ?? "—"}</p>
                 {mov.metodoPago && mov.tipo === "VENTA_VIRTUAL" && (
-                  <p className="text-xs text-gray-400">{mov.metodoPago.replace("_", " ")}</p>
+                  <p className="text-xs text-gray-600">{mov.metodoPago.replace("_", " ")}</p>
                 )}
               </div>
               <div className="text-right flex-shrink-0">
                 <p className={`text-sm font-semibold ${esPositivo(mov.tipo) ? "text-green-700" : "text-red-700"}`}>
                   {esPositivo(mov.tipo) ? "+" : "−"}{fmt(mov.monto)}
                 </p>
-                <p className="text-xs text-gray-400">{fmtHora(mov.createdAt)}</p>
+                <p className="text-xs text-gray-600">{fmtHora(mov.createdAt)}</p>
               </div>
             </div>
           ))}
@@ -359,7 +369,7 @@ export default function CajaPage() {
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cobrar venta</h3>
                 <button
                 onClick={() => { setModalVenta(false); setError(null); }}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-600 hover:text-gray-600 transition-colors"
                 >
                 <X className="w-5 h-5" />
                 </button>
@@ -367,7 +377,7 @@ export default function CajaPage() {
             <div className="flex-1 overflow-hidden">
                 {loadingProd ? (
                 <div className="flex items-center justify-center h-full">
-                    <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+                    <RefreshCw className="w-8 h-8 animate-spin text-gray-600" />
                 </div>
                 ) : (
                 <POSClient
@@ -431,7 +441,7 @@ export default function CajaPage() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-400">(opcional)</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-600">(opcional)</span></label>
               <input type="text" value={obsCierre} onChange={(e) => setObsCierre(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="Notas del cierre..." />
@@ -453,11 +463,11 @@ function FilaCaja({ num, label, valor, sub, color, icon }: {
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
-        {num && <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-500 text-xs flex items-center justify-center font-semibold flex-shrink-0">{num}</span>}
-        {icon && <span className="text-gray-400 flex-shrink-0">{icon}</span>}
+        {num && <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-xs flex items-center justify-center font-semibold flex-shrink-0">{num}</span>}
+        {icon && <span className="text-gray-600 flex-shrink-0">{icon}</span>}
         <div>
           <p className="text-xs font-medium text-gray-700">{label}</p>
-          {sub && <p className="text-xs text-gray-400">{sub}</p>}
+          {sub && <p className="text-xs text-gray-600">{sub}</p>}
         </div>
       </div>
       <p className={`text-sm font-semibold ${color}`}>{valor}</p>
@@ -470,7 +480,7 @@ function InputMoneda({ value, onChange, autoFocus }: {
 }) {
   return (
     <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 font-medium">$</span>
       <input type="number" min="0" step="0.01" value={value} onChange={(e) => onChange(e.target.value)}
         className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-lg"
         placeholder="0.00" autoFocus={autoFocus} />
@@ -499,7 +509,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+          <button onClick={onClose} className="text-gray-600 hover:text-gray-600 text-2xl leading-none">×</button>
         </div>
         <div className="px-6 py-5">{children}</div>
       </div>

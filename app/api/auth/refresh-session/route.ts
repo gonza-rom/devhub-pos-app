@@ -1,7 +1,5 @@
 // app/api/auth/refresh-session/route.ts
-// Se llama cuando el middleware detecta que hay sesión de Supabase
-// pero no hay cookie de tenant (cookie expirada o primer login post-deploy).
-// Busca el tenant en la DB, genera una nueva cookie y redirige al destino.
+// ACTUALIZADO: incluye plan y planVenceAt en la cookie de sesión
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -13,7 +11,6 @@ export async function GET(req: NextRequest) {
   const redirectTo = searchParams.get("redirect") ?? "/dashboard";
 
   try {
-    // Obtener el usuario de Supabase
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -21,9 +18,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL("/auth/login", req.url));
     }
 
-    // Buscar el tenant del usuario en la DB
     const usuarioTenant = await prisma.usuarioTenant.findUnique({
-      where: { supabaseId: user.id },
+      where:  { supabaseId: user.id },
       select: { tenantId: true, rol: true, nombre: true, activo: true },
     });
 
@@ -31,17 +27,34 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL("/onboarding", req.url));
     }
 
-    // Crear nueva cookie firmada
+    // ✅ Obtener plan y vencimiento para incluirlos en la cookie
+    const [tenant, suscripcion] = await Promise.all([
+      prisma.tenant.findUnique({
+        where:  { id: usuarioTenant.tenantId },
+        select: { plan: true },
+      }),
+      prisma.suscripcion.findUnique({
+        where:  { tenantId: usuarioTenant.tenantId },
+        select: { proximoVencimiento: true, estado: true },
+      }),
+    ]);
+
+    const plan = (tenant?.plan ?? "FREE") as "FREE" | "PRO" | "ENTERPRISE";
+    const planVenceAt = suscripcion?.proximoVencimiento
+      ? new Date(suscripcion.proximoVencimiento).getTime()
+      : null;
+
     const token = await crearTenantSession({
       tenantId:  usuarioTenant.tenantId,
       usuarioId: user.id,
       rol:       usuarioTenant.rol,
       nombre:    usuarioTenant.nombre,
+      plan,
+      planVenceAt,
     });
 
     const response = NextResponse.redirect(new URL(redirectTo, req.url));
     setTenantCookie(response, token);
-
     return response;
 
   } catch (error) {
