@@ -1,7 +1,6 @@
 "use client";
 // app/(public)/auth/callback/page.tsx
-// Maneja el callback de Supabase desde el cliente
-// El flujo PKCE necesita acceso al localStorage del browser
+// Maneja implicit flow: el token viene en el hash #access_token=...
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -9,34 +8,50 @@ import { createClient } from "@/lib/supabase/client";
 import { Suspense } from "react";
 
 function CallbackHandler() {
-  const router     = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
     async function handleCallback() {
+      // ── Error en query params ──
       const error            = searchParams.get("error");
       const errorDescription = searchParams.get("error_description");
-      const code             = searchParams.get("code");
-
       if (error) {
         router.replace(`/auth/login?error=${encodeURIComponent(errorDescription ?? error)}`);
         return;
       }
 
-      if (code) {
-        const supabase = createClient();
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      const supabase = createClient();
 
+      // ── Implicit flow: token en el hash #access_token=...&refresh_token=... ──
+      const hash = window.location.hash;
+      if (hash && hash.includes("access_token")) {
+        // Supabase lee el hash automáticamente al llamar getSession()
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+        if (sessionError || !session) {
+          router.replace(`/auth/login?error=${encodeURIComponent("Link inválido o expirado")}`);
+          return;
+        }
+
+        window.location.href = "/api/auth/refresh-session?redirect=/dashboard";
+        return;
+      }
+
+      // ── PKCE flow: token en query param ?code= ──
+      const code = searchParams.get("code");
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError) {
           router.replace(`/auth/login?error=${encodeURIComponent("Link inválido o expirado")}`);
           return;
         }
+        window.location.href = "/api/auth/refresh-session?redirect=/dashboard";
+        return;
       }
 
-      // Sesión establecida en el cliente → crear tenant + cookie de sesión
-      // refresh-session es un endpoint GET que lee la sesión de Supabase,
-      // crea el tenant si no existe y setea la cookie de tenant
-      window.location.href = "/api/auth/refresh-session?redirect=/dashboard";
+      // ── Nada encontrado ──
+      router.replace(`/auth/login?error=${encodeURIComponent("Link inválido o expirado")}`);
     }
 
     handleCallback();
