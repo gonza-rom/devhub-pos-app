@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import {
   Zap, CheckCircle, Crown, Rocket, MessageCircle, Mail,
   Calendar, AlertTriangle, RefreshCw, Loader2, XCircle,
-  Package, Users, Clock, Image,
+  Package, Users, Clock, Image, Landmark, Copy, Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -161,7 +161,9 @@ export default function PlanPage() {
   const [loadingCancelar, setLoadingCancelar] = useState(false);
   const [error,    setError]    = useState("");
   const [toast,    setToast]    = useState<{ tipo: "ok" | "error"; msg: string } | null>(null);
-  const [confirmarCancelar, setConfirmarCancelar] = useState(false);
+  const [confirmarCancelar,   setConfirmarCancelar]   = useState(false);
+  const [modalTransferencia, setModalTransferencia] = useState(false);
+  const [copiado,            setCopiado]            = useState<"alias" | "cbu" | null>(null);
 
   const resultado = searchParams.get("suscripcion");
 
@@ -239,6 +241,12 @@ export default function PlanPage() {
     }
   };
 
+  const copiar = async (texto: string, tipo: "alias" | "cbu") => {
+    await navigator.clipboard.writeText(texto);
+    setCopiado(tipo);
+    setTimeout(() => setCopiado(null), 2000);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -248,10 +256,16 @@ export default function PlanPage() {
   }
 
   const planActual  = PLANES.find((p) => p.key === suscripcion?.plan);
-  const estaActivo = suscripcion?.estado === "authorized" || suscripcion?.estado === "pending";
+  const esPro       = suscripcion?.plan === "PRO";
+  const estaActivo  = suscripcion?.estado === "authorized";
   const cancelado   = suscripcion?.estado === "cancelled";
-  const esFree = !suscripcion || suscripcion.plan === "FREE";
-  const esPro  = suscripcion?.plan === "PRO" || suscripcion?.plan === "ENTERPRISE";
+  const esFree      = suscripcion?.plan === "FREE" || !suscripcion;
+
+  const ALIAS    = "gonza-rom";
+  const CBU      = "4530000800017862828905";
+  const TITULAR  = "Gonzalo Misael Romero Quispe";
+  const MONTO    = "$35.000 ARS";
+  const WA_URL   = `https://wa.me/543834946767?text=${encodeURIComponent("Hola! Hice una transferencia para el Plan Pro de DevHub POS. Te mando el comprobante.")}`;
 
   return (
     <div className="space-y-8 max-w-4xl">
@@ -463,6 +477,33 @@ export default function PlanPage() {
         </div>
       )}
 
+      {/* ── Pagar por transferencia (solo si no es PRO activo) ── */}
+      {!esPro && (
+        <div className="card p-5 flex flex-col sm:flex-row items-center gap-4"
+          style={{ background: "rgba(34,197,94,0.04)", border: "1px solid rgba(34,197,94,0.2)" }}>
+          <div className="p-3 rounded-xl flex-shrink-0"
+            style={{ background: "rgba(34,197,94,0.1)" }}>
+            <Landmark className="h-6 w-6 text-green-600" />
+          </div>
+          <div className="flex-1 text-center sm:text-left">
+            <p className="font-semibold text-gray-900 dark:text-gray-100">
+              ¿Preferís pagar por transferencia?
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              Transferí {MONTO}/mes y envianos el comprobante por WhatsApp. Activamos tu plan en minutos.
+            </p>
+          </div>
+          <button
+            onClick={() => setModalTransferencia(true)}
+            className="flex-shrink-0 flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors text-green-700 dark:text-green-400"
+            style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)" }}
+          >
+            <Landmark className="h-4 w-4" />
+            Ver datos bancarios
+          </button>
+        </div>
+      )}
+
       {/* Planes */}
       <div>
         <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-5">Planes disponibles</h2>
@@ -578,29 +619,98 @@ export default function PlanPage() {
         </div>
       </div>
 
-      {/* Modal confirmar cancelación */}
-      {confirmarCancelar && (
+      {/* Modal transferencia */}
+      {modalTransferencia && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setConfirmarCancelar(false)} />
-          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white dark:bg-gray-800 shadow-xl p-6 space-y-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 mx-auto">
-              <AlertTriangle className="h-6 w-6 text-red-600" />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setModalTransferencia(false)} />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white dark:bg-gray-800 shadow-xl p-6 space-y-5">
+
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-green-100 dark:bg-green-900/30 flex-shrink-0">
+                <Landmark className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Datos para transferencia</h3>
+                <p className="text-xs text-gray-500">Plan Pro · {MONTO}/mes</p>
+              </div>
             </div>
-            <div className="text-center">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">¿Cancelar suscripción?</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                MercadoPago dejará de cobrarte, pero mantenés acceso al Plan Pro hasta el próximo vencimiento.
+
+            {/* Datos bancarios */}
+            <div className="space-y-3">
+              {/* Alias */}
+              <div className="flex items-center justify-between rounded-xl px-4 py-3"
+                style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)" }}>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Alias</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mt-0.5">{ALIAS}</p>
+                </div>
+                <button
+                  onClick={() => copiar(ALIAS, "alias")}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                  style={{ background: copiado === "alias" ? "rgba(34,197,94,0.1)" : "rgba(0,0,0,0.06)", color: copiado === "alias" ? "#16a34a" : "#6b7280" }}
+                >
+                  {copiado === "alias" ? <><Check className="h-3.5 w-3.5" />Copiado</> : <><Copy className="h-3.5 w-3.5" />Copiar</>}
+                </button>
+              </div>
+
+              {/* CBU */}
+              <div className="flex items-center justify-between rounded-xl px-4 py-3"
+                style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)" }}>
+                <div>
+                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">CBU</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mt-0.5 font-mono tracking-wider">{CBU}</p>
+                </div>
+                <button
+                  onClick={() => copiar(CBU, "cbu")}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors flex-shrink-0 ml-2"
+                  style={{ background: copiado === "cbu" ? "rgba(34,197,94,0.1)" : "rgba(0,0,0,0.06)", color: copiado === "cbu" ? "#16a34a" : "#6b7280" }}
+                >
+                  {copiado === "cbu" ? <><Check className="h-3.5 w-3.5" />Copiado</> : <><Copy className="h-3.5 w-3.5" />Copiar</>}
+                </button>
+              </div>
+
+              {/* Titular y monto */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl px-4 py-3" style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)" }}>
+                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Titular</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mt-0.5">{TITULAR}</p>
+                </div>
+                <div className="rounded-xl px-4 py-3" style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.08)" }}>
+                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Monto</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mt-0.5">{MONTO}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Instrucción */}
+            <div className="flex items-start gap-2.5 rounded-xl px-4 py-3"
+              style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)" }}>
+              <MessageCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                Después de transferir, envianos el comprobante por WhatsApp y activamos tu plan <strong>en minutos</strong>.
               </p>
             </div>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmarCancelar(false)}
-                className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-                Volver
-              </button>
-              <button onClick={handleCancelar} disabled={loadingCancelar}
-                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white py-2.5 text-sm font-bold transition-colors">
-                {loadingCancelar ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Sí, cancelar
+
+            {/* Botones */}
+            <div className="flex flex-col gap-2.5">
+              <a
+                href={WA_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold text-white transition-colors"
+                style={{ background: "#16a34a" }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#15803d"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#16a34a"}
+              >
+                <MessageCircle className="h-4 w-4" />
+                Enviar comprobante por WhatsApp
+              </a>
+              <button
+                onClick={() => setModalTransferencia(false)}
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-600 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cerrar
               </button>
             </div>
           </div>
