@@ -1,25 +1,19 @@
 "use client";
 // app/(public)/auth/callback/page.tsx
-// Maneja implicit flow: el token viene en el hash #access_token=...
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Suspense } from "react";
-import Link from "next/link";
-import { CheckCircle2, ArrowRight, Store } from "lucide-react";
 
 function CallbackHandler() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const [estado, setEstado] = useState<"cargando" | "activado" | "ya_confirmado">("cargando");
+  const [estado, setEstado] = useState<"cargando" | "ya_confirmado">("cargando");
 
   useEffect(() => {
     async function handleCallback() {
       const error = searchParams.get("error");
 
-      // Si hay error en la URL → la cuenta igual puede estar confirmada
-      // mostramos pantalla amigable en vez de "link expirado"
       if (error) {
         setEstado("ya_confirmado");
         return;
@@ -34,12 +28,10 @@ function CallbackHandler() {
           setEstado("ya_confirmado");
           return;
         }
-        // Éxito — generar cookie y redirigir
         window.location.href = "/api/auth/refresh-session?redirect=/dashboard";
         return;
       }
 
-      // Sin code ni error → mostrar pantalla de login
       setEstado("ya_confirmado");
     }
 
@@ -68,7 +60,6 @@ function CallbackHandler() {
     );
   }
 
-  // Estado "ya_confirmado" o "activado" sin redirect automático
   return (
     <div style={{
       minHeight: "100vh", display: "flex", alignItems: "center",
@@ -88,18 +79,24 @@ function CallbackHandler() {
             border: "1px solid rgba(220,38,38,0.25)", borderRadius: 10,
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            <Store size={18} color="#DC2626" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
           </div>
           <span style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>DevHub POS</span>
         </div>
 
-        {/* Ícono */}
+        {/* Ícono check */}
         <div style={{
           width: 64, height: 64, borderRadius: "50%", margin: "0 auto 1.25rem",
           background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
-          <CheckCircle2 size={28} color="#22c55e" />
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
         </div>
 
         <h2 style={{ fontSize: "1.375rem", fontWeight: 700, color: "#fff", margin: "0 0 0.5rem" }}>
@@ -109,17 +106,23 @@ function CallbackHandler() {
           Tu cuenta ya está lista. Ingresá con tu email y contraseña para empezar a usar DevHub POS.
         </p>
 
-        <Link href="/auth/login" style={{
+        <a href="/auth/login" style={{
           display: "inline-flex", alignItems: "center", gap: 8,
           background: "#DC2626", color: "#fff", textDecoration: "none",
           padding: "11px 24px", borderRadius: 10, fontSize: "0.9375rem",
           fontWeight: 600,
         }}>
-          Iniciar sesión <ArrowRight size={16} />
-        </Link>
+          Iniciar sesión →
+        </a>
       </div>
     </div>
   );
 }
 
 export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={null}>
+      <CallbackHandler />
+    </Suspense>
+  );
+}
