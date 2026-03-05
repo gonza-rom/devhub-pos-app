@@ -1,91 +1,72 @@
+"use client";
 // app/(public)/auth/callback/page.tsx
-// Maneja el callback de confirmación de email de Supabase (flujo PKCE)
+// Maneja el callback de Supabase desde el cliente
+// El flujo PKCE necesita acceso al localStorage del browser
 
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { prisma } from "@/lib/prisma";
-import { toSlug } from "@/lib/utils";
+import { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { Suspense } from "react";
 
-export default async function AuthCallbackPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    code?: string;
-    token_hash?: string;
-    type?: string;
-    error?: string;
-    error_description?: string;
-  }>;
-}) {
-  const params = await searchParams;
+function CallbackHandler() {
+  const router     = useRouter();
+  const searchParams = useSearchParams();
 
-  // Si Supabase mandó un error en la URL
-  if (params.error) {
-    redirect(`/auth/login?error=${encodeURIComponent(params.error_description ?? params.error)}`);
-  }
+  useEffect(() => {
+    async function handleCallback() {
+      const error            = searchParams.get("error");
+      const errorDescription = searchParams.get("error_description");
+      const code             = searchParams.get("code");
 
-  const supabase = await createClient();
-
-  // ── Flujo PKCE con `code` ──
-  if (params.code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(params.code);
-    if (error) {
-      redirect(`/auth/login?error=${encodeURIComponent("Link inválido o expirado")}`);
-    }
-  }
-  // ── Flujo OTP con token_hash (fallback) ──
-  else if (params.token_hash && params.type) {
-    const { error } = await supabase.auth.verifyOtp({
-      token_hash: params.token_hash,
-      type: params.type as any,
-    });
-    if (error) {
-      redirect(`/auth/login?error=${encodeURIComponent("Link inválido o expirado")}`);
-    }
-  } else {
-    redirect(`/auth/login?error=${encodeURIComponent("Link inválido o expirado")}`);
-  }
-
-  // ── Crear tenant si no existe ──────────────────────────────────
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (user) {
-    const existente = await prisma.usuarioTenant.findUnique({
-      where: { supabaseId: user.id },
-    });
-
-    if (!existente) {
-      const nombre         = user.user_metadata?.nombre        ?? "Usuario";
-      const nombreComercio = user.user_metadata?.nombreComercio ?? "Mi Comercio";
-
-      const base = toSlug(nombreComercio);
-      let slug = base, contador = 2;
-      while (await prisma.tenant.findUnique({ where: { slug } })) {
-        slug = `${base}-${contador++}`;
+      if (error) {
+        router.replace(`/auth/login?error=${encodeURIComponent(errorDescription ?? error)}`);
+        return;
       }
 
-      await prisma.$transaction(async (tx) => {
-        const tenant = await tx.tenant.create({
-          data: { nombre: nombreComercio, email: user.email!, slug, plan: "FREE" },
-        });
-        await tx.usuarioTenant.create({
-          data: {
-            tenantId:   tenant.id,
-            supabaseId: user.id,
-            nombre,
-            email:      user.email!,
-            rol:        "PROPIETARIO",
-          },
-        });
-        await tx.suscripcion.create({
-          data: { tenantId: tenant.id, plan: "FREE", estado: "authorized" },
-        });
-      });
-    }
-  }
+      if (code) {
+        const supabase = createClient();
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
-  // ── Generar cookie de tenant y redirigir al dashboard ──────────
-  // refresh-session lee el usuario de Supabase, busca el tenant en DB
-  // y setea la cookie firmada que necesita el middleware
-  redirect("/api/auth/refresh-session?redirect=/dashboard");
+        if (exchangeError) {
+          router.replace(`/auth/login?error=${encodeURIComponent("Link inválido o expirado")}`);
+          return;
+        }
+      }
+
+      // Sesión establecida en el cliente → crear tenant + cookie de sesión
+      // refresh-session es un endpoint GET que lee la sesión de Supabase,
+      // crea el tenant si no existe y setea la cookie de tenant
+      window.location.href = "/api/auth/refresh-session?redirect=/dashboard";
+    }
+
+    handleCallback();
+  }, [router, searchParams]);
+
+  return (
+    <div style={{
+      minHeight: "100vh", display: "flex", alignItems: "center",
+      justifyContent: "center", background: "#0a0a0a",
+    }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{
+          width: 40, height: 40, margin: "0 auto 1rem",
+          border: "3px solid rgba(220,38,38,0.25)",
+          borderTopColor: "#DC2626", borderRadius: "50%",
+          animation: "spin 0.7s linear infinite",
+        }} />
+        <p style={{ color: "#71717a", fontSize: "0.875rem", fontFamily: "sans-serif" }}>
+          Confirmando tu cuenta...
+        </p>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={null}>
+      <CallbackHandler />
+    </Suspense>
+  );
 }
