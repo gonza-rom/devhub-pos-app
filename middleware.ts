@@ -10,7 +10,8 @@ const PUBLIC_PATHS = [
   "/auth/login",
   "/auth/registro",
   "/auth/callback",
-  "/auth/recuperar",        // recuperación de contraseña
+  "/auth/recuperar",
+  "/auth/loading",        // recuperación de contraseña
   "/api/auth",
   "/api/webhooks",
   "/_next",

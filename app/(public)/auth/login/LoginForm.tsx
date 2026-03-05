@@ -2,7 +2,7 @@
 // app/(public)/auth/login/LoginForm.tsx
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, Store, AlertCircle, CheckCircle2 } from "lucide-react";
 
@@ -12,7 +12,6 @@ export default function LoginForm() {
   const [showPass, setShowPass] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error,    setError]    = useState("");
-  const router       = useRouter();
   const searchParams = useSearchParams();
 
   const urlError   = searchParams.get("error");
@@ -30,8 +29,9 @@ export default function LoginForm() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Error al iniciar sesión"); return; }
-      router.push("/dashboard");
-      router.refresh();
+      // Ir a la pantalla de loading que llama a refresh-session
+      // Esto evita el flash blanco y garantiza que la cookie del tenant se actualice
+      window.location.href = "/auth/loading?redirect=/dashboard";
     } catch {
       setError("Error de conexión. Intentá de nuevo.");
     } finally {

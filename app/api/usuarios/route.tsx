@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant";
+import { PLAN_LIMITES } from "@/lib/utils";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseAdmin = createClient(
@@ -25,12 +26,12 @@ export async function GET() {
 
     const [usuarios, tenant] = await Promise.all([
       prisma.usuarioTenant.findMany({
-        where: { tenantId },
-        select: { id: true, nombre: true, email: true, rol: true, activo: true, createdAt: true },
+        where:   { tenantId },
+        select:  { id: true, nombre: true, email: true, rol: true, activo: true, createdAt: true },
         orderBy: { createdAt: "asc" },
       }),
       prisma.tenant.findUnique({
-        where: { id: tenantId },
+        where:  { id: tenantId },
         select: { plan: true },
       }),
     ]);
@@ -81,23 +82,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verificar límite de usuarios según plan
+    // ── Verificar límite de usuarios según plan (usa PLAN_LIMITES de utils) ──
     const tenant = await prisma.tenant.findUnique({
-      where: { id: tenantId },
+      where:  { id: tenantId },
       select: { plan: true, _count: { select: { usuarios: { where: { activo: true } } } } },
     });
 
-    const LIMITES: Record<string, number> = {
-      FREE: 1, STARTER: 3, PRO: 10, ENTERPRISE: Infinity,
-    };
-    const limite = LIMITES[tenant?.plan ?? "FREE"];
+    const plan   = (tenant?.plan ?? "FREE") as keyof typeof PLAN_LIMITES;
+    const limite = PLAN_LIMITES[plan].usuarios;
     const actual = tenant?._count.usuarios ?? 0;
 
     if (actual >= limite) {
       return NextResponse.json(
         {
-          ok: false,
-          error: `Límite de usuarios alcanzado (${actual}/${limite}). Actualizá tu plan para agregar más.`,
+          ok:    false,
+          error: `Límite de usuarios alcanzado (${actual}/${limite === Infinity ? "∞" : limite}). Actualizá tu plan para agregar más.`,
         },
         { status: 403 }
       );
@@ -116,7 +115,7 @@ export async function POST(req: NextRequest) {
 
     // Crear user en Supabase Auth
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: email.trim().toLowerCase(),
+      email:         email.trim().toLowerCase(),
       password,
       email_confirm: true,
     });
@@ -124,7 +123,7 @@ export async function POST(req: NextRequest) {
     if (authError) {
       if (authError.message.includes("already registered")) {
         return NextResponse.json(
-          { ok: false, error: "Ya existe una cuenta de Supabase con ese email" },
+          { ok: false, error: "Ya existe una cuenta con ese email" },
           { status: 409 }
         );
       }
@@ -136,21 +135,15 @@ export async function POST(req: NextRequest) {
       data: {
         tenantId,
         supabaseId: authData.user.id,
-        nombre: nombre.trim(),
-        email: email.trim().toLowerCase(),
-        rol: rolUsuario,
+        nombre:     nombre.trim(),
+        email:      email.trim().toLowerCase(),
+        rol:        rolUsuario,
       },
-      select: {
-        id: true,
-        nombre: true,
-        email: true,
-        rol: true,
-        activo: true,
-        createdAt: true,
-      },
+      select: { id: true, nombre: true, email: true, rol: true, activo: true, createdAt: true },
     });
 
     return NextResponse.json({ ok: true, data: usuario }, { status: 201 });
+
   } catch (error: any) {
     console.error("[POST /api/usuarios]", error);
     return NextResponse.json(
