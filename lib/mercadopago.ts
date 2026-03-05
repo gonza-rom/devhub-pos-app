@@ -1,6 +1,4 @@
 // lib/mercadopago.ts
-// ARREGLADO: conflicto de merge resuelto — combina calcularProximoVencimiento
-// del HEAD con el GET health check del otro branch.
 
 const MP_BASE = "https://api.mercadopago.com";
 
@@ -42,16 +40,16 @@ export type MPWebhookBody = {
 };
 
 export const PLAN_PRO = {
-  monto: 20,
+  monto:  20,
   moneda: "ARS",
   nombre: "Plan Pro — DevHub POS",
 };
 
 export type CreatePreapprovalInput = {
-  tenantId: string;
+  tenantId:     string;
   tenantNombre: string;
-  payerEmail: string;
-  backUrl: string;
+  payerEmail:   string;
+  backUrl:      string;
 };
 
 export async function createPreapproval(input: CreatePreapprovalInput): Promise<MPPreapproval> {
@@ -77,9 +75,6 @@ export async function createPreapproval(input: CreatePreapprovalInput): Promise<
     notification_url: `${appUrl}/api/webhooks/mercadopago`,
     status:           "pending",
   };
-
-  console.log("[MP] Creando preapproval para tenant:", input.tenantId);
-  console.log("[MP] notification_url:", body.notification_url);
 
   const res = await fetch(`${MP_BASE}/preapproval`, {
     method:  "POST",
@@ -139,15 +134,26 @@ export async function verifyWebhookSignature(
   dataId: string
 ): Promise<boolean> {
   const secret = process.env.MP_WEBHOOK_SECRET;
+
+  // Sin secret: solo permitir en desarrollo, rechazar en producción
   if (!secret) {
-    console.warn("[MP] MP_WEBHOOK_SECRET no definido — saltando verificación");
+    if (process.env.NODE_ENV === "production") {
+      console.error("[MP] MP_WEBHOOK_SECRET no definido en producción — rechazando");
+      return false;
+    }
+    console.warn("[MP] MP_WEBHOOK_SECRET no definido — saltando verificación (solo desarrollo)");
     return true;
   }
+
   try {
     const parts = xSignature.split(",");
     const ts    = parts.find((p) => p.startsWith("ts="))?.replace("ts=", "").trim();
     const v1    = parts.find((p) => p.startsWith("v1="))?.replace("v1=", "").trim();
-    if (!ts || !v1) return false;
+
+    if (!ts || !v1) {
+      console.warn("[MP] Firma malformada — falta ts o v1");
+      return false;
+    }
 
     const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
     const key = await crypto.subtle.importKey(
@@ -161,8 +167,13 @@ export async function verifyWebhookSignature(
     const computed = Array.from(new Uint8Array(buf))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
-    return computed === v1;
-  } catch {
+
+    const valid = computed === v1;
+    if (!valid) console.warn("[MP] HMAC no coincide");
+    return valid;
+
+  } catch (err) {
+    console.error("[MP] Error verificando firma:", err);
     return false;
   }
 }
