@@ -7,7 +7,7 @@ import {
   ArrowLeftRight, ShoppingCart, TrendingUp, TrendingDown, DollarSign,
   Search, X, UserCircle, Ban, AlertTriangle, Calendar, Filter,
   Minus, Plus, Trash2, ChevronLeft, ChevronRight, Package, Tag,
-  Edit, Save, CreditCard,
+  Edit, Save, CreditCard, Download
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -436,6 +436,42 @@ export default function MovimientosPage() {
     );
   }
 
+function exportarVentasCSV(movimientos: Movimiento[]) {
+  const ventas = movimientos.filter((m) => m.tipo === "VENTA" && !m.cancelado);
+
+  if (!ventas.length) {
+    alert("No hay ventas para exportar con los filtros actuales.");
+    return;
+  }
+
+  const SEP = ";";
+  const encabezado = [
+    "fecha", "producto", "codigo", "categoria",
+    "cantidad", "stock_resultante", "usuario", "venta_id",
+  ];
+
+  const filas = ventas.map((m) => [
+    new Date(m.createdAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false }),
+    m.productoNombre,
+    m.producto?.codigoProducto ?? "",
+    m.producto?.categoria?.nombre ?? "",
+    m.cantidad,
+    m.stockResultante ?? "",
+    m.usuarioNombre ?? "",
+    m.ventaId ?? "",
+  ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(SEP));
+
+  const BOM  = "\uFEFF";
+  const csv  = BOM + [encabezado.join(SEP), ...filas].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `ventas_${new Date().toISOString().split("T")[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
   return (
     <div className="space-y-6">
 
@@ -461,6 +497,14 @@ export default function MovimientosPage() {
             <button onClick={() => setModoFormulario("SALIDA")}
               className="flex items-center gap-2 rounded-lg bg-orange-500 hover:bg-orange-600 px-3 py-2 text-sm font-semibold text-white transition-colors">
               <TrendingDown className="h-4 w-4" /> Salida de Stock
+            </button>
+            <button
+              onClick={() => exportarVentasCSV(movimientosFiltrados)}
+              className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
+              style={{ borderColor: "rgba(255,255,255,0.12)", color: "#a1a1aa", background: "rgba(255,255,255,0.04)" }}
+            >
+              <Download className="h-4 w-4" />
+              Exportar ventas
             </button>
           </div>
         )}
