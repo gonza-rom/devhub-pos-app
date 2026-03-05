@@ -13,12 +13,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "La contraseña debe tener al menos 8 caracteres" }, { status: 400 });
 
     const supabase = await createServerClient();
+
+    // ✅ Limpiar la URL base para evitar doble barra
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { nombre: nombreUsuario, nombreComercio },  // ← ambos en metadata
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+        data: { nombre: nombreUsuario, nombreComercio },
+        emailRedirectTo: `${appUrl}/auth/callback`,
       },
     });
 
