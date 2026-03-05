@@ -2,9 +2,10 @@
 // components/layout/Sidebar.tsx
 // ACTUALIZADO: muestra barras de uso del plan FREE bajo el badge
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useFetch } from "@/hooks/useFetch";
 import {
   LayoutDashboard, ShoppingCart, Package, ArrowLeftRight,
   BarChart3, Tag, Truck, Settings, Store, Crown, Users, DollarSign,
@@ -86,16 +87,17 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
   const [logoLocal,   setLogoLocal]   = useState<string | null | undefined>(logoUrl);
   const [nombreLocal, setNombreLocal] = useState(nombreTenant);
   const [uso,         setUso]         = useState<UsoData>(null);
+  const { apiFetch } = useFetch();
 
   useEffect(() => { setLogoLocal(logoUrl); },        [logoUrl]);
   useEffect(() => { setNombreLocal(nombreTenant); }, [nombreTenant]);
 
   useEffect(() => {
     if (plan !== "FREE") return;
-    fetch("/api/plan/uso")
+    apiFetch("/api/plan/uso")
       .then((r) => r.json())
       .then((d) => { if (d.ok) setUso({ ...d.data.uso, trial: d.data.trial }); })
-      .catch(() => {});
+      .catch((err) => { if (err?.message !== "SESSION_EXPIRED") console.error(err); });
   }, [plan]);
 
   useEffect(() => {
