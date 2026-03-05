@@ -84,5 +84,8 @@ export default async function AuthCallbackPage({
     }
   }
 
-  redirect("/auth/refresh-session?redirect=/dashboard");
+  // ── Generar cookie de tenant y redirigir al dashboard ──────────
+  // refresh-session lee el usuario de Supabase, busca el tenant en DB
+  // y setea la cookie firmada que necesita el middleware
+  redirect("/api/auth/refresh-session?redirect=/dashboard");
 }
