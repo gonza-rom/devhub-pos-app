@@ -2,6 +2,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
+import { ThemeScript }   from "@/app/theme-script";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,17 +22,16 @@ export const metadata: Metadata = {
   icons: { icon: "/favicon.ico" },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100`}
-      >
-        {children}
+      <head>
+        <ThemeScript />
+      </head>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
         <Analytics />
       </body>
     </html>

@@ -1,10 +1,9 @@
 "use client";
 // components/layout/Sidebar.tsx
-// ACTUALIZADO: muestra barras de uso del plan FREE bajo el badge
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import {
   LayoutDashboard, ShoppingCart, Package, ArrowLeftRight,
@@ -12,6 +11,7 @@ import {
   ChevronRight, ChevronDown, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import type { PlanTipo, RolTenant } from "@/types";
 
 type SubItem = { label: string; href: string; soloPropietario?: boolean };
@@ -47,7 +47,7 @@ type UsoData = {
   usuarios: number;
   trial: { diasRestantes: number | null; vencidoAt: string | null; vencido: boolean } | null;
 } | null;
-type Props   = { nombreTenant: string; plan: PlanTipo; logoUrl?: string | null; rol: RolTenant };
+type Props = { nombreTenant: string; plan: PlanTipo; logoUrl?: string | null; rol: RolTenant };
 
 function BarraUso({ label, uso, limite }: { label: string; uso: number; limite: number }) {
   const pct     = Math.min(100, Math.round((uso / limite) * 100));
@@ -57,21 +57,21 @@ function BarraUso({ label, uso, limite }: { label: string; uso: number; limite: 
   return (
     <div className="space-y-0.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] text-zinc-500">{label}</span>
-        <span className={cn(
-          "text-[10px] font-semibold tabular-nums",
-          critico ? "text-red-400" : warning ? "text-amber-400" : "text-zinc-400"
-        )}>
+        <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{label}</span>
+        <span
+          className="text-[10px] font-semibold tabular-nums"
+          style={{ color: critico ? "#f87171" : warning ? "#fbbf24" : "var(--text-muted)" }}
+        >
           {uso}/{limite}
         </span>
       </div>
-      <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
+      <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--border-md)" }}>
         <div
-          className={cn(
-            "h-full rounded-full transition-all duration-500",
-            critico ? "bg-red-500" : warning ? "bg-amber-500" : "bg-zinc-500"
-          )}
-          style={{ width: `${pct}%` }}
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width:      `${pct}%`,
+            background: critico ? "#ef4444" : warning ? "#f59e0b" : "var(--text-faint)",
+          }}
         />
       </div>
     </div>
@@ -121,19 +121,23 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
   return (
     <aside
       className="hidden md:flex flex-col w-64 h-screen flex-shrink-0"
-      style={{ background: "#0f0f0f", borderRight: "1px solid rgba(255,255,255,0.07)" }}
+      style={{
+        background:  "var(--bg-surface)",
+        borderRight: "1px solid var(--border-base)",
+        transition:  "background 0.2s ease",
+      }}
     >
       {/* ── Brand ── */}
       <div
         className="flex items-center gap-3 px-5 py-5 flex-shrink-0"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
+        style={{ borderBottom: "1px solid var(--border-base)" }}
       >
         <div className="relative flex-shrink-0">
           <div
             className="h-9 w-9 rounded-lg overflow-hidden flex items-center justify-center"
             style={{
               background: logoLocal ? "transparent" : "rgba(220,38,38,0.15)",
-              border: "1px solid rgba(220,38,38,0.3)",
+              border:     "1px solid rgba(220,38,38,0.3)",
             }}
           >
             {logoLocal
@@ -143,12 +147,14 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
           </div>
           <span
             className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2"
-            style={{ background: "#22c55e", borderColor: "#0f0f0f" }}
+            style={{ background: "#22c55e", borderColor: "var(--bg-surface)" }}
           />
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white leading-tight">{nombreLocal}</p>
+          <p className="truncate text-sm font-semibold leading-tight" style={{ color: "var(--text-primary)" }}>
+            {nombreLocal}
+          </p>
           <span className={cn(
             "inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.5 rounded font-semibold tracking-wide uppercase border",
             badge.cls
@@ -163,24 +169,24 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
       {plan === "FREE" && uso !== null && (
         <div
           className="px-4 py-3 space-y-2 flex-shrink-0"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          style={{ borderBottom: "1px solid var(--border-subtle)" }}
         >
-          {/* Días restantes del trial */}
           {uso.trial && (
-            <div className={cn(
-              "flex items-center justify-between rounded-lg px-2.5 py-1.5 mb-1",
-              uso.trial.vencido
-                ? "bg-red-950/40 border border-red-800/40"
-                : uso.trial.diasRestantes! <= 2
-                ? "bg-amber-950/40 border border-amber-800/40"
-                : "bg-zinc-800/60 border border-zinc-700/40"
-            )}>
-              <span className="text-[10px] text-zinc-400">Trial</span>
-              <span className={cn(
-                "text-[10px] font-bold",
-                uso.trial.vencido ? "text-red-400" :
-                uso.trial.diasRestantes! <= 2 ? "text-amber-400" : "text-zinc-300"
-              )}>
+            <div
+              className="flex items-center justify-between rounded-lg px-2.5 py-1.5 mb-1"
+              style={
+                uso.trial.vencido
+                  ? { background: "rgba(220,38,38,0.1)",   border: "1px solid rgba(220,38,38,0.25)" }
+                  : uso.trial.diasRestantes! <= 2
+                  ? { background: "rgba(245,158,11,0.1)",  border: "1px solid rgba(245,158,11,0.25)" }
+                  : { background: "var(--bg-hover-md)",    border: "1px solid var(--border-base)" }
+              }
+            >
+              <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>Trial</span>
+              <span
+                className="text-[10px] font-bold"
+                style={{ color: uso.trial.vencido ? "#f87171" : uso.trial.diasRestantes! <= 2 ? "#fbbf24" : "var(--text-secondary)" }}
+              >
                 {uso.trial.vencido
                   ? "Vencido"
                   : uso.trial.diasRestantes === 1
@@ -218,18 +224,27 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
             <div key={item.href}>
               <Link
                 href={item.href}
-                className={cn(
-                  "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 select-none",
-                  activo ? "text-white" : "text-zinc-300 hover:text-white"
-                )}
+                className="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 select-none"
                 style={activo ? {
+                  color:      "var(--text-primary)",
                   background: "rgba(220,38,38,0.14)",
                   border:     "1px solid rgba(220,38,38,0.28)",
                 } : {
+                  color:  "var(--text-secondary)",
                   border: "1px solid transparent",
                 }}
-                onMouseEnter={e => { if (!activo) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
-                onMouseLeave={e => { if (!activo) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                onMouseEnter={e => {
+                  if (!activo) {
+                    (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)";
+                    (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!activo) {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                    (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+                  }
+                }}
               >
                 {activo && (
                   <span
@@ -237,18 +252,18 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
                     style={{ background: "#DC2626" }}
                   />
                 )}
-                <Icon className={cn(
-                  "h-4 w-4 flex-shrink-0 transition-colors",
-                  activo ? "text-red-500" : "text-zinc-500 group-hover:text-zinc-300"
-                )} />
+                <Icon
+                  className="h-4 w-4 flex-shrink-0 transition-colors"
+                  style={{ color: activo ? "#ef4444" : "var(--text-faint)" }}
+                />
                 <span className="flex-1 truncate">{item.label}</span>
                 {item.children ? (
-                  <ChevronDown className={cn(
-                    "h-3.5 w-3.5 transition-transform duration-200",
-                    activoGroup ? "text-red-500" : "rotate-[-90deg] text-zinc-600"
-                  )} />
+                  <ChevronDown
+                    className={cn("h-3.5 w-3.5 transition-transform duration-200", !activoGroup && "rotate-[-90deg]")}
+                    style={{ color: activoGroup ? "#ef4444" : "var(--text-faint)" }}
+                  />
                 ) : activo ? (
-                  <ChevronRight className="h-3.5 w-3.5 text-red-500/60" />
+                  <ChevronRight className="h-3.5 w-3.5" style={{ color: "rgba(220,38,38,0.6)" }} />
                 ) : null}
               </Link>
 
@@ -267,16 +282,26 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
                         <Link
                           key={sub.href}
                           href={sub.href}
-                          className={cn(
-                            "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-150",
-                            subActivo ? "text-red-400" : "text-zinc-400 hover:text-zinc-100"
-                          )}
-                          style={subActivo ? { background: "rgba(220,38,38,0.08)" } : undefined}
-                          onMouseEnter={e => { if (!subActivo) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"; }}
-                          onMouseLeave={e => { if (!subActivo) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                          className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-150"
+                          style={subActivo ? {
+                            color:      "#f87171",
+                            background: "rgba(220,38,38,0.08)",
+                          } : { color: "var(--text-muted)" }}
+                          onMouseEnter={e => {
+                            if (!subActivo) {
+                              (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)";
+                              (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
+                            }
+                          }}
+                          onMouseLeave={e => {
+                            if (!subActivo) {
+                              (e.currentTarget as HTMLElement).style.background = "transparent";
+                              (e.currentTarget as HTMLElement).style.color = "var(--text-muted)";
+                            }
+                          }}
                         >
                           {sub.href === "/configuracion/plan"     && <Crown className="h-3 w-3 text-amber-500 flex-shrink-0" />}
-                          {sub.href === "/configuracion/usuarios" && <Users className="h-3 w-3 flex-shrink-0" />}
+                          {sub.href === "/configuracion/usuarios" && <Users className="h-3 w-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} />}
                           {sub.label}
                         </Link>
                       );
@@ -290,12 +315,15 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
 
       {/* ── Footer ── */}
       <div
-        className="px-5 py-4 flex-shrink-0"
-        style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+        className="px-3 py-3 flex-shrink-0 space-y-1"
+        style={{ borderTop: "1px solid var(--border-subtle)" }}
       >
-        <div className="flex items-center gap-2">
-          <div className="h-1 w-1 rounded-full bg-red-600" />
-          <p className="text-[11px] text-zinc-700 font-medium">DevHub POS © 2026</p>
+        <ThemeToggle />
+        <div className="flex items-center gap-2 px-3 py-1">
+          <div className="h-1 w-1 rounded-full bg-red-600 flex-shrink-0" />
+          <p className="text-[11px] font-medium" style={{ color: "var(--text-faint)" }}>
+            DevHub POS © 2026
+          </p>
         </div>
       </div>
     </aside>

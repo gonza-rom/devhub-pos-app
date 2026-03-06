@@ -6,8 +6,6 @@ import { prisma }         from "@/lib/prisma";
 import Sidebar            from "@/components/layout/Sidebar";
 import Topbar             from "@/components/layout/Topbar";
 
-// Cache del tenant por supabaseId — ~0ms en cache hit.
-// Invalidar con: revalidateTag("tenant-config") al guardar configuración.
 const getTenantCached = unstable_cache(
   async (supabaseId: string) =>
     prisma.usuarioTenant.findUnique({
@@ -25,9 +23,6 @@ const getTenantCached = unstable_cache(
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-
-  // getUser() verifica el JWT localmente (sin red) cuando la cookie es reciente.
-  // Solo va a Supabase si el token necesita refresh (~cada 1h).
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
@@ -35,7 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!ut?.activo) redirect("/onboarding");
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "#0f0f0f" }}>
+    <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg-base)" }}>
       <Sidebar
         nombreTenant={ut.tenant.nombre}
         plan={ut.tenant.plan}
@@ -51,7 +46,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           plan={ut.tenant.plan}
           logoUrl={ut.tenant.logoUrl}
         />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6" style={{ background: "#0f0f0f" }}>
+        <main
+          className="flex-1 overflow-y-auto p-4 md:p-6"
+          style={{ background: "var(--bg-base)" }}
+        >
           {children}
         </main>
       </div>
