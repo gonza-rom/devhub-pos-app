@@ -10,6 +10,7 @@ import {
   calcularProximoVencimiento,
   type MPWebhookBody,
 } from "@/lib/mercadopago";
+import { emailPagoFallido } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,10 +21,6 @@ export async function POST(req: NextRequest) {
 
     console.log("[MP Webhook] Recibido:", body.type, body.action, dataId);
 
-    // ── Verificación de firma obligatoria ────────────────────────────────
-    // Rechazar si no viene la firma O si la firma es inválida.
-    // En desarrollo sin MP_WEBHOOK_SECRET configurado, verifyWebhookSignature
-    // devuelve true para no bloquear el desarrollo local.
     if (!xSignature) {
       console.warn("[MP Webhook] Request sin x-signature — rechazado");
       return NextResponse.json({ error: "Firma requerida" }, { status: 401 });
@@ -34,8 +31,8 @@ export async function POST(req: NextRequest) {
       console.warn("[MP Webhook] Firma inválida — rechazado");
       return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
     }
-    // ─────────────────────────────────────────────────────────────────────
 
+    // ── Suscripción ───────────────────────────────────────────
     if (body.type === "subscription_preapproval") {
       const preapproval = await getPreapproval(dataId);
 
@@ -55,23 +52,20 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const tenantId = suscripcion?.tenantId ?? preapproval.external_reference;
+      const tenantId    = suscripcion?.tenantId ?? preapproval.external_reference;
       if (!tenantId) {
         console.warn("[MP Webhook] No se pudo determinar el tenantId");
         return NextResponse.json({ ok: true });
       }
 
-      const esPro      = preapproval.status === "authorized";
-      const nuevoVence = esPro ? calcularProximoVencimiento() : null;
+      const esPro       = preapproval.status === "authorized";
+      const eraProAntes = suscripcion?.plan === "PRO";
+      const nuevoVence  = esPro ? calcularProximoVencimiento() : null;
 
       await prisma.$transaction([
         prisma.suscripcion.update({
           where: { tenantId },
-          data: {
-            estado:             preapproval.status,
-            plan:               esPro ? "PRO" : "FREE",
-            proximoVencimiento: nuevoVence,
-          },
+          data:  { estado: preapproval.status, plan: esPro ? "PRO" : "FREE", proximoVencimiento: nuevoVence },
         }),
         prisma.tenant.update({
           where: { id: tenantId },
@@ -83,18 +77,35 @@ export async function POST(req: NextRequest) {
       revalidateTag(`tenant-${tenantId}`);
       revalidateTag("dashboard");
 
-      console.log(`[MP Webhook] Tenant ${tenantId} → plan: ${esPro ? "PRO" : "FREE"} (${preapproval.status})`);
+      // Email pago fallido: era PRO y la suscripción fue cancelada o pausada
+      if (eraProAntes && !esPro && ["cancelled", "paused"].includes(preapproval.status)) {
+        const [tenant, propietario] = await Promise.all([
+          prisma.tenant.findUnique({ where: { id: tenantId } }),
+          prisma.usuarioTenant.findFirst({ where: { tenantId, rol: "PROPIETARIO", activo: true } }),
+        ]);
+        if (tenant && propietario) {
+          await emailPagoFallido({
+            emailDestino:   propietario.email,
+            nombreComercio: tenant.nombre,
+            nombreUsuario:  propietario.nombre,
+          });
+          console.log(`[MP Webhook] Email pago fallido → ${propietario.email}`);
+        }
+      }
+
+      console.log(`[MP Webhook] Tenant ${tenantId} → ${esPro ? "PRO" : "FREE"} (${preapproval.status})`);
     }
 
+    // ── Pago individual ───────────────────────────────────────
     if (body.type === "payment") {
       const payment = await getPayment(dataId);
       console.log("[MP Webhook] Pago:", payment.id, payment.status);
 
+      // Pago aprobado → activar PRO
       if (payment.status === "approved" && payment.preapproval_id) {
         const suscripcion = await prisma.suscripcion.findFirst({
           where: { mpPreapprovalId: payment.preapproval_id },
         });
-
         if (suscripcion) {
           const nuevoVence = calcularProximoVencimiento();
           await prisma.$transaction([
@@ -107,12 +118,31 @@ export async function POST(req: NextRequest) {
               data:  { plan: "PRO" },
             }),
           ]);
-
           revalidateTag("tenant-config");
           revalidateTag(`tenant-${suscripcion.tenantId}`);
           revalidateTag("dashboard");
+          console.log(`[MP Webhook] Pago aprobado → tenant ${suscripcion.tenantId} PRO`);
+        }
+      }
 
-          console.log(`[MP Webhook] Pago aprobado → tenant ${suscripcion.tenantId} activado PRO`);
+      // Pago rechazado → email aviso
+      if (payment.status === "rejected" && payment.preapproval_id) {
+        const suscripcion = await prisma.suscripcion.findFirst({
+          where: { mpPreapprovalId: payment.preapproval_id },
+        });
+        if (suscripcion) {
+          const [tenant, propietario] = await Promise.all([
+            prisma.tenant.findUnique({ where: { id: suscripcion.tenantId } }),
+            prisma.usuarioTenant.findFirst({ where: { tenantId: suscripcion.tenantId, rol: "PROPIETARIO", activo: true } }),
+          ]);
+          if (tenant && propietario) {
+            await emailPagoFallido({
+              emailDestino:   propietario.email,
+              nombreComercio: tenant.nombre,
+              nombreUsuario:  propietario.nombre,
+            });
+            console.log(`[MP Webhook] Email pago rechazado → ${propietario.email}`);
+          }
         }
       }
     }
