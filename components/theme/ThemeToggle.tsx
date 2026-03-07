@@ -15,7 +15,7 @@ export default function ThemeToggle() {
       title={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
       className="flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm transition-colors"
       style={{
-        color:      "var(--text-muted)",
+        color:      "var(--text-primary)",
         background: "transparent",
       }}
       onMouseEnter={e => {

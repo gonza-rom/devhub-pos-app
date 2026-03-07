@@ -155,10 +155,13 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
           <p className="truncate text-sm font-semibold leading-tight" style={{ color: "var(--text-primary)" }}>
             {nombreLocal}
           </p>
-          <span className={cn(
-            "inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.5 rounded font-semibold tracking-wide uppercase border",
-            badge.cls
-          )}>
+          <span className="inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.5 rounded font-semibold tracking-wide uppercase border"
+  style={{
+    color: "var(--text-prymary)",
+    background: "var(--bg-hover-md)",
+    borderColor: "var(--border-md)",
+  }}
+>
             {plan === "PRO" && <Crown className="h-2.5 w-2.5" />}
             {badge.label}
           </span>
@@ -230,7 +233,7 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
                   background: "rgba(220,38,38,0.14)",
                   border:     "1px solid rgba(220,38,38,0.28)",
                 } : {
-                  color:  "var(--text-secondary)",
+                  color:  "var(--text-primary)",
                   border: "1px solid transparent",
                 }}
                 onMouseEnter={e => {
@@ -242,7 +245,7 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
                 onMouseLeave={e => {
                   if (!activo) {
                     (e.currentTarget as HTMLElement).style.background = "transparent";
-                    (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+                    (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
                   }
                 }}
               >

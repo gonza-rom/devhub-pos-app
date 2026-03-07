@@ -129,14 +129,14 @@ export default function TicketPrint({ venta, nombreTenant, telefonoTenant, direc
       >
         <div
           className="w-full max-w-sm flex flex-col rounded-2xl overflow-hidden"
-          style={{ background: "#161616", border: "1px solid rgba(255,255,255,0.1)" }}
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border-md)" }}
         >
           {/* Header modal */}
           <div
             className="flex items-center justify-between px-5 py-4 flex-shrink-0"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
+            style={{ borderBottom: "1px solid var(--border-base)" }}
           >
-            <h3 className="text-base font-semibold text-zinc-100">Vista previa del ticket</h3>
+            <h3 className="text-base font-semibold text-zinc-100" style={{ color: "var(--text-primary)" }}>Vista previa del ticket</h3>
             <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 transition-colors">
               <X className="h-5 w-5" />
             </button>
@@ -250,7 +250,7 @@ export default function TicketPrint({ venta, nombreTenant, telefonoTenant, direc
           {/* Botones */}
           <div
             className="flex gap-2 px-5 py-4 flex-shrink-0"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}
+            style={{ borderBottom: "1px solid var(--border-base)" }}
           >
             <button onClick={onClose} className="btn-ghost flex-1">
               Cerrar

@@ -173,7 +173,7 @@ export default function CajaPage() {
       </div>
 
       {ultima && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+        <div className="rounded-xl p-6 mb-6" style={{ background: "var(--bg-card)", border: "1px solid var(--border-base)" }}>
           <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-4">Última sesión</h2>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div><p className="text-gray-600">Apertura</p><p className="font-medium">{fmtFecha(ultima.abiertaAt)}</p></div>
@@ -258,10 +258,10 @@ export default function CajaPage() {
 <div className="grid md:grid-cols-2 gap-4">
 
   {/* EFECTIVO */}
-  <div className="bg-white border-2 border-green-200 rounded-xl overflow-hidden">
-    <div className="bg-green-600 px-5 py-3 flex items-center gap-2">
+<div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "2px solid rgba(34,197,94,0.3)" }}>
+    <div className="px-5 py-3 flex items-center gap-2">
       <Banknote className="w-5 h-5 text-white" />
-      <h2 className="font-semibold text-white">Efectivo en caja</h2>
+      <h2 className="font-semibold">Efectivo en caja</h2>
     </div>
     <div className="p-5 space-y-3">
       <FilaCaja num="1" label="Saldo inicial"     valor={fmt(caja?.saldoInicial  ?? 0)} sub="Apertura del turno"  color="text-gray-700" />
@@ -281,16 +281,16 @@ export default function CajaPage() {
   </div>
 
   {/* VIRTUAL */}
-  <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-    <div className="bg-gray-700 px-5 py-3 flex items-center gap-2">
-      <Smartphone className="w-5 h-5 text-white" />
-      <h2 className="font-semibold text-white">Ventas virtuales</h2>
-      <span className="ml-auto text-xs text-gray-300">No afectan la caja física</span>
+<div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "2px solid rgba(34,197,94,0.3)" }}>
+    <div className="px-5 py-3 flex items-center gap-2" style={{ background: "#6b7280", color: "#ffffff" }}>
+      <Smartphone className="w-5 h-5" style={{ color: "#ffffff" }} />
+      <h2 className="font-semibold" style={{ color: "#ffffff" }}>Ventas virtuales</h2>
+      <span className="ml-auto text-xs" style={{ color: "rgba(255,255,255,0.8)" }}>No afectan la caja física</span>
     </div>
     <div className="p-5 space-y-3">
       <FilaCaja label="Transferencia"     valor={fmt(caja?.totalTransferencia ?? 0)} color="text-purple-700" icon={<Landmark   className="w-3.5 h-3.5" />} />
       <FilaCaja label="Mercado Pago / QR" valor={fmt(caja?.totalMercadoPago   ?? 0)} color="text-purple-700" icon={<Smartphone className="w-3.5 h-3.5" />} />
-      <div className="border-t border-gray-200 pt-3">
+      <div className="pt-3" style={{ borderTop: "1px solid var(--border-base)" }}>
         <div className="bg-gray-50 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-2">
             <CreditCard className="w-4 h-4 text-gray-600" />
@@ -301,7 +301,7 @@ export default function CajaPage() {
           <FilaCaja label="Crédito" valor={fmt(caja?.totalTarjetaCredito ?? 0)} color="text-blue-700" icon={<CreditCard className="w-3.5 h-3.5" />} />
         </div>
       </div>
-      <div className="border-t border-gray-200 pt-3">
+      <div className="rounded-lg p-3" style={{ background: "var(--bg-surface)" }}>
         <div className="flex justify-between items-center">
           <p className="text-sm font-semibold text-gray-700">Total virtual</p>
           <p className="text-lg font-bold text-gray-800">{fmt((caja?.totalVirtuales ?? 0) + (caja?.totalTarjetas ?? 0))}</p>
@@ -314,24 +314,34 @@ export default function CajaPage() {
       {/* Botones acción */}
       <div className="grid grid-cols-3 gap-3">
         <button onClick={() => { setError(null); setModalVenta(true); }}
-          className="flex flex-col items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold py-4 rounded-xl transition-colors">
+          className="flex flex-col items-center justify-center gap-1.5 font-semibold py-4 rounded-xl transition-colors"
+          style={{ background: "#16a34a", color: "#ffffff" }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#15803d"}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#16a34a"}>
           <ShoppingCart className="w-5 h-5" />
           <span className="text-sm">Cobrar venta</span>
         </button>
         <button onClick={() => { setError(null); setMontoMov(""); setDescMov(""); setModalMovimiento("INGRESO"); }}
-          className="flex flex-col items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold py-4 rounded-xl transition-colors">
+          className="flex flex-col items-center justify-center gap-1.5 font-semibold py-4 rounded-xl transition-colors"
+          style={{ background: "rgba(16,185,129,0.12)", color: "#10b981", border: "1px solid rgba(16,185,129,0.3)" }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.2)"}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(16,185,129,0.12)"}>
           <Plus className="w-5 h-5" />
           <span className="text-sm">Ingreso manual</span>
         </button>
+        {/* Gasto / Retiro */}
         <button onClick={() => { setError(null); setMontoMov(""); setDescMov(""); setModalMovimiento("EGRESO"); }}
-          className="flex flex-col items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-semibold py-4 rounded-xl transition-colors">
+          className="flex flex-col items-center justify-center gap-1.5 font-semibold py-4 rounded-xl transition-colors"
+          style={{ background: "rgba(220,38,38,0.12)", color: "#ef4444", border: "1px solid rgba(220,38,38,0.3)" }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(220,38,38,0.2)"}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(220,38,38,0.12)"}>
           <Minus className="w-5 h-5" />
           <span className="text-sm">Gasto / Retiro</span>
         </button>
       </div>
 
       {/* Movimientos del día */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "1px solid var(--border-base)" }}>
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Movimientos del día</h2>
           <span className="text-sm text-gray-600">{caja?.movimientos.length ?? 0} registros</span>
@@ -482,7 +492,7 @@ function InputMoneda({ value, onChange, autoFocus }: {
     <div className="relative">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 font-medium">$</span>
       <input type="number" min="0" step="0.01" value={value} onChange={(e) => onChange(e.target.value)}
-        className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-lg"
+        className="input-base w-full pl-8 pr-4 py-3 text-lg"
         placeholder="0.00" autoFocus={autoFocus} />
     </div>
   );
@@ -506,8 +516,8 @@ function BotonesModal({ onCancel, onConfirm, loading, labelConfirm, colorConfirm
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="rounded-2xl shadow-xl w-full max-w-md" style={{ background: "var(--bg-card)" }}>
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--border-base)" }}>
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <button onClick={onClose} className="text-gray-600 hover:text-gray-600 text-2xl leading-none">×</button>
         </div>

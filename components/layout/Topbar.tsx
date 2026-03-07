@@ -10,6 +10,7 @@ import {
   BarChart3, Tag, Truck, DollarSign, Store, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 import type { RolTenant, PlanTipo } from "@/types";
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -63,7 +64,6 @@ type Props = {
   nombreUsuario: string;
   emailUsuario:  string;
   rolUsuario:    RolTenant;
-  // drawer needs tenant info
   nombreTenant?: string;
   plan?:         PlanTipo;
   logoUrl?:      string | null;
@@ -85,16 +85,12 @@ export default function Topbar({
   const esAdmin       = rolUsuario === "ADMINISTRADOR" || rolUsuario === "PROPIETARIO";
   const esPropietario = rolUsuario === "PROPIETARIO";
 
-  // Close drawer on route change
   useEffect(() => { setDrawerAbierto(false); }, [pathname]);
-
-  // Prevent body scroll when drawer is open
   useEffect(() => {
     document.body.style.overflow = drawerAbierto ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [drawerAbierto]);
 
-  // Breadcrumb
   const segments = pathname.split("/").filter(Boolean);
   const crumbs   = segments.map((seg, i) => ({
     label:  ROUTE_LABELS[seg] ?? seg,
@@ -117,7 +113,11 @@ export default function Topbar({
       {/* ── Header bar ─────────────────────────────────────── */}
       <header
         className="flex h-14 items-center justify-between px-4 md:px-5 flex-shrink-0"
-        style={{ background: "#0f0f0f", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+        style={{
+          background:   "var(--bg-surface)",
+          borderBottom: "1px solid var(--border-base)",
+          transition:   "background 0.2s ease",
+        }}
       >
         {/* Left */}
         <div className="flex items-center gap-3 min-w-0">
@@ -126,14 +126,14 @@ export default function Topbar({
           <button
             onClick={() => setDrawerAbierto(true)}
             className="md:hidden flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
-            style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+            style={{ border: "1px solid var(--border-base)" }}
             aria-label="Abrir menú"
           >
-            <Menu className="h-4 w-4 text-zinc-300" />
+            <Menu className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
           </button>
 
           {/* Mobile: tenant name */}
-          <span className="md:hidden text-sm font-semibold text-white truncate max-w-[140px]">
+          <span className="md:hidden text-sm font-semibold truncate max-w-[140px]" style={{ color: "var(--text-primary)" }}>
             {nombreTenant}
           </span>
 
@@ -141,10 +141,10 @@ export default function Topbar({
           <nav className="hidden md:flex items-center gap-1.5">
             {crumbs.map((crumb, i) => (
               <span key={crumb.href} className="flex items-center gap-1.5">
-                {i > 0 && <ChevronDown className="h-3 w-3 text-zinc-700 -rotate-90" />}
+                {i > 0 && <ChevronDown className="h-3 w-3 -rotate-90" style={{ color: "var(--text-faint)" }} />}
                 {crumb.isLast
-                  ? <span className="text-sm font-semibold text-white">{crumb.label}</span>
-                  : <Link href={crumb.href} className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors">{crumb.label}</Link>
+                  ? <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{crumb.label}</span>
+                  : <Link href={crumb.href} className="text-sm transition-colors" style={{ color: "var(--text-muted)" }}>{crumb.label}</Link>
                 }
               </span>
             ))}
@@ -157,11 +157,11 @@ export default function Topbar({
           {/* Bell */}
           <button
             className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
-            style={{ border: "1px solid rgba(255,255,255,0.07)" }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"}
+            style={{ border: "1px solid var(--border-base)" }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"}
             onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
           >
-            <Bell className="h-4 w-4 text-zinc-500" />
+            <Bell className="h-4 w-4" style={{ color: "var(--text-faint)" }} />
           </button>
 
           {/* User dropdown */}
@@ -169,8 +169,8 @@ export default function Topbar({
             <button
               onClick={() => setMenuAbierto(!menuAbierto)}
               className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors"
-              style={{ border: "1px solid rgba(255,255,255,0.07)" }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"}
+              style={{ border: "1px solid var(--border-base)" }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"}
               onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
             >
               <div
@@ -180,10 +180,11 @@ export default function Topbar({
                 {initials}
               </div>
               <div className="hidden md:flex flex-col items-start leading-none">
-                <span className="text-[13px] font-medium text-white">{nombreUsuario}</span>
-                <span className="text-[11px] text-zinc-500 mt-0.5">{ROL_LABEL[rolUsuario]}</span>
+                <span className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>{nombreUsuario}</span>
+                <span className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{ROL_LABEL[rolUsuario]}</span>
               </div>
-              <ChevronDown className={cn("h-3.5 w-3.5 text-zinc-600 transition-transform duration-200", menuAbierto && "rotate-180")} />
+              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", menuAbierto && "rotate-180")}
+                style={{ color: "var(--text-faint)" }} />
             </button>
 
             {menuAbierto && (
@@ -191,16 +192,20 @@ export default function Topbar({
                 <div className="fixed inset-0 z-10" onClick={() => setMenuAbierto(false)} />
                 <div
                   className="absolute right-0 top-full mt-2 z-20 w-60 rounded-xl py-1.5 overflow-hidden"
-                  style={{ background: "#161616", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 16px 40px rgba(0,0,0,0.6)" }}
+                  style={{
+                    background:  "var(--bg-card)",
+                    border:      "1px solid var(--border-md)",
+                    boxShadow:   "0 16px 40px rgba(0,0,0,0.3)",
+                  }}
                 >
                   {/* User info */}
-                  <div className="px-4 py-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                  <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border-base)" }}>
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold text-white flex-shrink-0"
                            style={{ background: "rgba(220,38,38,0.85)" }}>{initials}</div>
                       <div className="min-w-0">
-                        <p className="text-[13px] font-semibold text-white truncate">{nombreUsuario}</p>
-                        <p className="text-[11px] text-zinc-300 truncate mt-0.5">{emailUsuario}</p>
+                        <p className="text-[13px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>{nombreUsuario}</p>
+                        <p className="text-[11px] truncate mt-0.5" style={{ color: "var(--text-secondary)" }}>{emailUsuario}</p>
                       </div>
                     </div>
                     <span className={cn("inline-flex items-center mt-2.5 text-[10px] px-2 py-0.5 rounded font-semibold tracking-wide uppercase border", ROL_COLOR[rolUsuario])}>
@@ -209,7 +214,7 @@ export default function Topbar({
                   </div>
 
                   {esAdmin && (
-                    <div className="py-1.5" style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.32)" }}>
+                    <div className="py-1.5" style={{ borderBottom: "1px solid var(--border-base)" }}>
                       <DDItem href="/configuracion"        icon={Settings} label="Mi comercio"        onClick={() => setMenuAbierto(false)} />
                       <DDItem href="/configuracion/plan"   icon={Crown}    label="Plan y suscripción" onClick={() => setMenuAbierto(false)} iconColor="text-amber-500" />
                       {esPropietario && <DDItem href="/configuracion/usuarios" icon={Users} label="Usuarios" onClick={() => setMenuAbierto(false)} />}
@@ -237,7 +242,6 @@ export default function Topbar({
       </header>
 
       {/* ── Mobile Drawer ───────────────────────────────────── */}
-      {/* Backdrop */}
       <div
         className={cn(
           "fixed inset-0 z-40 md:hidden transition-opacity duration-300",
@@ -247,18 +251,21 @@ export default function Topbar({
         onClick={() => setDrawerAbierto(false)}
       />
 
-      {/* Drawer panel */}
       <div
         className={cn(
           "fixed top-0 left-0 z-50 h-full w-72 flex flex-col md:hidden transition-transform duration-300 ease-out",
           drawerAbierto ? "translate-x-0" : "-translate-x-full"
         )}
-        style={{ background: "#0f0f0f", borderRight: "1px solid rgba(255,255,255,0.07)" }}
+        style={{
+          background:   "var(--bg-surface)",
+          borderRight:  "1px solid var(--border-base)",
+          transition:   "transform 0.3s ease-out, background 0.2s ease",
+        }}
       >
         {/* Drawer header */}
         <div
           className="flex items-center justify-between px-5 py-4 flex-shrink-0"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
+          style={{ borderBottom: "1px solid var(--border-base)" }}
         >
           <div className="flex items-center gap-3">
             <div
@@ -271,7 +278,7 @@ export default function Topbar({
               }
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white truncate max-w-[160px]">{nombreTenant}</p>
+              <p className="text-sm font-semibold truncate max-w-[160px]" style={{ color: "var(--text-primary)" }}>{nombreTenant}</p>
               <span className={cn("inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-semibold tracking-wide uppercase border", badge.cls)}>
                 {plan === "PRO" && <Crown className="h-2.5 w-2.5" />}
                 {badge.label}
@@ -281,12 +288,12 @@ export default function Topbar({
 
           <button
             onClick={() => setDrawerAbierto(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors"
-            style={{ border: "1px solid rgba(255,255,255,0.08)" }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"}
+            className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+            style={{ border: "1px solid var(--border-base)" }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"}
             onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" style={{ color: "var(--text-muted)" }} />
           </button>
         </div>
 
@@ -304,25 +311,40 @@ export default function Topbar({
                 <div key={item.href}>
                   <Link
                     href={item.href}
-                    className={cn(
-                      "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
-                      activo ? "text-white" : "text-zinc-300"
-                    )}
+                    className="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 select-none"
                     style={activo ? {
+                      color:      "var(--text-primary)",
                       background: "rgba(220,38,38,0.14)",
                       border:     "1px solid rgba(220,38,38,0.28)",
-                    } : { border: "1px solid transparent" }}
-                    onMouseEnter={e => { if (!activo) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
-                    onMouseLeave={e => { if (!activo) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                    } : {
+                      color:  "var(--text-secondary)",
+                      border: "1px solid transparent",
+                    }}
+                    onMouseEnter={e => {
+                      if (!activo) {
+                        (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)";
+                        (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!activo) {
+                        (e.currentTarget as HTMLElement).style.background = "transparent";
+                        (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+                      }
+                    }}
                   >
                     {activo && (
                       <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full" style={{ background: "#DC2626" }} />
                     )}
-                    <Icon className={cn("h-4 w-4 flex-shrink-0", activo ? "text-red-500" : "text-zinc-500")} />
+                    <Icon
+                      className="h-4 w-4 flex-shrink-0"
+                      style={{ color: activo ? "#ef4444" : "var(--text-faint)" }}
+                    />
                     <span className="flex-1 truncate">{item.label}</span>
                     {item.children
-                      ? <ChevronDown className={cn("h-3.5 w-3.5", activoGroup ? "text-red-500" : "rotate-[-90deg] text-zinc-600")} />
-                      : activo ? <ChevronRight className="h-3.5 w-3.5 text-red-500/60" /> : null
+                      ? <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !activoGroup && "rotate-[-90deg]")}
+                          style={{ color: activoGroup ? "#ef4444" : "var(--text-faint)" }} />
+                      : activo ? <ChevronRight className="h-3.5 w-3.5" style={{ color: "rgba(220,38,38,0.6)" }} /> : null
                     }
                   </Link>
 
@@ -338,16 +360,26 @@ export default function Topbar({
                             <Link
                               key={sub.href}
                               href={sub.href}
-                              className={cn(
-                                "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
-                                subActivo ? "text-red-400" : "text-zinc-400"
-                              )}
-                              style={subActivo ? { background: "rgba(220,38,38,0.08)" } : undefined}
-                              onMouseEnter={e => { if (!subActivo) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"; }}
-                              onMouseLeave={e => { if (!subActivo) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-all"
+                              style={subActivo
+                                ? { color: "#f87171", background: "rgba(220,38,38,0.08)" }
+                                : { color: "var(--text-muted)" }
+                              }
+                              onMouseEnter={e => {
+                                if (!subActivo) {
+                                  (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)";
+                                  (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
+                                }
+                              }}
+                              onMouseLeave={e => {
+                                if (!subActivo) {
+                                  (e.currentTarget as HTMLElement).style.background = "transparent";
+                                  (e.currentTarget as HTMLElement).style.color = "var(--text-muted)";
+                                }
+                              }}
                             >
                               {sub.href === "/configuracion/plan" && <Crown className="h-3 w-3 text-amber-500 flex-shrink-0" />}
-                              {sub.href === "/configuracion/usuarios" && <Users className="h-3 w-3 flex-shrink-0" />}
+                              {sub.href === "/configuracion/usuarios" && <Users className="h-3 w-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} />}
                               {sub.label}
                             </Link>
                           );
@@ -359,11 +391,12 @@ export default function Topbar({
             })}
         </nav>
 
-        {/* Drawer footer */}
+        {/* Drawer footer — ThemeToggle + Logout */}
         <div
-          className="px-5 py-4 flex-shrink-0"
-          style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+          className="px-3 py-3 flex-shrink-0 space-y-1"
+          style={{ borderTop: "1px solid var(--border-subtle)" }}
         >
+          <ThemeToggle />
           <button
             onClick={handleLogout}
             disabled={cargandoLogout}
@@ -389,11 +422,18 @@ function DDItem({ href, icon: Icon, label, onClick, iconColor }: {
     <Link
       href={href}
       onClick={onClick}
-      className="flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium text-zinc-200 transition-colors"
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255, 255, 255, 0.2)"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "#d4d4d8"; }}
+      className="flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium transition-colors"
+      style={{ color: "var(--text-secondary)" }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)";
+        (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLElement).style.background = "transparent";
+        (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+      }}
     >
-      <Icon className={cn("h-4 w-4 flex-shrink-0 text-zinc-600", iconColor)} />
+      <Icon className={cn("h-4 w-4 flex-shrink-0", iconColor ?? "")} style={!iconColor ? { color: "var(--text-faint)" } : {}} />
       {label}
     </Link>
   );
