@@ -102,7 +102,7 @@ export default function CajaPage() {
     if (!modalVenta) return;
     setLoadingProd(true);
     Promise.all([
-        fetch("/api/productos?limit=200&activo=true").then(r => r.json()),
+        fetch("/api/productos?pageSize=50&page=1").then(r => r.json()),
         fetch("/api/categorias").then(r => r.json()),
     ]).then(([prod, cats]) => {
         setProdCaja(prod.data ?? prod ?? []);
@@ -394,9 +394,14 @@ export default function CajaPage() {
                     productos={prodCaja}
                     categorias={catsCaja}
                     isModal
+                    onBusquedaRemota={async (q) => {
+                    const res = await fetch(`/api/productos?pageSize=20&page=1&busqueda=${encodeURIComponent(q)}`);
+                    const data = await res.json();
+                    return data.data ?? [];
+                    }}
                     onVentaExitosa={() => {
-                        setModalVenta(false);
-                        fetchEstado();
+                    setModalVenta(false);
+                    fetchEstado();
                     }}
                 />
                 )}

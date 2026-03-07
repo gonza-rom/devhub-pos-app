@@ -42,13 +42,17 @@ type Props = {
   nombreTenant?: string;
   telefonoTenant?: string | null;
   direccionTenant?: string | null;
+  onBusquedaRemota?: (q: string) => Promise<ProductoConCategoria[]>; // nuevo
 };
 
 export default function POSClient({
   productos, categorias, onVentaExitosa, isModal,
-  nombreTenant = "Mi comercio", telefonoTenant, direccionTenant,
+  nombreTenant = "Mi comercio", telefonoTenant, direccionTenant,onBusquedaRemota,
 }: Props) {
-  const [busqueda,         setBusqueda]         = useState("");
+  const [busqueda,          setBusqueda]          = useState("");
+  const [productosRemoto,   setProductosRemoto]   = useState<ProductoConCategoria[]>([]);
+  const [buscandoRemoto,    setBuscandoRemoto]    = useState(false);
+  const [busquedaTimeout,   setBusquedaTimeout]   = useState<ReturnType<typeof setTimeout> | null>(null);
   const [categoriaActiva,  setCategoriaActiva]  = useState<string | null>(null);
   const [carrito,          setCarrito]          = useState<ItemCarrito[]>([]);
   const [metodoPago,       setMetodoPago]       = useState<MetodoPago>("efectivo");
@@ -62,15 +66,36 @@ export default function POSClient({
   const [imprimirTicket,   setImprimirTicket]   = useState(true);
   const [tabMobile,        setTabMobile]        = useState<"catalogo" | "carrito">("catalogo");
 
-  const productosFiltrados = useMemo(() => productos.filter((p) => {
-    const matchBusqueda =
-      !busqueda ||
-      p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-      (p.codigoProducto ?? "").toLowerCase().includes(busqueda.toLowerCase()) ||
-      (p.codigoBarras   ?? "").toLowerCase().includes(busqueda.toLowerCase());
+  const handleBusqueda = useCallback((valor: string) => {
+  setBusqueda(valor);
+  if (busquedaTimeout) clearTimeout(busquedaTimeout);
+  if (!valor.trim() || !onBusquedaRemota) { setProductosRemoto([]); return; }
+  const t = setTimeout(async () => {
+    setBuscandoRemoto(true);
+    const res = await onBusquedaRemota(valor);
+    setProductosRemoto(res);
+    setBuscandoRemoto(false);
+  }, 350);
+  setBusquedaTimeout(t);
+}, [busquedaTimeout, onBusquedaRemota]);
+  
+const productosFiltrados = useMemo(() => {
+  const base = busqueda.trim() && productosRemoto.length > 0
+    ? productosRemoto
+    : productos;
+  return base.filter((p) => {
     const matchCategoria = !categoriaActiva || p.categoriaId === categoriaActiva;
-    return matchBusqueda && matchCategoria;
-  }), [productos, busqueda, categoriaActiva]);
+    if (!matchCategoria) return false;
+    if (!onBusquedaRemota && busqueda) {
+      // filtro local solo si no hay búsqueda remota
+      const q = busqueda.toLowerCase();
+      return p.nombre.toLowerCase().includes(q) ||
+        (p.codigoProducto ?? "").toLowerCase().includes(q) ||
+        (p.codigoBarras ?? "").toLowerCase().includes(q);
+    }
+    return true;
+  });
+}, [productos, productosRemoto, busqueda, categoriaActiva, onBusquedaRemota]);
 
   const agregarAlCarrito = useCallback((producto: ProductoConCategoria) => {
     setCarrito((prev) => {
@@ -159,7 +184,7 @@ export default function POSClient({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 var(--text-primary)" />
           <input
-            type="text" value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+            type="text" value={busqueda} onChange={(e) => handleBusqueda(e.target.value)}
             placeholder="Buscar producto o código..." className="input-base pl-9 pr-9 w-full" autoFocus
           />
           {busqueda && (

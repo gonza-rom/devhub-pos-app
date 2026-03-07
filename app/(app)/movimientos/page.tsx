@@ -146,7 +146,7 @@ export default function MovimientosPage() {
   const fetchMovimientos = useCallback(async (pagina = 1) => {
     setLoading(true);
     try {
-      const res  = await fetch(`/api/movimientos?page=${pagina}&pageSize=30`);
+      const res  = await fetch(`/api/movimientos?page=${pagina}&pageSize=15`);
       const data = await res.json();
       setMovimientos(data.data ?? []);
       setPaginacion(data.meta ?? { page: 1, total: 0, totalPages: 1, hasNext: false, hasPrev: false });
@@ -481,7 +481,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <ArrowLeftRight className="h-6 w-6" /> Movimientos de Stock
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{paginacion.total} registros totales</p>
+          <p className="text-sm text-zinc-300 dark:text-zinc-300">{paginacion.total} registros totales</p>
         </div>
 
         {!modoFormulario && (
@@ -542,7 +542,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                   value={posBusqueda} onChange={(e) => setPosBusqueda(e.target.value)}
                   className="input-base pl-10" autoFocus />
                 {posBusqueda && (
-                  <button onClick={() => setPosBusqueda("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <button onClick={() => setPosBusqueda("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-400">
                     <X className="h-4 w-4" />
                   </button>
                 )}
@@ -550,7 +550,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
 
               {/* Paginación catálogo */}
               {posTotalPaginas > 1 && (
-                <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex items-center justify-between text-sm text-zinc-300 dark:text-gray-400">
                   <span>Página {posPaginaActual}/{posTotalPaginas}</span>
                   <div className="flex gap-1">
                     <button onClick={() => { const p = Math.max(1, posPaginaActual - 1); setPosPaginaActual(p); fetchPosProductos(p, posBusquedaDebounced); }}
@@ -579,7 +579,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                   ))}
                 </div>
               ) : posProductos.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <div className="text-center py-12 text-zinc-300 dark:text-gray-400">
                   <Package className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                   No se encontraron productos
                 </div>
@@ -625,7 +625,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                           <p className="text-xs text-primary-600 dark:text-primary-400 font-medium truncate">{producto.codigoProducto}</p>
                         )}
                         <p className="text-sm font-bold text-green-600 dark:text-green-400 mt-0.5">${producto.precio.toFixed(2)}</p>
-                        <p className={cn("text-xs mt-0.5", producto.stock <= producto.stockMinimo && producto.stock > 0 ? "text-orange-500" : "text-gray-500 dark:text-gray-400")}>
+                        <p className={cn("text-xs mt-0.5", producto.stock <= producto.stockMinimo && producto.stock > 0 ? "text-orange-500" : "text-zinc-300 dark:text-gray-400")}>
                           Stock: {producto.stock}
                         </p>
                       </div>
@@ -644,7 +644,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
 
                 <div className="space-y-2 max-h-52 overflow-y-auto">
                   {carrito.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                    <p className="text-sm text-zinc-300 dark:text-gray-400 text-center py-4">
                       Seleccioná productos del catálogo
                     </p>
                   ) : carrito.map((item) => {
@@ -656,7 +656,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                             {item.esManual && <Tag className="h-3 w-3 text-orange-500 flex-shrink-0" />}
                             {item.nombre}
                           </p>
-                          <p className="text-xs text-gray-500">${item.precioUnit.toFixed(2)}</p>
+                          <p className="text-xs text-zinc-300">${item.precioUnit.toFixed(2)}</p>
                         </div>
                         <div className="flex items-center gap-1">
                           <button onClick={() => actualizarCantidad(itemId, item.cantidad - 1)}
@@ -724,7 +724,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     className={cn("px-3 py-2 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap",
                       horaVentaAuto
                         ? "bg-green-600 text-white border-green-600"
-                        : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50")}>
+                        : "bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50")}>
                     {horaVentaAuto ? "⚡ Ahora" : "Manual"}
                   </button>
                 </div>
@@ -793,7 +793,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                   </div>
                 )}
                 {busquedaProducto && !buscandoSugerencias && (
-                  <button type="button" onClick={limpiarSeleccion} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <button type="button" onClick={limpiarSeleccion} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-400">
                     <X className="h-4 w-4" />
                   </button>
                 )}
@@ -804,7 +804,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     <button key={p.id} type="button" onClick={() => seleccionarProducto(p)}
                       className="w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0">
                       <div className="font-medium text-gray-900 dark:text-gray-100">{p.nombre}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                      <div className="text-xs text-zinc-300 dark:text-gray-400">
                         {p.codigoProducto && `Código: ${p.codigoProducto} · `}
                         Stock: {p.stock} · Precio: ${p.precio.toFixed(2)}
                       </div>
@@ -838,7 +838,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     className={cn("px-3 py-2 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap",
                       formData.horaAuto
                         ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50")}>
+                        : "bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50")}>
                     {formData.horaAuto ? "⚡ Ahora" : "Manual"}
                   </button>
                 </div>
@@ -866,7 +866,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                 Registrar {modoFormulario === "ENTRADA" ? "Entrada" : "Salida"}
               </button>
               <button type="button" onClick={cerrarFormulario}
-                className="rounded-xl border border-gray-200 dark:border-gray-700 px-6 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                className="rounded-xl border border-gray-200 dark:border-gray-700 px-6 py-2.5 text-sm font-semibold text-gray-400 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                 Cancelar
               </button>
             </div>
@@ -885,7 +885,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               value={busquedaInput} onChange={(e) => setBusquedaInput(e.target.value)}
               className="input-base pl-10 pr-9" />
             {busquedaInput && (
-              <button onClick={() => setBusquedaInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <button onClick={() => setBusquedaInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-400">
                 <X className="h-4 w-4" />
               </button>
             )}
@@ -921,7 +921,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
             </div>
             {hayFiltrosActivos && (
               <button onClick={limpiarFiltros}
-                className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                className="flex items-center gap-2 text-sm text-zinc-300 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
                 <X className="h-4 w-4" /> Limpiar filtros
               </button>
             )}
@@ -930,7 +930,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
 
         {/* Info resultados + paginación */}
         <div className="flex items-center justify-between border-t dark:border-gray-700 pt-3">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-zinc-300 dark:text-gray-400">
             {movimientosFiltrados.length} de {movimientos.length} mostrados · {paginacion.total} totales
           </p>
           {paginacion.totalPages > 1 && (
@@ -939,7 +939,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                 className="p-1.5 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="px-3 py-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+              <span className="px-3 py-1 text-sm font-medium text-gray-500 dark:text-gray-300">
                 {paginacion.page}/{paginacion.totalPages}
               </span>
               <button onClick={() => fetchMovimientos(paginaActual + 1)} disabled={!paginacion.hasNext}
@@ -956,7 +956,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
       ══════════════════════════════════════════ */}
       {movimientosFiltrados.length === 0 ? (
         <div className="card py-20 text-center">
-          <ArrowLeftRight className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+          <ArrowLeftRight className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-400 mb-4" />
           <p className="text-lg font-medium text-gray-900 dark:text-gray-100">No hay movimientos</p>
           {hayFiltrosActivos && (
             <button onClick={limpiarFiltros} className="mt-3 text-sm text-primary-600 hover:underline">Limpiar filtros</button>
@@ -969,7 +969,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                 <tr>
                   {["Fecha", "Producto", "Tipo", "Cantidad", "Motivo", "Usuario", "Stock", "Precio", "Acciones"].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-zinc-300 dark:text-gray-400 uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -979,7 +979,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     "hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors",
                     m.cancelado && "opacity-50"
                   )}>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-zinc-300 dark:text-gray-400">
                       {new Date(m.createdAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false })}
                       {m.cancelado && (
                         <div className="text-[10px] text-red-500 mt-0.5">
@@ -998,7 +998,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {m.cancelado ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 dark:bg-gray-700 text-zinc-300 dark:text-gray-400">
                           <Ban className="h-3 w-3" /> Cancelado
                         </span>
                       ) : m.tipo === "ENTRADA" ? (
@@ -1028,13 +1028,13 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                         {m.tipo === "ENTRADA" ? "+" : "-"}{m.cantidad}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 max-w-[160px]">
+                    <td className="px-4 py-3 text-xs text-zinc-300 dark:text-gray-400 max-w-[160px]">
                       {m.cancelado && m.motivoCancelacion
                         ? <span className="text-red-500">↩ {m.motivoCancelacion}</span>
-                        : (m.motivo ?? <span className="text-gray-300 dark:text-gray-600">Sin motivo</span>)
+                        : (m.motivo ?? <span className="text-zinc-300 dark:text-gray-400">Sin motivo</span>)
                       }
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-xs text-zinc-300 dark:text-gray-400 whitespace-nowrap">
                       {m.usuarioNombre
                         ? <span className="flex items-center gap-1"><UserCircle className="h-3.5 w-3.5" />{m.usuarioNombre}</span>
                         : "—"
@@ -1084,9 +1084,9 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               </div>
               <div className="flex-1">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Editar Movimiento</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Producto: {modalEditar.productoNombre}</p>
+                <p className="text-sm text-zinc-300 dark:text-gray-400 mt-0.5">Producto: {modalEditar.productoNombre}</p>
               </div>
-              <button onClick={() => setModalEditar(null)} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+              <button onClick={() => setModalEditar(null)} className="text-gray-400 hover:text-gray-400"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-4">
               <div>
@@ -1130,12 +1130,12 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Cancelar Movimiento</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Esto revertirá el efecto sobre el stock del producto.</p>
+                <p className="text-sm text-zinc-300 dark:text-gray-400 mt-1">Esto revertirá el efecto sobre el stock del producto.</p>
               </div>
             </div>
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 mb-4 text-sm space-y-1">
               <p className="font-medium text-gray-900 dark:text-gray-100">{modalCancelar.productoNombre}</p>
-              <p className="text-gray-500 dark:text-gray-400">
+              <p className="text-zinc-300 dark:text-gray-400">
                 {modalCancelar.tipo === "ENTRADA" ? "📥 Entrada" : modalCancelar.tipo === "VENTA" ? "💰 Venta" : "📤 Salida"} de {modalCancelar.cantidad} unidades
               </p>
               <p className="text-xs text-gray-400">
@@ -1178,9 +1178,9 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <Tag className="h-5 w-5 text-orange-500" /> Ítem manual — Varios
               </h2>
-              <button onClick={() => setModalManual(false)} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>
+              <button onClick={() => setModalManual(false)} className="text-gray-400 hover:text-gray-400"><X className="h-5 w-5" /></button>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            <p className="text-xs text-zinc-300 dark:text-gray-400 mb-4">
               Se registra como ítem de la venta pero <strong>no descuenta stock</strong>.
             </p>
             <div className="space-y-3">
