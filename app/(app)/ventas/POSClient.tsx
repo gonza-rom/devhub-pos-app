@@ -1,7 +1,9 @@
 "use client";
 // app/(app)/ventas/POSClient.tsx
+// OPTIMIZADO con debounce en búsqueda
 
 import { useState, useMemo, useCallback, useRef } from "react";
+import { debounce } from "lodash"; // ✅ NUEVO IMPORT
 import {
   ShoppingCart, Search, X, Plus, Minus, Trash2,
   CreditCard, Banknote, Smartphone, QrCode, ChevronRight,
@@ -43,60 +45,78 @@ type Props = {
   nombreTenant?: string;
   telefonoTenant?: string | null;
   direccionTenant?: string | null;
-  onBusquedaRemota?: (q: string) => Promise<ProductoConCategoria[]>; // nuevo
+  onBusquedaRemota?: (q: string) => Promise<ProductoConCategoria[]>;
 };
 
 export default function POSClient({
   productos, categorias, onVentaExitosa, isModal,
-  nombreTenant = "Mi comercio", telefonoTenant, direccionTenant,onBusquedaRemota,
+  nombreTenant = "Mi comercio", telefonoTenant, direccionTenant, onBusquedaRemota,
 }: Props) {
   const [busqueda,          setBusqueda]          = useState("");
   const [productosRemoto,   setProductosRemoto]   = useState<ProductoConCategoria[]>([]);
   const [buscandoRemoto,    setBuscandoRemoto]    = useState(false);
-  const [busquedaTimeout,   setBusquedaTimeout]   = useState<ReturnType<typeof setTimeout> | null>(null);
-  const [categoriaActiva,  setCategoriaActiva]  = useState<string | null>(null);
-  const [carrito,          setCarrito]          = useState<ItemCarrito[]>([]);
-  const [metodoPago,       setMetodoPago]       = useState<MetodoPago>("efectivo");
-  const [descuento,        setDescuento]        = useState(0);
-  const [clienteNombre,    setClienteNombre]    = useState("");
-  const [cargando,         setCargando]         = useState(false);
-  const [resultado,        setResultado]        = useState<"exito" | "error" | null>(null);
-  const [mensajeError,     setMensajeError]     = useState("");
-  const [efectivoRecibido, setEfectivoRecibido] = useState("");
-  const [ticketVenta,      setTicketVenta]      = useState<any | null>(null);
-  const [imprimirTicket,   setImprimirTicket]   = useState(true);
-  const [tabMobile,        setTabMobile]        = useState<"catalogo" | "carrito">("catalogo");
+  const [categoriaActiva,   setCategoriaActiva]   = useState<string | null>(null);
+  const [carrito,           setCarrito]           = useState<ItemCarrito[]>([]);
+  const [metodoPago,        setMetodoPago]        = useState<MetodoPago>("efectivo");
+  const [descuento,         setDescuento]         = useState(0);
+  const [clienteNombre,     setClienteNombre]     = useState("");
+  const [cargando,          setCargando]          = useState(false);
+  const [resultado,         setResultado]         = useState<"exito" | "error" | null>(null);
+  const [mensajeError,      setMensajeError]      = useState("");
+  const [efectivoRecibido,  setEfectivoRecibido]  = useState("");
+  const [ticketVenta,       setTicketVenta]       = useState<any | null>(null);
+  const [imprimirTicket,    setImprimirTicket]    = useState(true);
+  const [tabMobile,         setTabMobile]         = useState<"catalogo" | "carrito">("catalogo");
+
+  // ✅ OPTIMIZACIÓN: Debounce en búsqueda remota
+  const debouncedBusquedaRemota = useCallback(
+    debounce(async (valor: string) => {
+      if (!valor.trim() || !onBusquedaRemota) {
+        setProductosRemoto([]);
+        setBuscandoRemoto(false);
+        return;
+      }
+      setBuscandoRemoto(true);
+      try {
+        const res = await onBusquedaRemota(valor);
+        setProductosRemoto(res);
+      } catch (error) {
+        console.error("Error búsqueda remota:", error);
+        setProductosRemoto([]);
+      } finally {
+        setBuscandoRemoto(false);
+      }
+    }, 350), // 350ms de debounce
+    [onBusquedaRemota]
+  );
 
   const handleBusqueda = useCallback((valor: string) => {
-  setBusqueda(valor);
-  if (busquedaTimeout) clearTimeout(busquedaTimeout);
-  if (!valor.trim() || !onBusquedaRemota) { setProductosRemoto([]); return; }
-  const t = setTimeout(async () => {
-    setBuscandoRemoto(true);
-    const res = await onBusquedaRemota(valor);
-    setProductosRemoto(res);
-    setBuscandoRemoto(false);
-  }, 350);
-  setBusquedaTimeout(t);
-}, [busquedaTimeout, onBusquedaRemota]);
-  
-const productosFiltrados = useMemo(() => {
-  const base = busqueda.trim() && productosRemoto.length > 0
-    ? productosRemoto
-    : productos;
-  return base.filter((p) => {
-    const matchCategoria = !categoriaActiva || p.categoriaId === categoriaActiva;
-    if (!matchCategoria) return false;
-    if (!onBusquedaRemota && busqueda) {
-      // filtro local solo si no hay búsqueda remota
-      const q = busqueda.toLowerCase();
-      return p.nombre.toLowerCase().includes(q) ||
-        (p.codigoProducto ?? "").toLowerCase().includes(q) ||
-        (p.codigoBarras ?? "").toLowerCase().includes(q);
+    setBusqueda(valor);
+    if (onBusquedaRemota) {
+      debouncedBusquedaRemota(valor);
     }
-    return true;
-  });
-}, [productos, productosRemoto, busqueda, categoriaActiva, onBusquedaRemota]);
+  }, [debouncedBusquedaRemota, onBusquedaRemota]);
+
+  // ✅ OPTIMIZACIÓN: Filtrado local con useMemo
+  const productosFiltrados = useMemo(() => {
+    const base = busqueda.trim() && productosRemoto.length > 0
+      ? productosRemoto
+      : productos;
+    
+    return base.filter((p) => {
+      const matchCategoria = !categoriaActiva || p.categoriaId === categoriaActiva;
+      if (!matchCategoria) return false;
+      
+      // Solo filtrar localmente si NO hay búsqueda remota
+      if (!onBusquedaRemota && busqueda) {
+        const q = busqueda.toLowerCase();
+        return p.nombre.toLowerCase().includes(q) ||
+          (p.codigoProducto ?? "").toLowerCase().includes(q) ||
+          (p.codigoBarras ?? "").toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [productos, productosRemoto, busqueda, categoriaActiva, onBusquedaRemota]);
 
   const agregarAlCarrito = useCallback((producto: ProductoConCategoria) => {
     setCarrito((prev) => {
@@ -189,9 +209,14 @@ const productosFiltrados = useMemo(() => {
             placeholder="Buscar producto o código..." className="input-base pl-9 pr-9 w-full" autoFocus
           />
           {busqueda && (
-            <button onClick={() => setBusqueda("")} className="absolute right-3 top-1/2 -translate-y-1/2 var(--text-primary) hover:text-zinc-200">
+            <button onClick={() => handleBusqueda("")} className="absolute right-3 top-1/2 -translate-y-1/2 var(--text-primary) hover:text-zinc-200">
               <X className="h-4 w-4 var(--text-primary)" />
             </button>
+          )}
+          {buscandoRemoto && (
+            <div className="absolute right-10 top-1/2 -translate-y-1/2">
+              <div className="h-4 w-4 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin" />
+            </div>
           )}
         </div>
       </div>
@@ -205,7 +230,6 @@ const productosFiltrados = useMemo(() => {
               !categoriaActiva ? "bg-red-600 text-white" : "var(--text-secondary) hover:text-white"
             )}
             style={!categoriaActiva ? {} :{ background: "var(--bg-hover-md)", border: "1px solid var(--border-md)" }}
-
           >
             Todos
           </button>
@@ -228,8 +252,12 @@ const productosFiltrados = useMemo(() => {
         {productosFiltrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-20">
             <Package className="h-12 w-12 text-zinc-700 mb-3" />
-            <p className="text-sm font-medium var(--text-muted)">Sin productos</p>
-            <p className="text-xs var(--text-muted) mt-1">{busqueda ? "Probá con otro término" : "No hay productos con stock disponible"}</p>
+            <p className="text-sm font-medium var(--text-muted)">
+              {buscandoRemoto ? "Buscando..." : "Sin productos"}
+            </p>
+            <p className="text-xs var(--text-muted) mt-1">
+              {busqueda ? "Probá con otro término" : "No hay productos con stock disponible"}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 md:gap-3">
@@ -250,7 +278,9 @@ const productosFiltrados = useMemo(() => {
                   <div className="mb-2 flex items-center justify-center h-14 md:h-16 rounded-lg overflow-hidden w-full"
                     style={{ background: "var(--bg-hover-md)" }}>
                     {producto.imagen
-                      ? <img src={producto.imagen} alt={producto.nombre} className="h-full w-full object-cover rounded-lg" />
+                      ? <img src={producto.imagen?.replace('/upload/', '/upload/f_auto,q_auto,w_200/')} 
+                        alt={producto.nombre}
+                        loading="lazy" className="h-full w-full object-cover rounded-lg" />
                       : <Package className="h-6 w-6 md:h-7 md:w-7 var(--text-muted)" />
                     }
                   </div>
@@ -492,12 +522,10 @@ const productosFiltrados = useMemo(() => {
           </button>
         </div>
 
-        {/* Contenido tab */}
+        {/* Contenido tab - ✅ OPTIMIZADO: Lazy rendering */}
         <div className="flex-1 overflow-hidden">
-          {tabMobile === "catalogo"
-            ? <div className="h-full overflow-hidden">{panelCatalogo}</div>
-            : <div className="h-full overflow-hidden">{panelCarrito}</div>
-          }
+          {tabMobile === "catalogo" && panelCatalogo}
+          {tabMobile === "carrito" && panelCarrito}
         </div>
 
         {/* Barra inferior "Ver carrito" cuando hay items en catálogo */}

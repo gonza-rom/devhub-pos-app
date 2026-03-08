@@ -27,6 +27,18 @@ const getCategoriasCached = (tenantId: string) =>
     { tags: [`tenant-${tenantId}`, "categorias"], revalidate: 300 } // 5 min
   )();
 
+
+  const getProveedoresCached = (tenantId: string) =>
+  unstable_cache(
+    () => prisma.proveedor.findMany({
+      where: { tenantId },
+      select: { id: true, nombre: true },
+      orderBy: { nombre: "asc" },
+    }),
+    [`proveedores-${tenantId}`],
+    { tags: [`tenant-${tenantId}`, "proveedores"], revalidate: 300 }
+  )()
+  
 // ── GET /api/productos ─────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {

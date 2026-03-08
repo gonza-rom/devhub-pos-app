@@ -109,7 +109,9 @@ export default function ProductosTabla({ productos, categorias, proveedores }: P
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         {producto.imagen ? (
-                          <img src={producto.imagen} alt={producto.nombre}
+                          <img src={producto.imagen?.replace('/upload/', '/upload/f_auto,q_auto,w_200/')} 
+                            alt={producto.nombre}
+                            loading="lazy"
                             className="h-9 w-9 rounded-lg object-cover flex-shrink-0"
                             style={{ border: "1px solid var(--border-base)" }} />
                         ) : (

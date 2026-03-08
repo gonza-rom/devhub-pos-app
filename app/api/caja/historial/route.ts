@@ -40,6 +40,8 @@ export async function GET(req: NextRequest) {
               usuarioNombre: true, createdAt: true,
             },
             orderBy: { createdAt: "asc" },
+            take: 100, // limitar a los últimos 100
+
           },
         },
       }),

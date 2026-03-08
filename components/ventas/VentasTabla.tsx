@@ -218,7 +218,9 @@ export default function VentasTabla({ ventas }: Props) {
                                   <div className="flex items-center gap-2">
                                     {item.producto?.imagen ? (
                                       <img
-                                        src={item.producto.imagen} alt={item.nombre}
+                                        src={item.producto.imagen?.replace('/upload/', '/upload/f_auto,q_auto,w_200/')}
+                                        alt={item.nombre}
+                                        loading="lazy"
                                         className="h-7 w-7 rounded-md object-cover flex-shrink-0"
                                         style={{ border: "1px solid var(--border-base)" }}
                                       />
