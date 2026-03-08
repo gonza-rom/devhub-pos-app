@@ -58,12 +58,16 @@ const METODO_TEXT: Record<string, string> = {
 };
 
 function formatFecha(fecha: Date | string) {
-  const d = new Date(fecha);
-  return (
-    d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }) +
-    " " +
-    d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
-  );
+  const d = typeof fecha === "string" ? new Date(fecha) : fecha;
+  
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(d);
 }
 
 export default function VentasTabla({ ventas }: Props) {
