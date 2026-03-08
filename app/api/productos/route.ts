@@ -38,7 +38,7 @@ const getCategoriasCached = (tenantId: string) =>
     [`proveedores-${tenantId}`],
     { tags: [`tenant-${tenantId}`, "proveedores"], revalidate: 300 }
   )()
-  
+
 // ── GET /api/productos ─────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const page     = Math.max(1, parseInt(searchParams.get("page")     ?? "1"));
-    const pageSize = Math.min(50, parseInt(searchParams.get("pageSize") ?? "20"));
+    const pageSize = Math.min(100, parseInt(searchParams.get("pageSize") ?? "20"));
     const skip     = (page - 1) * pageSize;
 
     const busqueda    = searchParams.get("busqueda") ?? searchParams.get("q") ?? "";

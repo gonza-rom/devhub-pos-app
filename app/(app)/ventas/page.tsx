@@ -1,13 +1,27 @@
 // app/(app)/ventas/page.tsx
-import { Metadata } from "next";
-import { headers } from "next/headers";
+// Server Component - Carga solo 30 productos iniciales
+// El resto se carga con scroll infinito desde el cliente
+
+import { getTenantContext } from "@/lib/tenant";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import POSClient from "./POSClient";
-import Link from "next/link";
 
-export const metadata: Metadata = { title: "Ventas (POS)" };
+const SELECT_PRODUCTO_POS = {
+  id: true,
+  nombre: true,
+  precio: true,
+  stock: true,
+  stockMinimo: true,
+  imagen: true,
+  codigoBarras: true,
+  codigoProducto: true,
+  categoriaId: true,
+  categoria: {
+    select: { id: true, nombre: true },
+  },
+};
 
 const getVentasData = cache(async (tenantId: string) => {
   return unstable_cache(
@@ -15,63 +29,64 @@ const getVentasData = cache(async (tenantId: string) => {
       const [tenant, productos, categorias] = await Promise.all([
         prisma.tenant.findUnique({
           where: { id: tenantId },
-          select: { nombre: true, telefono: true, direccion: true },
-        }),
-        prisma.producto.findMany({
-          where: { tenantId, activo: true, stock: { gt: 0 } },
           select: {
             id: true,
             nombre: true,
-            precio: true,
-            stock: true,
-            stockMinimo: true,
-            imagen: true,
-            codigoProducto: true,
-            codigoBarras: true,
-            categoriaId: true,
-            categoria: { select: { id: true, nombre: true } },
+            telefono: true,
+            direccion: true,
           },
-          orderBy: { nombre: "asc" },
-          take: 200,
         }),
+
+        // ✅ Solo 30 productos iniciales (los más recientes o más vendidos)
+        prisma.producto.findMany({
+          where: {
+            tenantId,
+            activo: true,
+            stock: { gt: 0 },
+          },
+          select: SELECT_PRODUCTO_POS,
+          orderBy: { createdAt: "desc" }, // Los más recientes primero
+          take: 30, // Solo 30 iniciales
+        }),
+
         prisma.categoria.findMany({
           where: { tenantId },
           select: { id: true, nombre: true },
           orderBy: { nombre: "asc" },
         }),
       ]);
+
       return { tenant, productos, categorias };
     },
     [`ventas-pos-${tenantId}`],
-    { revalidate: 30, tags: [`tenant-${tenantId}`, "productos", "categorias"] }
+    {
+      revalidate: 30,
+      tags: [`tenant-${tenantId}`, "productos", "categorias"],
+    }
   )();
 });
 
 export default async function VentasPage() {
-  const headersList = await headers();
-  const tenantId = headersList.get("x-tenant-id")!;
+  const { tenantId } = await getTenantContext();
   const { tenant, productos, categorias } = await getVentasData(tenantId);
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm">
-        <Link href="/ventas" className="font-semibold text-red-400">
-          Punto de venta
-        </Link>
-        <span style={{ color: "var(--text-faint)" }}>·</span>
-        <Link href="/historial-ventas" className="text-zinc-500 hover:text-zinc-300">
-          Ver historial
-        </Link>
+  if (!tenant) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-red-400">Tenant no encontrado</p>
       </div>
-      <POSClient
-        productos={productos as any}
-        categorias={categorias}
-        nombreTenant={tenant?.nombre ?? "Mi comercio"}
-        telefonoTenant={tenant?.telefono ?? null}
-        direccionTenant={tenant?.direccion ?? null}
-      />
-    </div>
+    );
+  }
+
+  return (
+    <POSClient
+      productosIniciales={productos}
+      categorias={categorias}
+      nombreTenant={tenant.nombre}
+      telefonoTenant={tenant.telefono}
+      direccionTenant={tenant.direccion}
+    />
   );
 }
 
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
