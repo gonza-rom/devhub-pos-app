@@ -1,5 +1,7 @@
 // app/api/ventas/route.ts
-// OPTIMIZADO: agrega revalidateTag("dashboard") al registrar venta
+// OPTIMIZADO:
+// - GET: filtros adicionales (metodoPago, clienteNombre), select mínimo, sin N+1
+// - POST: stockAnterior guardado correctamente, sin query extra de usuarioTenant
 
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
@@ -7,34 +9,59 @@ import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant";
 import type { CreateVentaInput } from "@/types";
 
-// GET /api/ventas
+// ── GET /api/ventas ────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
     const { tenantId } = await getTenantContext();
     const { searchParams } = new URL(req.url);
 
-    const page  = parseInt(searchParams.get("page")  ?? "1");
-    const limit = parseInt(searchParams.get("limit") ?? "20");
-    const desde = searchParams.get("desde");
-    const hasta = searchParams.get("hasta");
+    const page       = Math.max(1, parseInt(searchParams.get("page")  ?? "1"));
+    const limit      = Math.min(50, parseInt(searchParams.get("limit") ?? "20"));
+    const desde      = searchParams.get("desde");
+    const hasta      = searchParams.get("hasta");
+    const metodoPago = searchParams.get("metodoPago");
+    const cliente    = searchParams.get("cliente");
+    const usuarioId  = searchParams.get("usuarioId");
 
-    const where = {
-      tenantId,
-      ...(desde || hasta ? {
-        createdAt: {
-          ...(desde && { gte: new Date(desde) }),
-          ...(hasta && { lte: new Date(hasta + "T23:59:59") }),
-        },
-      } : {}),
-    };
+    const where: any = { tenantId };
 
+    if (desde || hasta) {
+      where.createdAt = {
+        ...(desde && { gte: new Date(desde) }),
+        ...(hasta && { lte: new Date(hasta + "T23:59:59") }),
+      };
+    }
+    if (metodoPago) where.metodoPago = metodoPago;
+    if (usuarioId)  where.usuarioId  = usuarioId;
+    if (cliente?.trim()) {
+      where.clienteNombre = { contains: cliente.trim(), mode: "insensitive" };
+    }
+
+    // ✅ select mínimo en items — evita traer campos pesados innecesarios
     const [ventas, total] = await Promise.all([
       prisma.venta.findMany({
         where,
-        include: {
+        select: {
+          id:            true,
+          total:         true,
+          subtotal:      true,
+          descuento:     true,
+          metodoPago:    true,
+          clienteNombre: true,
+          clienteDni:    true,
+          observaciones: true,
+          usuarioNombre: true,
+          createdAt:     true,
           items: {
-            include: {
-              producto: { select: { id: true, nombre: true, imagen: true } },
+            select: {
+              id:         true,
+              nombre:     true,
+              cantidad:   true,
+              precioUnit: true,
+              subtotal:   true,
+              producto: {
+                select: { id: true, imagen: true }, // ✅ solo lo que usa el front
+              },
             },
           },
         },
@@ -57,24 +84,41 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/ventas
+// ── POST /api/ventas ───────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
-    const { tenantId, usuarioId } = await getTenantContext();
+    const { tenantId, usuarioId, nombreUsuario } = await getTenantContext();
     const body: CreateVentaInput = await req.json();
     const { items, metodoPago, descuento = 0, clienteNombre, clienteDni, observaciones } = body;
 
-    if (!items || items.length === 0)
+    if (!items?.length)
       return NextResponse.json({ ok: false, error: "La venta debe tener al menos un producto" }, { status: 400 });
     if (!metodoPago)
       return NextResponse.json({ ok: false, error: "El método de pago es requerido" }, { status: 400 });
 
-    const usuarioTenant = await prisma.usuarioTenant.findUnique({
-      where:  { supabaseId: usuarioId },
-      select: { nombre: true },
-    });
+    // ✅ IDs de productos para traerlos todos de una — evita N+1
+    const productoIds = items.map((i) => i.productoId);
 
     const venta = await prisma.$transaction(async (tx) => {
+      // ✅ Un solo fetch de todos los productos en vez de uno por item
+      const productos = await tx.producto.findMany({
+        where: { id: { in: productoIds }, tenantId, activo: true },
+        select: { id: true, nombre: true, stock: true, precio: true },
+      });
+
+      const productoMap = new Map(productos.map((p) => [p.id, p]));
+
+      // Validar stock antes de cualquier escritura
+      for (const item of items) {
+        const producto = productoMap.get(item.productoId);
+        if (!producto) throw new Error(`Producto ${item.productoId} no encontrado`);
+        if (producto.stock < item.cantidad) {
+          throw new Error(
+            `Stock insuficiente para "${producto.nombre}". Disponible: ${producto.stock}, pedido: ${item.cantidad}`
+          );
+        }
+      }
+
       let subtotal = 0;
       const itemsData: {
         productoId: string; nombre: string; cantidad: number;
@@ -82,16 +126,7 @@ export async function POST(req: NextRequest) {
       }[] = [];
 
       for (const item of items) {
-        const producto = await tx.producto.findFirst({
-          where: { id: item.productoId, tenantId, activo: true },
-        });
-        if (!producto) throw new Error(`Producto ${item.productoId} no encontrado`);
-        if (producto.stock < item.cantidad) {
-          throw new Error(
-            `Stock insuficiente para "${producto.nombre}". Disponible: ${producto.stock}, pedido: ${item.cantidad}`
-          );
-        }
-
+        const producto    = productoMap.get(item.productoId)!;
         const itemSubtotal = item.precioUnit * item.cantidad;
         subtotal += itemSubtotal;
         itemsData.push({
@@ -100,11 +135,6 @@ export async function POST(req: NextRequest) {
           cantidad:   item.cantidad,
           precioUnit: item.precioUnit,
           subtotal:   itemSubtotal,
-        });
-
-        await tx.producto.update({
-          where: { id: producto.id },
-          data:  { stock: { decrement: item.cantidad } },
         });
       }
 
@@ -118,54 +148,71 @@ export async function POST(req: NextRequest) {
           clienteDni:    clienteDni?.trim()    || null,
           observaciones: observaciones?.trim() || null,
           usuarioId,
-          usuarioNombre: usuarioTenant?.nombre ?? null,
-          createdAt:     new Date(),
+          usuarioNombre: nombreUsuario ?? null, // ✅ viene de getTenantContext, sin query extra
           items: { create: itemsData },
         },
-        include: { items: true },
+        select: {
+          id:    true,
+          total: true,
+          items: { select: { id: true, nombre: true, cantidad: true, precioUnit: true, subtotal: true } },
+        },
       });
 
+      // ✅ Actualizar stock de todos los productos en paralelo
+      await Promise.all(
+        itemsData.map((item) =>
+          tx.producto.update({
+            where: { id: item.productoId },
+            data:  { stock: { decrement: item.cantidad } },
+          })
+        )
+      );
+
+      // Caja
       const cajaAbierta = await tx.caja.findFirst({
-        where: { tenantId, estado: "ABIERTA" },
+        where:  { tenantId, estado: "ABIERTA" },
+        select: { id: true },
       });
       if (cajaAbierta) {
         await tx.movimientoCaja.create({
           data: {
             tenantId,
-            cajaId:       cajaAbierta.id,
-            tipo:         metodoPago?.toUpperCase() === "EFECTIVO" ? "VENTA_EFECTIVO" : "VENTA_VIRTUAL",
-            monto:        total,
-            descripcion:  `Venta #${ventaCreada.id.slice(-6).toUpperCase()}`,
-            ventaId:      ventaCreada.id,
+            cajaId:        cajaAbierta.id,
+            tipo:          metodoPago?.toUpperCase() === "EFECTIVO" ? "VENTA_EFECTIVO" : "VENTA_VIRTUAL",
+            monto:         total,
+            descripcion:   `Venta #${ventaCreada.id.slice(-6).toUpperCase()}`,
+            ventaId:       ventaCreada.id,
             metodoPago,
             usuarioId,
-            usuarioNombre: usuarioTenant?.nombre ?? null,
+            usuarioNombre: nombreUsuario ?? null,
           },
         });
       }
 
-      for (const item of itemsData) {
-        const producto = await tx.producto.findUnique({ where: { id: item.productoId } });
-        await tx.movimiento.create({
-          data: {
+      // ✅ Movimientos con stockAnterior correcto — calculado desde productoMap
+      await tx.movimiento.createMany({
+        data: itemsData.map((item) => {
+          const producto     = productoMap.get(item.productoId)!;
+          const stockAnterior = producto.stock;
+          return {
             tenantId,
             productoId:      item.productoId,
             productoNombre:  item.nombre,
-            tipo:            "VENTA",
+            tipo:            "VENTA" as const,
             cantidad:        item.cantidad,
-            stockResultante: producto?.stock ?? 0,
+            stockAnterior,                              // ✅ antes era undefined
+            stockResultante: stockAnterior - item.cantidad,
             ventaId:         ventaCreada.id,
             usuarioId,
-            usuarioNombre:   usuarioTenant?.nombre ?? null,
+            usuarioNombre:   nombreUsuario ?? null,
             createdAt:       new Date(),
-          },
-        });
-      }
+          };
+        }),
+      });
 
       return ventaCreada;
     });
 
-    // ✅ Invalidar dashboard — ventas del día y del mes cambiaron
     revalidateTag("dashboard");
     revalidateTag(`tenant-${tenantId}`);
 

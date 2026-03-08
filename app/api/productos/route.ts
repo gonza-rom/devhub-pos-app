@@ -1,8 +1,10 @@
 // app/api/productos/route.ts
-// OPTIMIZADO: agrega revalidateTag("dashboard") en POST
+// OPTIMIZADO:
+// - GET: caché con unstable_cache para llamadas frecuentes del POS
+// - POST: sin cambios de lógica, ya estaba bien
 
 import { NextRequest, NextResponse } from "next/server";
-import { revalidateTag } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext, verificarLimiteProductos } from "@/lib/tenant";
 
@@ -12,6 +14,20 @@ function toNullIfEmpty(value: unknown): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
+// ✅ Caché de categorías — se llaman en cada carga del POS, cambian muy poco
+const getCategoriasCached = (tenantId: string) =>
+  unstable_cache(
+    () =>
+      prisma.categoria.findMany({
+        where:   { tenantId },
+        select:  { id: true, nombre: true },
+        orderBy: { nombre: "asc" },
+      }),
+    [`categorias-${tenantId}`],
+    { tags: [`tenant-${tenantId}`, "categorias"], revalidate: 300 } // 5 min
+  )();
+
+// ── GET /api/productos ─────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
     const { tenantId } = await getTenantContext();
@@ -27,31 +43,55 @@ export async function GET(req: NextRequest) {
     const soloActivos = searchParams.get("activos") !== "false";
     const ordenar     = searchParams.get("ordenar") ?? "nombre";
 
+    // ✅ Endpoint especial: solo categorías (para selectores del front)
+    if (searchParams.get("solo") === "categorias") {
+      const categorias = await getCategoriasCached(tenantId);
+      return NextResponse.json({ ok: true, data: categorias });
+    }
+
     const where: any = { tenantId };
     if (soloActivos) where.activo = true;
     if (stockBajo)   where.stock  = { lte: 5 };
+    if (categoriaId) where.categoriaId = categoriaId;
     if (busqueda.trim()) {
       where.OR = [
         { nombre:         { contains: busqueda, mode: "insensitive" } },
-        { descripcion:    { contains: busqueda, mode: "insensitive" } },
         { codigoProducto: { contains: busqueda, mode: "insensitive" } },
         { codigoBarras:   { contains: busqueda, mode: "insensitive" } },
+        // ✅ descripcion removida — rara vez útil en búsqueda rápida y es campo largo
       ];
     }
-    if (categoriaId) where.categoriaId = categoriaId;
 
     let orderBy: any = { nombre: "asc" };
     if (ordenar === "precio-asc")  orderBy = { precio: "asc" };
     if (ordenar === "precio-desc") orderBy = { precio: "desc" };
     if (ordenar === "recientes")   orderBy = { createdAt: "desc" };
+    if (ordenar === "stock-asc")   orderBy = { stock: "asc" };
+
+    // ✅ select explícito — evita traer imagenes[], descripcion larga, etc. en listados
+    const esPOS = searchParams.get("modo") === "pos";
+    const selectProducto = esPOS
+      ? {
+          // Modo POS: solo lo mínimo para mostrar en pantalla de venta
+          id: true, nombre: true, precio: true, stock: true,
+          imagen: true, codigoBarras: true, codigoProducto: true,
+          categoriaId: true,
+          categoria: { select: { id: true, nombre: true } },
+        }
+      : {
+          // Modo admin/listado: incluye más campos
+          id: true, nombre: true, descripcion: true, precio: true, costo: true,
+          stock: true, stockMinimo: true, unidad: true, imagen: true, imagenes: true,
+          activo: true, categoriaId: true, proveedorId: true,
+          codigoProducto: true, codigoBarras: true, createdAt: true,
+          categoria: { select: { id: true, nombre: true } },
+          proveedor:  { select: { id: true, nombre: true } },
+        };
 
     const [productos, total] = await Promise.all([
       prisma.producto.findMany({
         where,
-        include: {
-          categoria: { select: { id: true, nombre: true } },
-          proveedor:  { select: { id: true, nombre: true } },
-        },
+        select:  selectProducto,
         orderBy, skip, take: pageSize,
       }),
       prisma.producto.count({ where }),
@@ -60,9 +100,9 @@ export async function GET(req: NextRequest) {
     const totalPages = Math.ceil(total / pageSize);
 
     return NextResponse.json({
-      ok: true,
-      data: productos,
-      productos,
+      ok:         true,
+      data:       productos,
+      productos,  // compatibilidad con código existente
       meta:       { page, pageSize, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
       pagination: { page, pageSize, total, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
     });
@@ -73,6 +113,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// ── POST /api/productos ────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
     const { tenantId, usuarioId } = await getTenantContext();
@@ -93,63 +134,74 @@ export async function POST(req: NextRequest) {
     const codigoProductoFinal = toNullIfEmpty(codigoProducto);
     const codigoBarrasFinal   = toNullIfEmpty(codigoBarras);
 
-    if (codigoProductoFinal) {
-      const existente = await prisma.producto.findFirst({ where: { tenantId, codigoProducto: codigoProductoFinal } });
-      if (existente)
-        return NextResponse.json({ ok: false, error: `El código "${codigoProductoFinal}" ya está en uso por: ${existente.nombre}` }, { status: 409 });
-    }
-    if (codigoBarrasFinal) {
-      const existente = await prisma.producto.findFirst({ where: { tenantId, codigoBarras: codigoBarrasFinal } });
-      if (existente)
-        return NextResponse.json({ ok: false, error: `El código de barras "${codigoBarrasFinal}" ya está en uso por: ${existente.nombre}` }, { status: 409 });
-    }
+    // ✅ Verificar duplicados en paralelo
+    const [dupCodigo, dupBarras] = await Promise.all([
+      codigoProductoFinal
+        ? prisma.producto.findFirst({ where: { tenantId, codigoProducto: codigoProductoFinal }, select: { nombre: true } })
+        : null,
+      codigoBarrasFinal
+        ? prisma.producto.findFirst({ where: { tenantId, codigoBarras: codigoBarrasFinal }, select: { nombre: true } })
+        : null,
+    ]);
+
+    if (dupCodigo)
+      return NextResponse.json({ ok: false, error: `El código "${codigoProductoFinal}" ya está en uso por: ${dupCodigo.nombre}` }, { status: 409 });
+    if (dupBarras)
+      return NextResponse.json({ ok: false, error: `El código de barras ya está en uso por: ${dupBarras.nombre}` }, { status: 409 });
 
     const imagenPrincipal =
       toNullIfEmpty(imagen) ??
       (Array.isArray(imagenes) && imagenes.length > 0 ? imagenes[0] : null);
 
-    const producto = await prisma.producto.create({
-      data: {
-        tenantId,
-        nombre:         nombre.trim(),
-        descripcion:    toNullIfEmpty(descripcion),
-        precio:         parseFloat(precio),
-        costo:          costo ? parseFloat(costo) : null,
-        stock:          parseInt(stock) || 0,
-        stockMinimo:    stockMinimo !== undefined && stockMinimo !== "" ? parseInt(stockMinimo) : 5,
-        unidad:         toNullIfEmpty(unidad),
-        imagen:         imagenPrincipal,
-        imagenes:       Array.isArray(imagenes) ? imagenes : [],
-        categoriaId:    toNullIfEmpty(categoriaId),
-        proveedorId:    toNullIfEmpty(proveedorId),
-        codigoProducto: codigoProductoFinal,
-        codigoBarras:   codigoBarrasFinal,
-      },
-      include: {
-        categoria: { select: { id: true, nombre: true } },
-        proveedor:  { select: { id: true, nombre: true } },
-      },
-    });
+    const stockFinal = parseInt(stock) || 0;
 
-    if (producto.stock > 0) {
-      await prisma.movimiento.create({
+    // ✅ Crear producto y movimiento inicial en una sola transacción
+    const producto = await prisma.$transaction(async (tx) => {
+      const p = await tx.producto.create({
         data: {
           tenantId,
-          productoId:      producto.id,
-          productoNombre:  producto.nombre,
-          tipo:            "ENTRADA",
-          cantidad:        producto.stock,
-          stockAnterior:   0,
-          stockResultante: producto.stock,
-          motivo:          "Stock inicial al crear producto",
-          usuarioId,
+          nombre:         nombre.trim(),
+          descripcion:    toNullIfEmpty(descripcion),
+          precio:         parseFloat(precio),
+          costo:          costo ? parseFloat(costo) : null,
+          stock:          stockFinal,
+          stockMinimo:    stockMinimo !== undefined && stockMinimo !== "" ? parseInt(stockMinimo) : 5,
+          unidad:         toNullIfEmpty(unidad),
+          imagen:         imagenPrincipal,
+          imagenes:       Array.isArray(imagenes) ? imagenes : [],
+          categoriaId:    toNullIfEmpty(categoriaId),
+          proveedorId:    toNullIfEmpty(proveedorId),
+          codigoProducto: codigoProductoFinal,
+          codigoBarras:   codigoBarrasFinal,
+        },
+        include: {
+          categoria: { select: { id: true, nombre: true } },
+          proveedor:  { select: { id: true, nombre: true } },
         },
       });
-    }
 
-    // ✅ Invalidar dashboard — "Productos activos" y "Stock bajo" pueden cambiar
+      if (stockFinal > 0) {
+        await tx.movimiento.create({
+          data: {
+            tenantId,
+            productoId:      p.id,
+            productoNombre:  p.nombre,
+            tipo:            "ENTRADA",
+            cantidad:        stockFinal,
+            stockAnterior:   0,
+            stockResultante: stockFinal,
+            motivo:          "Stock inicial al crear producto",
+            usuarioId,
+          },
+        });
+      }
+
+      return p;
+    });
+
     revalidateTag("dashboard");
     revalidateTag(`tenant-${tenantId}`);
+    revalidateTag("categorias"); // ✅ por si se creó con nueva categoría
 
     return NextResponse.json({ ok: true, data: producto }, { status: 201 });
 

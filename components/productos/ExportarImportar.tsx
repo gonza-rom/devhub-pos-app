@@ -1,7 +1,5 @@
 "use client";
 // components/productos/ExportarImportar.tsx
-// Botones: Exportar productos (CSV) + Importar productos (CSV)
-// Se agrega en la página de productos junto al botón "Nuevo producto"
 
 import { useState, useRef } from "react";
 import { Download, Upload, X, CheckCircle2, AlertCircle, FileText } from "lucide-react";
@@ -14,7 +12,6 @@ export default function ExportarImportar() {
   const [exportando,     setExportando]    = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ── Exportar ─────────────────────────────────────────────
   async function handleExportar() {
     setExportando(true);
     try {
@@ -34,7 +31,6 @@ export default function ExportarImportar() {
     }
   }
 
-  // ── Importar ─────────────────────────────────────────────
   function handleArchivoSeleccionado(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
     setArchivo(file);
@@ -67,7 +63,6 @@ export default function ExportarImportar() {
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  // ── Template CSV ──────────────────────────────────────────
   function descargarTemplate() {
     const BOM = "\uFEFF";
     const csv = BOM + [
@@ -86,93 +81,162 @@ export default function ExportarImportar() {
 
   return (
     <>
-      {/* Botones inline */}
+      {/* ── Botones inline ── */}
       <div className="flex gap-2">
-        <button onClick={handleExportar} disabled={exportando}
-          className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50"
-          style={{ borderColor: "rgba(255,255,255,0.12)", color: "#a1a1aa", background: "rgba(255,255,255,0.04)" }}
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)"}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"}
+        <button
+          onClick={handleExportar}
+          disabled={exportando}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+          style={{
+            border:     "1px solid var(--border-md)",
+            color:      "var(--text-secondary)",
+            background: "var(--bg-hover)",
+          }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"}
         >
           <Download className="h-4 w-4" />
           {exportando ? "Exportando..." : "Exportar CSV"}
         </button>
 
-        <button onClick={() => setModalImportar(true)}
-          className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
-          style={{ borderColor: "rgba(255,255,255,0.12)", color: "#a1a1aa", background: "rgba(255,255,255,0.04)" }}
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)"}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"}
+        <button
+          onClick={() => setModalImportar(true)}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+          style={{
+            border:     "1px solid var(--border-md)",
+            color:      "var(--text-secondary)",
+            background: "var(--bg-hover)",
+          }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"}
         >
           <Upload className="h-4 w-4" />
           Importar CSV
         </button>
       </div>
 
-      {/* Modal importar */}
+      {/* ── Modal importar ── */}
       {modalImportar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={cerrarModal} />
-          <div className="relative z-10 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
-            style={{ background: "#161616", border: "1px solid rgba(255,255,255,0.1)" }}>
-
+          <div
+            className="absolute inset-0 backdrop-blur-sm"
+            style={{ background: "rgba(0,0,0,0.6)" }}
+            onClick={cerrarModal}
+          />
+          <div
+            className="relative z-10 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden"
+            style={{
+              background: "var(--bg-card)",
+              border:     "1px solid var(--border-md)",
+            }}
+          >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-              <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                <Upload className="h-4 w-4 text-zinc-400" /> Importar productos
+            <div
+              className="flex items-center justify-between px-6 py-4"
+              style={{ borderBottom: "1px solid var(--border-base)" }}
+            >
+              <h3
+                className="text-base font-semibold flex items-center gap-2"
+                style={{ color: "var(--text-primary)" }}
+              >
+                <Upload className="h-4 w-4" style={{ color: "var(--text-faint)" }} />
+                Importar productos
               </h3>
-              <button onClick={cerrarModal} className="text-zinc-500 hover:text-zinc-200 transition-colors">
+              <button
+                onClick={cerrarModal}
+                className="transition-colors"
+                style={{ color: "var(--text-faint)" }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-faint)"}
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Template */}
-              <div className="rounded-xl p-4 space-y-2"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <p className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-zinc-500" /> Formato CSV requerido
+              {/* Info formato CSV */}
+              <div
+                className="rounded-xl p-4 space-y-2"
+                style={{
+                  background: "var(--bg-hover)",
+                  border:     "1px solid var(--border-base)",
+                }}
+              >
+                <p
+                  className="text-sm font-medium flex items-center gap-2"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  <FileText className="h-4 w-4" style={{ color: "var(--text-faint)" }} />
+                  Formato CSV requerido
                 </p>
-                <p className="text-xs text-zinc-500">
-                  Columnas obligatorias: <span className="text-zinc-300 font-mono">nombre, precio</span>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  Columnas obligatorias:{" "}
+                  <span className="font-mono" style={{ color: "var(--text-secondary)" }}>
+                    nombre, precio
+                  </span>
                 </p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                   Opcionales: codigo_producto, codigo_barras, costo, stock, stock_minimo, unidad, descripcion, categoria
                 </p>
-                <button onClick={descargarTemplate}
-                  className="text-xs text-red-400 hover:text-red-300 underline transition-colors mt-1">
+                <button
+                  onClick={descargarTemplate}
+                  className="text-xs underline transition-colors mt-1"
+                  style={{ color: "#f87171" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#fca5a5"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#f87171"}
+                >
                   Descargar template de ejemplo
                 </button>
               </div>
 
               {/* Upload zone */}
-              <label htmlFor="csv-upload"
+              <label
+                htmlFor="csv-upload"
                 className="flex flex-col items-center justify-center gap-3 rounded-xl p-6 cursor-pointer transition-colors"
-                style={{ border: "2px dashed rgba(255,255,255,0.1)" }}
+                style={{ border: "2px dashed var(--border-md)" }}
                 onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = "rgba(220,38,38,0.4)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.1)"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = "var(--border-md)"}
               >
-                <input id="csv-upload" ref={inputRef} type="file" accept=".csv"
-                  onChange={handleArchivoSeleccionado} className="hidden" />
-                <Upload className="h-8 w-8 text-zinc-600" />
-                {archivo
-                  ? <p className="text-sm font-medium text-zinc-300">{archivo.name}</p>
-                  : <p className="text-sm text-zinc-500">Hacé click para seleccionar un archivo .csv</p>
-                }
+                <input
+                  id="csv-upload"
+                  ref={inputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleArchivoSeleccionado}
+                  className="hidden"
+                />
+                <Upload className="h-8 w-8" style={{ color: "var(--text-faint)" }} />
+                {archivo ? (
+                  <p className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                    {archivo.name}
+                  </p>
+                ) : (
+                  <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                    Hacé click para seleccionar un archivo .csv
+                  </p>
+                )}
               </label>
 
               {/* Resultado */}
               {resultado && (
-                <div className={`rounded-xl p-4 space-y-2 ${resultado.creados > 0 ? "bg-green-950/40 border border-green-800/40" : "bg-red-950/40 border border-red-800/40"}`}>
+                <div
+                  className="rounded-xl p-4 space-y-2"
+                  style={
+                    resultado.creados > 0
+                      ? { background: "rgba(22,163,74,0.08)",  border: "1px solid rgba(22,163,74,0.25)" }
+                      : { background: "rgba(220,38,38,0.08)",  border: "1px solid rgba(220,38,38,0.25)" }
+                  }
+                >
                   {resultado.creados > 0 && (
                     <p className="text-sm font-semibold text-green-400 flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" /> {resultado.creados} productos importados correctamente
+                      <CheckCircle2 className="h-4 w-4" />
+                      {resultado.creados} productos importados correctamente
                     </p>
                   )}
                   {resultado.errores > 0 && (
                     <p className="text-sm font-semibold text-red-400 flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4" /> {resultado.errores} filas con error
+                      <AlertCircle className="h-4 w-4" />
+                      {resultado.errores} filas con error
                     </p>
                   )}
                   {resultado.detallesError.length > 0 && (
@@ -187,18 +251,28 @@ export default function ExportarImportar() {
             </div>
 
             {/* Footer */}
-            <div className="flex gap-3 px-6 py-4" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-              <button onClick={cerrarModal}
-                className="flex-1 rounded-xl py-2.5 text-sm font-medium text-zinc-400 transition-colors"
-                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.1)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"}
+            <div
+              className="flex gap-3 px-6 py-4"
+              style={{ borderTop: "1px solid var(--border-base)" }}
+            >
+              <button
+                onClick={cerrarModal}
+                className="flex-1 rounded-xl py-2.5 text-sm font-medium transition-colors"
+                style={{
+                  color:      "var(--text-muted)",
+                  background: "var(--bg-hover)",
+                  border:     "1px solid var(--border-base)",
+                }}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"}
+                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"}
               >
                 {resultado?.creados ? "Cerrar" : "Cancelar"}
               </button>
-              <button onClick={handleImportar} disabled={!archivo || importando || !!resultado?.creados}
-                className="flex-1 rounded-xl py-2.5 text-sm font-bold text-white transition-colors disabled:opacity-40"
-                style={{ background: "#DC2626" }}
+              <button
+                onClick={handleImportar}
+                disabled={!archivo || importando || !!resultado?.creados}
+                className="flex-1 rounded-xl py-2.5 text-sm font-bold transition-colors disabled:opacity-40"
+                style={{ background: "#DC2626", color: "#ffffff" }}
                 onMouseEnter={e => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.background = "#b91c1c"; }}
                 onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#DC2626"}
               >
