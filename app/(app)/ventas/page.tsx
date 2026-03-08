@@ -1,11 +1,12 @@
 // app/(app)/ventas/page.tsx
-// Pasa nombre, teléfono y dirección del tenant al POSClient para el ticket
+// OPTIMIZADO: Select mínimo para el POS — solo lo necesario
 
 import { Metadata }       from "next";
 import { headers }        from "next/headers";
 import { unstable_cache } from "next/cache";
 import { prisma }         from "@/lib/prisma";
 import POSClient          from "./POSClient";
+import Link               from "next/link";
 
 export const metadata: Metadata = { title: "Ventas (POS)" };
 
@@ -18,15 +19,21 @@ const getVentasData = unstable_cache(
       }),
       prisma.producto.findMany({
         where:   { tenantId, activo: true, stock: { gt: 0 } },
+        // ✅ SOLO lo necesario para el POS
         select: {
-          id: true, nombre: true, descripcion: true, codigoProducto: true,
-          codigoBarras: true, precio: true, costo: true, stock: true,
-          stockMinimo: true, unidad: true, imagen: true, imagenes: true,
-          activo: true, categoriaId: true, proveedorId: true,
-          createdAt: true, updatedAt: true, tenantId: true,
+          id: true,
+          nombre: true,
+          precio: true,
+          stock: true,
+          stockMinimo: true,
+          imagen: true,           // Solo imagen principal
+          codigoProducto: true,   // Para búsqueda
+          codigoBarras: true,     // Para búsqueda
+          categoriaId: true,
           categoria: { select: { id: true, nombre: true } },
         },
         orderBy: { nombre: "asc" },
+        take: 200, // ✅ Límite: los 200 primeros productos (ordenados alfabéticamente)
       }),
       prisma.categoria.findMany({
         where:   { tenantId },
@@ -47,6 +54,17 @@ export default async function VentasPage() {
   const { tenant, productos, categorias } = await getVentasData(tenantId);
 
   return (
+    <div className="space-y-4">
+      {/* Breadcrumb opcional */}
+      <div className="flex items-center gap-2 text-sm">
+        <Link href="/ventas" className="font-semibold text-red-400">
+          Punto de venta
+        </Link>
+        <span style={{ color: "var(--text-faint)" }}>·</span>
+        <Link href="/historial-ventas" className="text-zinc-500 hover:text-zinc-300">
+          Ver historial
+        </Link>
+      </div>
     <POSClient
       productos={productos as any}
       categorias={categorias}
@@ -54,5 +72,6 @@ export default async function VentasPage() {
       telefonoTenant={tenant?.telefono ?? null}
       direccionTenant={tenant?.direccion ?? null}
     />
+  </div>
   );
 }

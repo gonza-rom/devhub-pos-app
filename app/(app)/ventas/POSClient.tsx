@@ -1,7 +1,7 @@
 "use client";
 // app/(app)/ventas/POSClient.tsx
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import {
   ShoppingCart, Search, X, Plus, Minus, Trash2,
   CreditCard, Banknote, Smartphone, QrCode, ChevronRight,
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { formatPrecio } from "@/lib/utils";
 import type { Producto, Categoria } from "@/types";
 import TicketPrint from "@/components/ventas/TicketPrint";
+
 
 type ProductoConCategoria = Producto & {
   categoria: Pick<Categoria, "id" | "nombre"> | null;

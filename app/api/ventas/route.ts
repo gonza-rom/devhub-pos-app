@@ -15,13 +15,12 @@ export async function GET(req: NextRequest) {
     const { tenantId } = await getTenantContext();
     const { searchParams } = new URL(req.url);
 
-    const page       = Math.max(1, parseInt(searchParams.get("page")  ?? "1"));
-    const limit      = Math.min(50, parseInt(searchParams.get("limit") ?? "20"));
-    const desde      = searchParams.get("desde");
-    const hasta      = searchParams.get("hasta");
-    const metodoPago = searchParams.get("metodoPago");
-    const cliente    = searchParams.get("cliente");
-    const usuarioId  = searchParams.get("usuarioId");
+    const page = parseInt(searchParams.get("page") ?? "1");
+    const limit = Math.min(50, parseInt(searchParams.get("limit") ?? "20")); // ✅ MAX 50
+    const desde = searchParams.get("desde");
+    const hasta = searchParams.get("hasta");
+    const metodoPago = searchParams.get("metodoPago"); // ✅ NUEVO
+    const busqueda = searchParams.get("busqueda") ?? ""; // ✅ NUEVO
 
     const where: any = { tenantId };
 
@@ -31,53 +30,66 @@ export async function GET(req: NextRequest) {
         ...(hasta && { lte: new Date(hasta + "T23:59:59") }),
       };
     }
+
     if (metodoPago) where.metodoPago = metodoPago;
-    if (usuarioId)  where.usuarioId  = usuarioId;
-    if (cliente?.trim()) {
-      where.clienteNombre = { contains: cliente.trim(), mode: "insensitive" };
+
+    if (busqueda.trim()) {
+      where.OR = [
+        { clienteNombre: { contains: busqueda, mode: "insensitive" } },
+        { clienteDni: { contains: busqueda, mode: "insensitive" } },
+        { observaciones: { contains: busqueda, mode: "insensitive" } },
+      ];
     }
 
-    // ✅ select mínimo en items — evita traer campos pesados innecesarios
     const [ventas, total] = await Promise.all([
       prisma.venta.findMany({
         where,
+        // ✅ OPTIMIZACIÓN: Solo traemos lo necesario
         select: {
-          id:            true,
-          total:         true,
-          subtotal:      true,
-          descuento:     true,
-          metodoPago:    true,
+          id: true,
+          total: true,
+          subtotal: true,
+          descuento: true,
+          metodoPago: true,
           clienteNombre: true,
-          clienteDni:    true,
-          observaciones: true,
           usuarioNombre: true,
-          createdAt:     true,
+          createdAt: true,
           items: {
             select: {
-              id:         true,
-              nombre:     true,
-              cantidad:   true,
+              nombre: true,
+              cantidad: true,
               precioUnit: true,
-              subtotal:   true,
+              subtotal: true,
+              // ✅ NO traemos el producto completo, solo lo básico
               producto: {
-                select: { id: true, imagen: true }, // ✅ solo lo que usa el front
+                select: {
+                  id: true,
+                  nombre: true,
+                  imagen: true,
+                },
               },
             },
           },
         },
         orderBy: { createdAt: "desc" },
-        skip:    (page - 1) * limit,
-        take:    limit,
+        skip: (page - 1) * limit,
+        take: limit,
       }),
       prisma.venta.count({ where }),
     ]);
 
     return NextResponse.json({
-      ok:   true,
+      ok: true,
       data: ventas,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1,
+      },
     });
-
   } catch (error) {
     console.error("[GET /api/ventas]", error);
     return NextResponse.json({ ok: false, error: "Error al obtener ventas" }, { status: 500 });

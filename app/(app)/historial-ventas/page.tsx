@@ -1,13 +1,13 @@
-// app/(app)/ventas/page.tsx
+// app/(app)/historial-ventas/page.tsx
 
-import { Metadata }  from "next";
-import { headers }   from "next/headers";
-import { prisma }    from "@/lib/prisma";
+import { Metadata } from "next";
+import { headers } from "next/headers";
+import { prisma } from "@/lib/prisma";
 import { formatPrecio } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
 import Link from "next/link";
-import VentasTabla    from "@/components/ventas/VentasTabla";
-import VentasFiltros  from "@/components/ventas/VentasFiltros";
+import VentasTabla from "@/components/ventas/VentasTabla";
+import VentasFiltros from "@/components/ventas/VentasFiltros";
 
 export const metadata: Metadata = { title: "Historial de ventas" };
 
@@ -15,7 +15,7 @@ const PAGE_SIZE = 20;
 
 const METODOS_PAGO = ["EFECTIVO", "DEBITO", "CREDITO", "TRANSFERENCIA", "QR", "MERCADOPAGO"];
 
-export default async function VentasPage({
+export default async function HistorialVentasPage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -24,14 +24,14 @@ export default async function VentasPage({
   }>;
 }) {
   const headersList = await headers();
-  const tenantId    = headersList.get("x-tenant-id")!;
-  const params      = await searchParams;
+  const tenantId = headersList.get("x-tenant-id")!;
+  const params = await searchParams;
 
-  const desde      = params.desde      ?? "";
-  const hasta      = params.hasta      ?? "";
+  const desde = params.desde ?? "";
+  const hasta = params.hasta ?? "";
   const metodoPago = params.metodoPago ?? "";
-  const cliente    = params.cliente    ?? "";
-  const page       = Math.max(1, parseInt(params.page ?? "1"));
+  const cliente = params.cliente ?? "";
+  const page = Math.max(1, parseInt(params.page ?? "1"));
 
   const where: any = { tenantId };
 
@@ -50,51 +50,50 @@ export default async function VentasPage({
     prisma.venta.findMany({
       where,
       select: {
-        id:            true,
-        total:         true,
-        subtotal:      true,
-        descuento:     true,
-        metodoPago:    true,
+        id: true,
+        total: true,
+        subtotal: true,
+        descuento: true,
+        metodoPago: true,
         clienteNombre: true,
-        clienteDni:    true,
+        clienteDni: true,
         observaciones: true,
         usuarioNombre: true,
-        createdAt:     true,
+        createdAt: true,
         items: {
           select: {
-            id:         true,
-            nombre:     true,
-            cantidad:   true,
+            id: true,
+            nombre: true,
+            cantidad: true,
             precioUnit: true,
-            subtotal:   true,
-            producto:   { select: { id: true, imagen: true } },
+            subtotal: true,
+            producto: { select: { id: true, imagen: true } },
           },
         },
       },
       orderBy: { createdAt: "desc" },
-      skip:    (page - 1) * PAGE_SIZE,
-      take:    PAGE_SIZE,
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
     }),
     prisma.venta.count({ where }),
   ]);
 
-  // Totales del período filtrado (sin paginación)
   const resumen = await prisma.venta.aggregate({
     where,
-    _sum:   { total: true },
+    _sum: { total: true },
     _count: { id: true },
   });
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const desde_n    = (page - 1) * PAGE_SIZE + 1;
-  const hasta_n    = Math.min(page * PAGE_SIZE, total);
+  const desde_n = (page - 1) * PAGE_SIZE + 1;
+  const hasta_n = Math.min(page * PAGE_SIZE, total);
 
   const buildQuery = (newPage: number) => {
     const q = new URLSearchParams();
-    if (desde)      q.set("desde",      desde);
-    if (hasta)      q.set("hasta",      hasta);
+    if (desde) q.set("desde", desde);
+    if (hasta) q.set("hasta", hasta);
     if (metodoPago) q.set("metodoPago", metodoPago);
-    if (cliente)    q.set("cliente",    cliente);
+    if (cliente) q.set("cliente", cliente);
     q.set("page", String(newPage));
     return `?${q.toString()}`;
   };
@@ -103,7 +102,15 @@ export default async function VentasPage({
 
   return (
     <div className="space-y-5">
-
+      <div className="flex items-center gap-2 text-sm">
+        <Link href="/ventas" className="text-zinc-500 hover:text-zinc-300">
+          Punto de venta
+        </Link>
+        <span style={{ color: "var(--text-faint)" }}>·</span>
+        <Link href="/historial-ventas" className="font-semibold text-red-400">
+          Historial de ventas
+        </Link>
+      </div>
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
@@ -134,7 +141,7 @@ export default async function VentasPage({
         </div>
       </div>
 
-      {/* Filtros — Client Component para UX fluida */}
+      {/* Filtros */}
       <VentasFiltros
         metodosPago={METODOS_PAGO}
         valores={{ desde, hasta, metodoPago, cliente }}
@@ -151,7 +158,7 @@ export default async function VentasPage({
             {hayFiltros ? "No hay ventas con esos filtros" : "Todavía no se registraron ventas"}
           </p>
           {hayFiltros && (
-            <Link href="/ventas" className="inline-block mt-4 text-sm underline"
+            <Link href="/historial-ventas" className="inline-block mt-4 text-sm underline"
               style={{ color: "var(--text-muted)" }}>
               Limpiar filtros
             </Link>
@@ -195,8 +202,8 @@ export default async function VentasPage({
                       className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
                       style={{
                         background: p === page ? "#DC2626" : "transparent",
-                        color:      p === page ? "#ffffff" : "var(--text-secondary)",
-                        border:     p === page ? "none" : "1px solid var(--border-base)",
+                        color: p === page ? "#ffffff" : "var(--text-secondary)",
+                        border: p === page ? "none" : "1px solid var(--border-base)",
                       }}>
                       {p}
                     </Link>

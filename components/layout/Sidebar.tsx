@@ -21,13 +21,10 @@ type NavItem = { label: string; href: string; icon: React.ElementType; soloAdmin
 
 const navItems: NavItem[] = [
   { label: "Dashboard",    href: "/dashboard",    icon: LayoutDashboard },
-  {
-    label: "Ventas", href: "/ventas", icon: ShoppingCart,
-    children: [
-      { label: "Punto de venta", href: "/ventas",           icon: ShoppingCart },
-      { label: "Historial",      href: "/ventas/historial", icon: History },
-    ],
-  },
+  // ✅ CAMBIO 1: POS como item simple (sin children)
+  { label: "Punto de venta", href: "/ventas", icon: ShoppingCart },
+  // ✅ CAMBIO 2: Historial como item separado
+  { label: "Historial de ventas", href: "/historial-ventas", icon: History },
   { label: "Caja",         href: "/caja",         icon: DollarSign },
   { label: "Productos",    href: "/productos",    icon: Package },
   { label: "Movimientos",  href: "/movimientos",  icon: ArrowLeftRight },
@@ -286,7 +283,6 @@ useEffect(() => {
                     .map((sub) => {
                       const SubIcon   = sub.icon;
                       const subActivo =
-                        sub.href === "/ventas"         ? pathname === "/ventas"         :
                         sub.href === "/configuracion"  ? pathname === "/configuracion"  :
                         pathname.startsWith(sub.href);
 

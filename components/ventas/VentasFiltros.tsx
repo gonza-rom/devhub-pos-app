@@ -33,12 +33,12 @@ export default function VentasFiltros({ metodosPago, valores }: Props) {
     if (form.metodoPago) q.set("metodoPago", form.metodoPago);
     if (form.cliente)    q.set("cliente",    form.cliente);
     q.set("page", "1");
-    router.push(`/ventas?${q.toString()}`);
+    router.push(`/historial-ventas?${q.toString()}`);
   }
 
   function handleLimpiar() {
     setForm({ desde: "", hasta: "", metodoPago: "", cliente: "" });
-    router.push("/ventas");
+    router.push("/historial-ventas");
   }
 
   const hayFiltros = !!(form.desde || form.hasta || form.metodoPago || form.cliente);
