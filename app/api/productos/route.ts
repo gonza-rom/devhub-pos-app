@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     const selectProducto = esPOS
       ? {
           // Modo POS: solo lo mínimo para mostrar en pantalla de venta
-          id: true, nombre: true, precio: true, stock: true,
+          id: true, nombre: true, precio: true, stock: true,stockMinimo: true,
           imagen: true, codigoBarras: true, codigoProducto: true,
           categoriaId: true,
           categoria: { select: { id: true, nombre: true } },
