@@ -1,6 +1,7 @@
 "use client";
 // app/(app)/ventas/POSClient.tsx
 // OPTIMIZADO para 1500+ productos con scroll infinito + búsqueda remota
+// ✅ TIPOS OPTIMIZADOS - Sin dependencia de Prisma completo
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { debounce } from "lodash";
@@ -11,12 +12,30 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPrecio } from "@/lib/utils";
-import type { Producto, Categoria } from "@/types";
 import TicketPrint from "@/components/ventas/TicketPrint";
 
-type ProductoConCategoria = Producto & {
-  categoria: Pick<Categoria, "id" | "nombre"> | null;
+// ✅ Tipos optimizados - Solo lo necesario para el POS (sin Prisma)
+type ProductoConCategoria = {
+  id: string;
+  nombre: string;
+  precio: number;
+  stock: number;
+  stockMinimo: number;
+  imagen: string | null;
+  codigoBarras: string | null;
+  codigoProducto: string | null;
+  categoriaId: string | null;
+  categoria: {
+    id: string;
+    nombre: string;
+  } | null;
 };
+
+type CategoriaSimple = {
+  id: string;
+  nombre: string;
+};
+
 type ItemCarrito = {
   productoId: string;
   nombre: string;
@@ -26,6 +45,7 @@ type ItemCarrito = {
   stock: number;
   imagen?: string | null;
 };
+
 type MetodoPago = "efectivo" | "debito" | "credito" | "transferencia" | "qr";
 
 const METODOS_PAGO: { value: MetodoPago; label: string; icono: React.ElementType }[] = [
@@ -37,8 +57,8 @@ const METODOS_PAGO: { value: MetodoPago; label: string; icono: React.ElementType
 ];
 
 type Props = {
-  productosIniciales: ProductoConCategoria[];  // Solo 30 iniciales
-  categorias: Pick<Categoria, "id" | "nombre">[];
+  productosIniciales: ProductoConCategoria[];
+  categorias: CategoriaSimple[];
   onVentaExitosa?: () => void;
   isModal?: boolean;
   nombreTenant?: string;

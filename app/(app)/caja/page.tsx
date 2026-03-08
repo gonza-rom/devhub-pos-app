@@ -78,6 +78,8 @@ export default function CajaPage() {
   const [montoMov,     setMontoMov]     = useState("");
   const [descMov,      setDescMov]      = useState("");
 
+  const [categorias, setCategorias] = useState<any[]>([]);
+
   // POS
   const [prodCaja,    setProdCaja]    = useState<any[]>([]);
   const [catsCaja,    setCatsCaja]    = useState<any[]>([]);
@@ -110,6 +112,53 @@ export default function CajaPage() {
     }).finally(() => setLoadingProd(false));
     }, [modalVenta]);
 
+    useEffect(() => {
+  fetch('/api/productos?solo=categorias')
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok && d.data) {
+        setCategorias(d.data);
+      }
+    })
+    .catch(err => console.error('Error cargando categorías:', err));
+}, []);
+
+const cargarDatos = async () => {
+  try {
+    const [cajaRes, prodRes, catRes] = await Promise.all([
+      fetch("/api/caja"),
+      fetch("/api/productos?modo=pos&activos=true&pageSize=30"),
+      fetch("/api/productos?solo=categorias")
+    ]);
+
+    const [cajaData, prodData, catData] = await Promise.all([
+      cajaRes.json(),
+      prodRes.json(),
+      catRes.json()
+    ]);
+
+    // Actualizar caja si está abierta
+    if (cajaData.abierta && cajaData.caja) {
+      setCaja(cajaData.caja);
+    }
+    
+    // Actualizar productos
+    if (prodData.ok) {
+      setProdCaja(prodData.productos || prodData.data || []);
+    }
+    
+    // Actualizar categorías
+    if (catData.ok) {
+      setCategorias(catData.data || []);
+    }
+  } catch (err) {
+    console.error("Error cargando datos:", err);
+  }
+};
+// Cargar al montar
+useEffect(() => {
+  cargarDatos();
+}, []);
 
 
   const abrirCaja = async () => {
@@ -391,18 +440,10 @@ export default function CajaPage() {
                 </div>
                 ) : (
                 <POSClient
-                    productos={prodCaja}
-                    categorias={catsCaja}
-                    isModal
-                    onBusquedaRemota={async (q) => {
-                    const res = await fetch(`/api/productos?pageSize=20&page=1&busqueda=${encodeURIComponent(q)}`);
-                    const data = await res.json();
-                    return data.data ?? [];
-                    }}
-                    onVentaExitosa={() => {
-                    setModalVenta(false);
-                    fetchEstado();
-                    }}
+                  productosIniciales={prodCaja}
+                  categorias={categorias}
+                  isModal={true}
+                  onVentaExitosa={cargarDatos}  // ← Llama la función
                 />
                 )}
             </div>
