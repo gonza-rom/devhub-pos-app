@@ -12,10 +12,13 @@ import {
   ShoppingCart, Search, X, Plus, Minus, Trash2,
   CreditCard, Banknote, Smartphone, QrCode, ChevronRight,
   Package, CheckCircle2, AlertCircle, Tag, Loader2,
+  ScanLine,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPrecio } from "@/lib/utils";
 import TicketPrint from "@/components/ventas/TicketPrint";
+import BarcodeScanner from "@/components/ventas/BarcodeScanner";
+
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -109,7 +112,8 @@ export default function POSClient({
   const [ticketVenta,      setTicketVenta]      = useState<any | null>(null);
   const [imprimirTicket,   setImprimirTicket]   = useState(true);
   const [tabMobile,        setTabMobile]        = useState<"catalogo" | "carrito">("catalogo");
-
+  const [scannerAbierto, setScannerAbierto] = useState(false);
+  
   // Refs
   const gridContainerRef   = useRef<HTMLDivElement>(null);
   const gridRef            = useRef<any>(null);
@@ -347,6 +351,19 @@ export default function POSClient({
     setEfectivoRecibido("");
   }, []);
 
+
+    const handleCodigoEscaneado = useCallback((codigo: string) => {
+    const producto = productos.find(
+      p => p.codigoBarras === codigo || p.codigoProducto === codigo
+    );
+    if (producto) {
+      agregarAlCarrito(producto);
+    } else {
+      setBusqueda(codigo);
+      buscarProductosRemoto(codigo, null);
+      setScannerAbierto(false);
+    }
+  }, [productos, agregarAlCarrito, buscarProductosRemoto]);
   // ── Totales ─────────────────────────────────────────────────────────────────
 
   const subtotal      = carrito.reduce((acc, i) => acc + i.subtotal, 0);
@@ -520,30 +537,55 @@ export default function POSClient({
         className="p-3 md:p-4 border-b flex-shrink-0"
         style={{ background: "var(--bg-surface)", borderColor: "var(--border-base)" }}
       >
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--text-primary)" }} />
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => handleBusqueda(e.target.value)}
-            placeholder="Buscar producto o código..."
-            className="input-base pl-9 pr-9 w-full"
-            autoFocus
-          />
-          {busqueda && (
-            <button
-              onClick={() => handleBusqueda("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2"
-              style={{ color: "var(--text-primary)" }}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-          {buscandoRemoto && (
-            <div className="absolute right-10 top-1/2 -translate-y-1/2">
-              <Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--text-muted)" }} />
-            </div>
-          )}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--text-primary)" }} />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => handleBusqueda(e.target.value)}
+              placeholder="Buscar producto o código..."
+              className="input-base pl-9 pr-9 w-full"
+              autoFocus
+            />
+            {busqueda && (
+              <button
+                onClick={() => handleBusqueda("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+                style={{ color: "var(--text-primary)" }}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+            {buscandoRemoto && (
+              <div className="absolute right-10 top-1/2 -translate-y-1/2">
+                <Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--text-muted)" }} />
+              </div>
+            )}
+          </div>
+          {/* Botón scanner */}
+          <button
+            onClick={() => {
+              console.log("🔍 click scanner");
+              setScannerAbierto(true)}}
+            className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
+            style={{
+              background: "var(--bg-hover-md)",
+              border: "1px solid var(--border-md)",
+              color: "var(--text-secondary)",
+            }}
+            title="Escanear código de barras"
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = "rgba(220,38,38,0.4)";
+              (e.currentTarget as HTMLElement).style.color = "#DC2626";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.borderColor = "var(--border-md)";
+              (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+            }}
+          >
+            <ScanLine className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
@@ -929,7 +971,7 @@ export default function POSClient({
     </div>
   );
 
-  // ── Layout ──────────────────────────────────────────────────────────────────
+ // ── Layout ──────────────────────────────────────────────────────────────────
 
   const alturaBase = isModal ? "h-full" : "h-[calc(100vh-3.5rem)]";
 
@@ -1007,6 +1049,25 @@ export default function POSClient({
           </div>
         )}
       </div>
+
+      {/* FAB scanner — solo mobile */}
+      {tabMobile === "catalogo" && (
+        <button
+          onClick={() => setScannerAbierto(true)}
+          className="fixed bottom-24 right-4 md:hidden flex h-12 w-12 items-center justify-center rounded-full z-40"
+          style={{ background: "#DC2626", color: "#fff", boxShadow: "0 4px 20px rgba(220,38,38,0.4)" }}
+        >
+          <ScanLine className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* Scanner modal */}
+      {scannerAbierto && (
+        <BarcodeScanner
+          onScanned={handleCodigoEscaneado}
+          onClose={() => setScannerAbierto(false)}
+        />
+      )}
 
       {/* Ticket */}
       {ticketVenta && (
