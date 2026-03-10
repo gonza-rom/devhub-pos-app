@@ -38,6 +38,7 @@ const navItems: NavItem[] = [
       { label: "Mi comercio",        href: "/configuracion" },
       { label: "Plan y suscripción", href: "/configuracion/plan",     icon: Crown },
       { label: "Usuarios",           href: "/configuracion/usuarios", icon: Users, soloPropietario: true },
+      { label: "Configuración AFIP", href: "/configuracion/afip",     icon: FileText },
     ],
   },
 ];
@@ -54,7 +55,7 @@ type UsoData = {
   trial: { diasRestantes: number | null; vencidoAt: string | null; vencido: boolean } | null;
 } | null;
 
-type Props = { nombreTenant: string; plan: PlanTipo; logoUrl?: string | null; rol: RolTenant };
+type Props = { nombreTenant: string; plan: PlanTipo; logoUrl?: string | null; rol: RolTenant; tieneAFIP?: boolean };
 
 function BarraUso({ label, uso, limite }: { label: string; uso: number; limite: number }) {
   const pct     = Math.min(100, Math.round((uso / limite) * 100));
@@ -77,7 +78,7 @@ function BarraUso({ label, uso, limite }: { label: string; uso: number; limite: 
   );
 }
 
-export default function Sidebar({ nombreTenant, plan, logoUrl, rol }: Props) {
+export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = false }: Props) {
   const pathname      = usePathname();
   const esAdmin       = rol === "ADMINISTRADOR" || rol === "PROPIETARIO";
   const esPropietario = rol === "PROPIETARIO";
@@ -157,7 +158,9 @@ useEffect(() => {
     });
   }
 
-  const items           = navItems.filter((i) => !i.soloAdmin || esAdmin);
+  const items = navItems
+    .filter((i) => !i.soloAdmin || esAdmin)
+    .filter((i) => i.href !== "/comprobantes" || tieneAFIP);
   const productosAlerta = plan === "FREE" && uso !== null && uso.productos >= 45;
 
   return (

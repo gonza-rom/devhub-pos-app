@@ -21,12 +21,34 @@ const getTenantCached = unstable_cache(
   { revalidate: 60, tags: ["tenant-config"] }
 );
 
+const getAFIPActivoCached = (supabaseId: string) =>
+  unstable_cache(
+    async () => {
+      const ut = await prisma.usuarioTenant.findUnique({
+        where:  { supabaseId },
+        select: { tenantId: true },
+      });
+      if (!ut) return false;
+      const config = await prisma.configuracionAFIP.findUnique({
+        where:  { tenantId: ut.tenantId },
+        select: { activo: true },
+      });
+      return !!config?.activo;
+    },
+    [`layout-afip-${supabaseId}`],
+    { revalidate: 60, tags: ["afip-config"] }  // ← tag genérico
+  )();
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
-  const ut = await getTenantCached(user.id);
+  const [ut, tieneAFIP] = await Promise.all([
+    getTenantCached(user.id),
+    getAFIPActivoCached(user.id),
+  ]);
+
   if (!ut?.activo) redirect("/onboarding");
 
   return (
@@ -36,6 +58,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         plan={ut.tenant.plan}
         logoUrl={ut.tenant.logoUrl}
         rol={ut.rol}
+        tieneAFIP={tieneAFIP}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
