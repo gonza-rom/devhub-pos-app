@@ -8,7 +8,7 @@ import { useFetch } from "@/hooks/useFetch";
 import {
   LayoutDashboard, ShoppingCart, Package, ArrowLeftRight,
   BarChart3, Tag, Truck, Settings, Store, Crown, Users, DollarSign,
-  ChevronRight, ChevronDown, AlertTriangle, History,
+  ChevronRight, ChevronDown, AlertTriangle, History, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/theme/ThemeToggle";
@@ -31,6 +31,7 @@ const navItems: NavItem[] = [
   { label: "Estadísticas", href: "/estadisticas", icon: BarChart3, soloAdmin: true },
   { label: "Categorías",   href: "/categorias",   icon: Tag,   soloAdmin: true },
   { label: "Proveedores",  href: "/proveedores",  icon: Truck, soloAdmin: true },
+  { label: "Comprobantes", href: "/comprobantes", icon: FileText, soloAdmin: true },
   {
     label: "Configuración", href: "/configuracion", icon: Settings, soloAdmin: true,
     children: [
