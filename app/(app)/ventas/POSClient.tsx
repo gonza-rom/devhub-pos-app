@@ -18,7 +18,9 @@ import { cn } from "@/lib/utils";
 import { formatPrecio } from "@/lib/utils";
 import TicketPrint from "@/components/ventas/TicketPrint";
 import BarcodeScanner from "@/components/ventas/BarcodeScanner";
-
+import { ModalFacturaPDF } from "@/components/ventas/ModalFacturaPDF";
+import { ModalSeleccionFactura, DatosFactura } from "@/components/ventas/ModalSeleccionFactura";
+import { useConfigAFIP } from "@/hooks/UseConfigAFIP";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -123,6 +125,11 @@ export default function POSClient({
 
   const [gridWidth,  setGridWidth]  = useState(800); // valor inicial razonable, se corrige en useEffect
   const [gridHeight, setGridHeight] = useState(600);
+
+  const [generarFactura, setGenerarFactura] = useState(false);
+  const [comprobanteGenerado, setComprobanteGenerado] = useState<string | null>(null);
+  const [modalFacturaAbierto, setModalFacturaAbierto] = useState(false);
+  const [datosFacturaSeleccionados, setDatosFacturaSeleccionados] = useState<DatosFactura | null>(null);
 
   // ── Columnas dinámicas ──────────────────────────────────────────────────────
 
@@ -374,68 +381,142 @@ export default function POSClient({
       ? parseFloat(efectivoRecibido) - total
       : 0;
 
+// Hook para obtener configuración AFIP
+const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
+      
   // ── Venta ───────────────────────────────────────────────────────────────────
+   async function handleVenta(datosFacturaParam?: DatosFactura | null) {
+      console.log("🔍 handleVenta llamada con:", { 
+    generarFactura, 
+    datosFacturaParam,
+    debeAbrirModal: generarFactura && !datosFacturaParam 
+  });
+  if (carrito.length === 0) return;
+  
+  // Si necesita factura y aún no tenemos los datos, abrir modal
+   if (generarFactura && !datosFacturaParam) {
+    setModalFacturaAbierto(true);
+        console.log("✅ Abriendo modal de factura");
 
-  async function handleVenta() {
-    if (carrito.length === 0) return;
-    setCargando(true);
-    setResultado(null);
-    setMensajeError("");
-
-    try {
-      const res = await fetch("/api/ventas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: carrito.map((i) => ({
-            productoId: i.productoId,
-            cantidad:   i.cantidad,
-            precioUnit: i.precio,
-          })),
-          metodoPago,
-          descuento,
-          clienteNombre: clienteNombre.trim() || undefined,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        setMensajeError(data.error ?? "Error al registrar la venta");
-        setResultado("error");
-      } else {
-        setResultado("exito");
-        if (imprimirTicket) {
-          setTicketVenta({
-            id:           data.data?.id ?? "000000",
-            createdAt:    data.data?.createdAt ?? new Date().toISOString(),
-            total,
-            subtotal,
-            descuento,
-            metodoPago,
-            clienteNombre: clienteNombre.trim() || null,
-            usuarioNombre: data.data?.usuarioNombre ?? null,
-            items: carrito.map((i) => ({
-              nombre:    i.nombre,
-              cantidad:  i.cantidad,
-              precioUnit: i.precio,
-              subtotal:  i.subtotal,
-            })),
-          });
-        }
-        setTimeout(() => {
-          limpiarCarrito();
-          setResultado(null);
-          onVentaExitosa?.();
-        }, 1200);
-      }
-    } catch {
-      setMensajeError("Error de conexión");
-      setResultado("error");
-    } finally {
-      setCargando(false);
-    }
+    return;
   }
+    console.log("⚠️ Continuando sin modal");
+
+  
+  setCargando(true);
+  setResultado(null);
+  setMensajeError("");
+
+  try {
+    const res = await fetch("/api/ventas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: carrito.map((i) => ({
+          productoId: i.productoId,
+          cantidad:   i.cantidad,
+          precioUnit: i.precio,
+        })),
+        metodoPago,
+        descuento,
+        clienteNombre: clienteNombre.trim() || undefined,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      setMensajeError(data.error ?? "Error al registrar la venta");
+      setResultado("error");
+    } else {
+      setResultado("exito");
+      const ventaId = data.data?.id;
+      
+      // Generar ticket si está activado
+      if (imprimirTicket) {
+        setTicketVenta({
+          id:           ventaId ?? "000000",
+          createdAt:    data.data?.createdAt ?? new Date().toISOString(),
+          total,
+          subtotal,
+          descuento,
+          metodoPago,
+          clienteNombre: clienteNombre.trim() || null,
+          usuarioNombre: data.data?.usuarioNombre ?? null,
+          items: carrito.map((i) => ({
+            nombre:    i.nombre,
+            cantidad:  i.cantidad,
+            precioUnit: i.precio,
+            subtotal:  i.subtotal,
+          })),
+        });
+      }
+      
+      // Generar factura AFIP si está activado
+   if (generarFactura && datosFacturaParam) {
+        try {
+          const resFactura = await fetch("/api/afip/facturar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ventaId: ventaId,
+              tipoComprobante: datosFacturaParam.tipoComprobante,
+              cliente: {
+                docTipo: datosFacturaParam.clienteDocTipo,
+                docNro: datosFacturaParam.clienteDocNro,
+                nombre: datosFacturaParam.clienteNombre,
+                direccion: datosFacturaParam.clienteDireccion,
+                condicionIVA: datosFacturaParam.clienteCondicionIVA,
+              },
+              items: carrito.map((item) => ({
+                descripcion: item.nombre,
+                cantidad: item.cantidad,
+                precioUnitario: item.precio,
+                subtotal: item.subtotal,
+              })),
+              total,
+              descuento,
+              metodoPago,
+            }),
+          });
+
+          if (resFactura.ok) {
+            const dataFactura = await resFactura.json();
+            // Mostrar PDF de la factura
+            setComprobanteGenerado(dataFactura.comprobante.id);
+          } else {
+            const errorData = await resFactura.json();
+            console.error("Error factura AFIP:", errorData);
+            // No bloqueamos la venta si falla la factura
+          }
+        } catch (error) {
+          console.error("Error factura AFIP:", error);
+          // No bloqueamos la venta si falla la factura
+        }
+      }
+      
+      setTimeout(() => {
+        limpiarCarrito();
+        setResultado(null);
+        onVentaExitosa?.();
+      }, 1200);
+    }
+  } catch {
+    setMensajeError("Error de conexión");
+    setResultado("error");
+  } finally {
+    setCargando(false);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NUEVA FUNCIÓN: Callback del modal de factura
+// ══════════════════════════════════════════════════════════════════════════════
+
+   const handleConfirmarFactura = (datos: DatosFactura) => {
+     setModalFacturaAbierto(false);
+     handleVenta(datos); // ← Pasar directamente
+   };
 
   // ── FIX 3: Cell con useCallback + dependencias correctas ───────────────────
   // Así react-window NO desmonta/monta las celdas en cada render del padre.
@@ -924,6 +1005,28 @@ export default function POSClient({
             </div>
             <span className="text-xs" style={{ color: "var(--text-muted)" }}>Generar ticket de venta</span>
           </label>
+          {/* Checkbox factura AFIP */}
+          <label
+            className="flex items-center gap-2.5 cursor-pointer select-none py-1"
+            onClick={() => setGenerarFactura((v) => !v)}
+          >
+            <div
+              className="flex h-4 w-4 items-center justify-center rounded flex-shrink-0"
+              style={{
+                background: generarFactura ? "#DC2626" : "transparent",
+                border: generarFactura ? "1px solid #DC2626" : "1px solid var(--border-strong)",
+              }}
+            >
+              {generarFactura && (
+                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 12 12" stroke="#ffffff" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2 6l3 3 5-5" />
+                </svg>
+              )}
+            </div>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+              Generar factura electrónica (AFIP)
+            </span>
+          </label>
 
           {/* Feedback */}
           {resultado === "error" && (
@@ -947,7 +1050,7 @@ export default function POSClient({
 
           {/* Botón cobrar */}
           <button
-            onClick={handleVenta}
+            onClick={() => handleVenta()}
             disabled={cargando || carrito.length === 0 || resultado === "exito"}
             className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: "#DC2626", color: "#ffffff" }}
@@ -1077,6 +1180,25 @@ export default function POSClient({
           telefonoTenant={telefonoTenant}
           direccionTenant={direccionTenant}
           onClose={() => setTicketVenta(null)}
+        />
+      )}
+      
+      {/* Modal selección factura */}
+      {modalFacturaAbierto && configAFIP && (
+          <ModalSeleccionFactura
+          open={modalFacturaAbierto}
+          onClose={() => setModalFacturaAbierto(false)}
+          onConfirmar={handleConfirmarFactura}
+          condicionFiscalEmisor={configAFIP.condicionFiscal} // ← Ya tenés esto
+          total={total}
+        />
+      )}
+       {/* Modal PDF Factura */}
+      {comprobanteGenerado && (
+        <ModalFacturaPDF
+          open={!!comprobanteGenerado}
+          onClose={() => setComprobanteGenerado(null)}
+          comprobanteId={comprobanteGenerado}
         />
       )}
     </>

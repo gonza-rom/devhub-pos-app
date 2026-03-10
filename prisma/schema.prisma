@@ -37,6 +37,8 @@ model Tenant {
   suscripcion Suscripcion?
   usuarios    UsuarioTenant[]
   ventas      Venta[]
+  configuracionAfip ConfiguracionAFIP?
+  comprobantes      Comprobante[]
 
   @@index([plan])
   @@index([activo])
@@ -183,6 +185,7 @@ model Venta {
   movimientos   Movimiento[]
   tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   items         VentaItem[]
+  comprobante Comprobante?
 
   @@index([tenantId])
   @@index([tenantId, metodoPago])
@@ -316,3 +319,162 @@ enum TipoMovimientoCaja {
   CIERRE
   VENTA_VIRTUAL
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFIGURACIÓN AFIP
+// ═══════════════════════════════════════════════════════════════════════════
+
+model ConfiguracionAFIP {
+  id              String   @id @default(cuid())
+  tenantId        String   @unique
+  
+  // Datos del Emisor
+  cuit            String   // CUIT sin guiones: "20123456789"
+  razonSocial     String?  // Razón Social del contribuyente
+  puntoVenta      Int      @default(1)  // Punto de venta habilitado en AFIP
+  
+  // Condición Fiscal
+  // RI = Responsable Inscripto (emite A, B)
+  // MT = Monotributista (emite C)
+  // EX = Exento (emite C)
+  // CF = Consumidor Final (no emite)
+  condicionFiscal String   @default("MT") // RI, MT, EX, CF
+  
+  // Certificados AFIP (.crt y .key)
+  // Estos se generan en el portal de AFIP
+  certificado     String   @db.Text // Contenido del archivo .crt
+  clavePrivada    String   @db.Text // Contenido del archivo .key
+  
+  // Ambiente
+  // "testing" = Homologación (para pruebas)
+  // "produccion" = Producción (facturas reales)
+  ambiente        String   @default("testing")
+  
+  // Estado
+  activo          Boolean  @default(true)
+  ultimaConexion  DateTime?
+  
+  // Metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId])
+  @@map("configuraciones_afip")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMPROBANTES FISCALES
+// ═══════════════════════════════════════════════════════════════════════════
+
+model Comprobante {
+  id                String   @id @default(cuid())
+  tenantId          String
+  ventaId           String?  @unique // Relación con Venta (opcional)
+  
+  // ─── Datos del Comprobante ─────────────────────────────────────────────
+  
+  puntoVenta        Int      // PtoVta (ej: 1, 2, 3)
+  
+  // Tipo de Comprobante (según AFIP) - CbteTipo
+  // 1  = Factura A
+  // 6  = Factura B
+  // 11 = Factura C
+  // 3  = Nota de Crédito A
+  // 8  = Nota de Crédito B
+  // 13 = Nota de Crédito C
+  tipoComprobante   Int
+  
+  numeroComprobante Int      // CbteDesde/CbteHasta (secuencial por tipo y PV)
+  
+  // ─── CAE (Código de Autorización Electrónica) ──────────────────────────
+  
+  cae               String   // CAE asignado por AFIP (14 dígitos)
+  caeFchVto         String   // Fecha vencimiento CAE (YYYYMMDD)
+  qrData            String?  @db.Text // Datos para generar QR (opcional)
+  
+  // ─── Datos del Cliente ─────────────────────────────────────────────────
+  
+  // Tipo de Documento
+  // 80 = CUIT
+  // 86 = CUIL  
+  // 96 = DNI
+  // 99 = Consumidor Final
+  docTipo           Int      @default(99)
+  
+  docNro            BigInt   @default(0) // 0 para Consumidor Final
+  clienteNombre     String?
+  clienteEmail      String?
+  clienteDireccion  String?
+  
+  // ─── Importes ──────────────────────────────────────────────────────────
+  
+  total             Float    // ImpTotal - Importe Total
+  neto              Float    // ImpNeto - Importe Neto Gravado
+  iva               Float    // ImpIVA - Importe IVA
+  descuento         Float    @default(0)
+  
+  // Importes adicionales según ARCA
+  importeNoGravado  Float    @default(0) // ImpTotConc - No gravado
+  importeExento     Float    @default(0) // ImpOpEx - Exento de IVA
+  importeTributos   Float    @default(0) // ImpTrib - Otros tributos
+  
+  // Moneda
+  monedaId          String   @default("PES") // MonId - PES, DOL, etc
+  monedaCotizacion  Float    @default(1)     // MonCotiz - Cotización
+  
+  // IVA puede ser 0%, 10.5%, 21%, 27%
+  // Se guarda como JSON según formato ARCA: [{ Id: 5, BaseImp: 100, Importe: 21 }]
+  ivaDetalle        Json?
+  
+  // ─── Items del Comprobante ─────────────────────────────────────────────
+  
+  // JSON con los productos/servicios
+  // [{ nombre: "...", cantidad: 1, precio: 100, subtotal: 100 }]
+  items             Json
+  
+  // ─── Estado y Observaciones ────────────────────────────────────────────
+  
+  fecha             DateTime // Fecha del comprobante
+  
+  // Resultado de AFIP
+  // "A" = Aprobado
+  // "R" = Rechazado
+  // "O" = Observado
+  resultado         String   @default("A")
+  
+  observaciones     String?  @db.Text // Mensajes de error o advertencia de AFIP
+  
+  // ─── Metadata ──────────────────────────────────────────────────────────
+  
+  // Concepto (según AFIP)
+  // 1 = Productos
+  // 2 = Servicios
+  // 3 = Productos y Servicios
+  concepto          Int      @default(1)
+  
+  // Método de pago (referencia)
+  metodoPago        String?
+  
+  // Usuario que emitió el comprobante
+  usuarioId         String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // ─── Relaciones ────────────────────────────────────────────────────────
+  
+  // Relaciones
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  venta             Venta?   @relation(fields: [ventaId], references: [id], onDelete: SetNull)
+  
+  @@index([tenantId])
+  @@index([ventaId])
+  @@index([cae])
+  @@index([fecha])
+  @@index([numeroComprobante, puntoVenta, tipoComprobante])
+  @@map("comprobantes")
+}
+
