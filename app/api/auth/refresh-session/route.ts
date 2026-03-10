@@ -1,5 +1,4 @@
 // app/api/auth/refresh-session/route.ts
-// ACTUALIZADO: crea el tenant si no existe (para el flujo de confirmación de email)
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
@@ -24,7 +23,6 @@ export async function GET(req: NextRequest) {
       select: { tenantId: true, rol: true, nombre: true, activo: true },
     });
 
-    // ── Crear tenant si no existe (flujo confirmación de email) ──
     if (!usuarioTenant) {
       const nombre         = user.user_metadata?.nombre        ?? "Usuario";
       const nombreComercio = user.user_metadata?.nombreComercio ?? "Mi Comercio";
@@ -37,7 +35,13 @@ export async function GET(req: NextRequest) {
 
       await prisma.$transaction(async (tx) => {
         const tenant = await tx.tenant.create({
-          data: { nombre: nombreComercio, email: user.email!, slug, plan: "FREE" },
+          data: {
+            nombre: nombreComercio,
+            email: user.email!,
+            slug,
+            plan: "FREE",
+            trialVenceAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // ← 7 días
+          },
         });
         await tx.usuarioTenant.create({
           data: {
@@ -66,7 +70,7 @@ export async function GET(req: NextRequest) {
     const [tenant, suscripcion] = await Promise.all([
       prisma.tenant.findUnique({
         where:  { id: usuarioTenant.tenantId },
-        select: { plan: true },
+        select: { plan: true, trialVenceAt: true, createdAt: true }, // ← agregar campos
       }),
       prisma.suscripcion.findUnique({
         where:  { tenantId: usuarioTenant.tenantId },
@@ -75,9 +79,15 @@ export async function GET(req: NextRequest) {
     ]);
 
     const plan = (tenant?.plan ?? "FREE") as "FREE" | "PRO" | "ENTERPRISE";
-    const planVenceAt = suscripcion?.proximoVencimiento
-      ? new Date(suscripcion.proximoVencimiento).getTime()
-      : null;
+
+    // ← Para FREE usar trialVenceAt, para PRO/ENTERPRISE usar proximoVencimiento
+    const planVenceAt =
+      plan !== "FREE"
+        ? suscripcion?.proximoVencimiento?.getTime() ?? null
+        : tenant?.trialVenceAt?.getTime()
+          ?? (tenant?.createdAt
+            ? new Date(tenant.createdAt).getTime() + 7 * 24 * 60 * 60 * 1000
+            : null);
 
     const token = await crearTenantSession({
       tenantId:  usuarioTenant.tenantId,
