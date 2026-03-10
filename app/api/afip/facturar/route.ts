@@ -139,10 +139,10 @@ ivaDetalle = [
 
   try {
     const lastVoucherResult =
-      await arca.electronicBillingService.getLastVoucher({
-        PtoVta: config.puntoVenta,
-        CbteTipo: tipoComprobante,
-      });
+      await arca.electronicBillingService.getLastVoucher(
+        config.puntoVenta,
+        tipoComprobante
+      );
 
     console.log("🔍 Respuesta getLastVoucher:", JSON.stringify(lastVoucherResult, null, 2));
 
