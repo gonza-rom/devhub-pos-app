@@ -72,7 +72,7 @@ type Props = {
 // ─── Configuración del grid ───────────────────────────────────────────────────
 
 const MIN_CARD_WIDTH = 160;
-const CARD_HEIGHT    = 165;
+const CARD_HEIGHT    = 190;
 const GAP            = 8;
 
 // Cache de productos por clave (categoría + búsqueda) — persiste entre renders
@@ -131,13 +131,34 @@ export default function POSClient({
   const [modalFacturaAbierto, setModalFacturaAbierto] = useState(false);
   const [datosFacturaSeleccionados, setDatosFacturaSeleccionados] = useState<DatosFactura | null>(null);
 
+
+  const [productoEditando, setProductoEditando] = useState<ProductoConCategoria | null>(null);
+  const [editando, setEditando] = useState(false);
+  const [formEdicion, setFormEdicion] = useState({ stock: "", precio: "", nombre: "", codigoProducto: "" });
+
+  // Vendedor
+  const [usuarios,        setUsuarios]        = useState<{id: string; nombre: string; supabaseId: string}[]>([]);
+  const [vendedorId,      setVendedorId]      = useState<string>("");  // supabaseId
+
+  // Fecha manual
+  const [fechaManual,     setFechaManual]     = useState(false);
+  const [fechaVenta,      setFechaVenta]      = useState("");
+
+  // Item manual
+  const [itemManualNombre, setItemManualNombre] = useState("");
+  const [itemManualPrecio, setItemManualPrecio] = useState("");
+
   // ── Columnas dinámicas ──────────────────────────────────────────────────────
 
   const columnCount = Math.max(2, Math.floor((gridWidth - GAP) / (MIN_CARD_WIDTH + GAP)));
   const cardWidth   = Math.floor((gridWidth - GAP * (columnCount + 1)) / columnCount);
 
-  // ── FIX 2: useEffect con retry de 100 ms para que el layout termine ────────
-
+  useEffect(() => {
+    fetch("/api/usuarios")
+      .then(r => r.json())
+      .then(d => { if (d.ok) setUsuarios(d.data.filter((u: any) => u.activo)); })
+      .catch(() => {});
+}, []);
   // Prefetch de todas las categorías en background al montar
   useEffect(() => {
     const prefetchCategorias = async () => {
@@ -308,6 +329,7 @@ export default function POSClient({
   // ── Carrito ─────────────────────────────────────────────────────────────────
 
   const agregarAlCarrito = useCallback((producto: ProductoConCategoria) => {
+    if (producto.stock <= 0) return;
     setCarrito((prev) => {
       const existente = prev.find((i) => i.productoId === producto.id);
       if (existente) {
@@ -356,8 +378,12 @@ export default function POSClient({
     setDescuento(0);
     setClienteNombre("");
     setEfectivoRecibido("");
+    setVendedorId("");        // ← agregar
+    setFechaManual(false);    // ← agregar
+    setFechaVenta("");        // ← agregar
+    setItemManualNombre("");  // ← agregar
+    setItemManualPrecio("");  // ← agregar
   }, []);
-
 
     const handleCodigoEscaneado = useCallback((codigo: string) => {
     const producto = productos.find(
@@ -416,10 +442,14 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
           productoId: i.productoId,
           cantidad:   i.cantidad,
           precioUnit: i.precio,
+          ...(i.productoId.startsWith("manual_") && { nombre: i.nombre }),
         })),
         metodoPago,
         descuento,
-        clienteNombre: clienteNombre.trim() || undefined,
+        clienteNombre:  clienteNombre.trim() || undefined,
+        vendedorId:     vendedorId || undefined,
+        vendedorNombre: usuarios.find(u => u.supabaseId === vendedorId)?.nombre || undefined,
+        fechaManual:    fechaManual && fechaVenta ? fechaVenta : undefined,
       }),
     });
 
@@ -518,6 +548,42 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
      handleVenta(datos); // ← Pasar directamente
    };
 
+
+   const handleGuardarEdicion = async () => {
+  if (!productoEditando) return;
+  setEditando(true);
+  try {
+    const res = await fetch(`/api/productos/${productoEditando.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        stock:          parseInt(formEdicion.stock) || 0,
+        precio:         parseFloat(formEdicion.precio) || 0,
+        nombre:         formEdicion.nombre.trim(),
+        codigoProducto: formEdicion.codigoProducto.trim() || null,
+      }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      // Actualizar lista local sin refetch
+      const actualizar = (lista: ProductoConCategoria[]) =>
+        lista.map(p => p.id === productoEditando.id
+          ? { ...p,
+              stock:          parseInt(formEdicion.stock) || 0,
+              precio:         parseFloat(formEdicion.precio) || 0,
+              nombre:         formEdicion.nombre.trim(),
+              codigoProducto: formEdicion.codigoProducto.trim() || null,
+            }
+          : p
+        );
+      setProductos(actualizar);
+      productosInicialesRef.current = actualizar(productosInicialesRef.current);
+      setProductoEditando(null);
+    }
+  } finally {
+    setEditando(false);
+  }
+};
   // ── FIX 3: Cell con useCallback + dependencias correctas ───────────────────
   // Así react-window NO desmonta/monta las celdas en cada render del padre.
 
@@ -535,6 +601,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
         <div style={{ ...style, padding: GAP / 2, boxSizing: 'border-box' }}>
           <button
             onClick={() => agregarAlCarrito(producto)}
+            disabled={producto.stock <= 0}  // ← agregar
             className="relative flex flex-col rounded-xl p-2.5 text-left transition-all active:scale-95 w-full h-full overflow-hidden"
             style={{
               background: enCarrito ? "rgba(220,38,38,0.12)" : "var(--bg-card)",
@@ -573,9 +640,52 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
               {producto.nombre}
             </p>
             <p className="text-sm font-bold text-red-400 mt-1">{formatPrecio(producto.precio)}</p>
+            {/* Código, stock y editar */}
+            <div className="flex items-center justify-between mt-0.5 gap-1">
+              <span className="text-[10px] font-mono truncate" style={{ color: "var(--text-primary)" }}>
+                {producto.codigoProducto || ""}
+              </span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {producto.stock > 0 && (
+                  <span className="text-[10px]" style={{ color: "var(--text-primary)" }}>
+                    Stock:
+                    {producto.stock}
+                  </span>
+                )}
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setProductoEditando(producto);
+                    setFormEdicion({
+                      stock:          String(producto.stock),
+                      precio:         String(producto.precio),
+                      nombre:         producto.nombre,
+                      codigoProducto: producto.codigoProducto || "",
+                    });
+                  }}
+                  className="flex h-4 w-4 items-center justify-center rounded flex-shrink-0 cursor-pointer"
+                  style={{ background: "var(--bg-hover-md)", color: "var(--text-muted)" }}
+                >
+                  <svg className="h-5.5 w-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828A2 2 0 0111 16H9v-2a2 2 0 01.172-.768z" />
+                  </svg>
+                </span>
+              </div>
+            </div>
 
             {/* Badge stock bajo */}
-            {stockBajo && (
+            {producto.stock <= 0 ? (
+              <span
+                className="absolute top-2 right-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: "rgba(220,38,38,0.15)",
+                  color: "#f87171",
+                  border: "1px solid rgba(220,38,38,0.3)",
+                }}
+              >
+                Sin stock
+              </span>
+            ) : stockBajo ? (
               <span
                 className="absolute top-2 right-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
                 style={{
@@ -586,7 +696,9 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
               >
                 {producto.stock}
               </span>
-            )}
+            ) : null}
+
+
 
             {/* Badge cantidad en carrito */}
             {enCarrito && (
@@ -801,35 +913,76 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
             </span>
           )}
         </div>
-        {carrito.length > 0 && (
-          <button
-            onClick={limpiarCarrito}
-            className="text-xs transition-colors"
-            style={{ color: "var(--text-muted)" }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f87171")}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-muted)")}
-          >
-            Limpiar
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Item manual inline */}
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={itemManualNombre}
+              onChange={e => setItemManualNombre(e.target.value)}
+              placeholder="Item manual..."
+              className="input-base text-xs"
+              style={{ width: "110px", padding: "4px 8px" }}
+            />
+            <input
+              type="number"
+              value={itemManualPrecio}
+              onChange={e => setItemManualPrecio(e.target.value)}
+              placeholder="$"
+              className="input-base text-xs"
+              style={{ width: "60px", padding: "4px 8px" }}
+            />
+            <button
+              onClick={() => {
+                const precio = parseFloat(itemManualPrecio) || 0;
+                if (!itemManualNombre.trim()) return;
+                setCarrito(prev => [...prev, {
+                  productoId: `manual_${Date.now()}`,
+                  nombre:     itemManualNombre.trim(),
+                  precio,
+                  cantidad:   1,
+                  subtotal:   precio,
+                  stock:      999,
+                }]);
+                setItemManualNombre("");
+                setItemManualPrecio("");
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold flex-shrink-0"
+              style={{ background: "#DC2626", color: "#fff" }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {carrito.length > 0 && (
+            <button
+              onClick={limpiarCarrito}
+              className="text-xs transition-colors"
+              style={{ color: "var(--text-muted)" }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f87171")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-muted)")}
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Items */}
       <div className="flex-1 overflow-y-auto">
         {carrito.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full py-16 text-center px-6">
-            <div
-              className="h-16 w-16 rounded-full flex items-center justify-center mb-4"
-              style={{ background: "var(--bg-hover)" }}
-            >
-              <ShoppingCart className="h-7 w-7" style={{ color: "var(--text-muted)" }} />
-            </div>
-            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>El carrito está vacío</p>
-            <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>
-              <span className="md:hidden">Tocá "Catálogo" para agregar productos</span>
-              <span className="hidden md:inline">Tocá un producto para agregarlo</span>
-            </p>
+        <div className="flex flex-col items-center justify-center h-full py-16 text-center px-6">
+          <div
+            className="h-16 w-16 rounded-full flex items-center justify-center mb-4"
+            style={{ background: "var(--bg-hover)" }}
+          >
+            <ShoppingCart className="h-7 w-7" style={{ color: "var(--text-muted)" }} />
           </div>
+          <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>El carrito está vacío</p>
+          <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>
+            <span className="md:hidden">Tocá "Catálogo" para agregar productos</span>
+            <span className="hidden md:inline">Tocá un producto para agregarlo</span>
+          </p>
+        </div>
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
             {carrito.map((item) => (
@@ -887,7 +1040,6 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
           </div>
         )}
       </div>
-
       {/* Footer: totales + pago */}
       {carrito.length > 0 && (
         <div
@@ -1047,7 +1199,52 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
               <p className="text-xs font-medium text-green-300">¡Venta registrada!</p>
             </div>
           )}
+          <label
+            className="flex items-center gap-2.5 cursor-pointer select-none py-1"
+            onClick={() => { setFechaManual(v => !v); setFechaVenta(""); }}
+          >
+            <div
+              className="flex h-4 w-4 items-center justify-center rounded flex-shrink-0"
+              style={{
+                background: fechaManual ? "#DC2626" : "transparent",
+                border: fechaManual ? "1px solid #DC2626" : "1px solid var(--border-strong)",
+              }}
+            >
+              {fechaManual && (
+                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 12 12" stroke="#ffffff" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2 6l3 3 5-5" />
+                </svg>
+              )}
+            </div>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Cargar venta con fecha pasada</span>
+          </label>
 
+          {fechaManual && (
+            <input
+              type="datetime-local"
+              value={fechaVenta}
+              max={new Date().toISOString().slice(0, 16)}
+              onChange={e => setFechaVenta(e.target.value)}
+              className="input-base w-full"
+            />
+          )}
+          {usuarios.length > 1 && (
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-muted)" }}>
+                Vendedor
+              </label>
+              <select
+                value={vendedorId}
+                onChange={e => setVendedorId(e.target.value)}
+                className="input-base w-full"
+              >
+                <option value="">— Mi cuenta —</option>
+                {usuarios.map(u => (
+                  <option key={u.id} value={u.supabaseId}>{u.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {/* Botón cobrar */}
           <button
             onClick={() => handleVenta()}
@@ -1200,6 +1397,61 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
           onClose={() => setComprobanteGenerado(null)}
           comprobanteId={comprobanteGenerado}
         />
+      )}
+      {/* Modal edición producto */}
+      {productoEditando && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setProductoEditando(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+            style={{ background: "var(--bg-surface)", border: "1px solid var(--border-base)" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
+              Editar producto
+            </h3>
+
+            {[
+              { label: "Nombre",           key: "nombre",         type: "text"   },
+              { label: "Código",           key: "codigoProducto", type: "text"   },
+              { label: "Precio $",         key: "precio",         type: "number" },
+              { label: "Stock",            key: "stock",          type: "number" },
+            ].map(({ label, key, type }) => (
+              <div key={key}>
+                <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-muted)" }}>
+                  {label}
+                </label>
+                <input
+                  type={type}
+                  value={formEdicion[key as keyof typeof formEdicion]}
+                  onChange={e => setFormEdicion(prev => ({ ...prev, [key]: e.target.value }))}
+                  className="input-base w-full"
+                />
+              </div>
+            ))}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setProductoEditando(null)}
+                className="flex-1 py-2 rounded-xl text-sm font-medium"
+                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGuardarEdicion}
+                disabled={editando}
+                className="flex-1 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+                style={{ background: "#DC2626", color: "#fff" }}
+              >
+                {editando ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, ShoppingBag } from "lucide-react";
 import Link from "next/link";
 import VentasTabla from "@/components/ventas/VentasTabla";
 import VentasFiltros from "@/components/ventas/VentasFiltros";
+import { ToggleMostrarCanceladas } from "@/components/ventas/ToggleMostrarCanceladas";
 
 export const metadata: Metadata = { title: "Historial de ventas" };
 
@@ -20,7 +21,7 @@ export default async function HistorialVentasPage({
 }: {
   searchParams: Promise<{
     desde?: string; hasta?: string; metodoPago?: string;
-    cliente?: string; page?: string;
+    cliente?: string; page?: string; mostrarCanceladas?: string;
   }>;
 }) {
   const headersList = await headers();
@@ -32,8 +33,12 @@ export default async function HistorialVentasPage({
   const metodoPago = params.metodoPago ?? "";
   const cliente = params.cliente ?? "";
   const page = Math.max(1, parseInt(params.page ?? "1"));
+  const mostrarCanceladas = params.mostrarCanceladas === "true";
 
-  const where: any = { tenantId };
+  const where: any = { 
+    tenantId,
+    cancelado: mostrarCanceladas ? undefined : false, // ← EXCLUIR CANCELADAS por defecto
+  };
 
   if (desde || hasta) {
     where.createdAt = {
@@ -60,6 +65,8 @@ export default async function HistorialVentasPage({
         observaciones: true,
         usuarioNombre: true,
         createdAt: true,
+        cancelado: true,  // ← Agregar campo
+        motivoCancelacion: true, // ← Agregar campo
         items: {
           select: {
             id: true,
@@ -94,6 +101,7 @@ export default async function HistorialVentasPage({
     if (hasta) q.set("hasta", hasta);
     if (metodoPago) q.set("metodoPago", metodoPago);
     if (cliente) q.set("cliente", cliente);
+    if (mostrarCanceladas) q.set("mostrarCanceladas", "true");
     q.set("page", String(newPage));
     return `?${q.toString()}`;
   };
@@ -146,6 +154,9 @@ export default async function HistorialVentasPage({
         metodosPago={METODOS_PAGO}
         valores={{ desde, hasta, metodoPago, cliente }}
       />
+
+      {/* Toggle mostrar canceladas */}
+      <ToggleMostrarCanceladas />
 
       {/* Tabla */}
       {ventas.length === 0 ? (

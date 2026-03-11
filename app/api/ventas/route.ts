@@ -101,54 +101,70 @@ export async function POST(req: NextRequest) {
   try {
     const { tenantId, usuarioId, nombreUsuario } = await getTenantContext();
     const body: CreateVentaInput = await req.json();
-    const { items, metodoPago, descuento = 0, clienteNombre, clienteDni, observaciones } = body;
+    const { items, metodoPago, descuento = 0, clienteNombre, clienteDni, observaciones, vendedorId, vendedorNombre, fechaManual } = body;
 
     if (!items?.length)
       return NextResponse.json({ ok: false, error: "La venta debe tener al menos un producto" }, { status: 400 });
     if (!metodoPago)
       return NextResponse.json({ ok: false, error: "El método de pago es requerido" }, { status: 400 });
 
-    // ✅ IDs de productos para traerlos todos de una — evita N+1
-    const productoIds = items.map((i) => i.productoId);
+    // Separar items reales de manuales
+    const itemsReales  = items.filter(i => !i.productoId.startsWith("manual_"));
+    const itemsManuales = items.filter(i => i.productoId.startsWith("manual_"));
 
-    const venta = await prisma.$transaction(async (tx) => {
-      // ✅ Un solo fetch de todos los productos en vez de uno por item
-      const productos = await tx.producto.findMany({
-        where: { id: { in: productoIds }, tenantId, activo: true },
-        select: { id: true, nombre: true, stock: true, precio: true },
-      });
+    const productoIds = itemsReales.map((i) => i.productoId);
 
-      const productoMap = new Map(productos.map((p) => [p.id, p]));
+const venta = await prisma.$transaction(async (tx) => {
+  const productos = await tx.producto.findMany({
+    where: { id: { in: productoIds }, tenantId, activo: true },
+    select: { id: true, nombre: true, stock: true, precio: true },
+  });
 
-      // Validar stock antes de cualquier escritura
-      for (const item of items) {
-        const producto = productoMap.get(item.productoId);
-        if (!producto) throw new Error(`Producto ${item.productoId} no encontrado`);
-        if (producto.stock < item.cantidad) {
-          throw new Error(
-            `Stock insuficiente para "${producto.nombre}". Disponible: ${producto.stock}, pedido: ${item.cantidad}`
-          );
-        }
-      }
+  const productoMap = new Map(productos.map((p) => [p.id, p]));
 
-      let subtotal = 0;
-      const itemsData: {
-        productoId: string; nombre: string; cantidad: number;
-        precioUnit: number; subtotal: number;
-      }[] = [];
+  // Validar stock solo de items reales
+  for (const item of itemsReales) {
+    const producto = productoMap.get(item.productoId);
+    if (!producto) throw new Error(`Producto ${item.productoId} no encontrado`);
+    if (producto.stock < item.cantidad) {
+      throw new Error(
+        `Stock insuficiente para "${producto.nombre}". Disponible: ${producto.stock}, pedido: ${item.cantidad}`
+      );
+    }
+  }
 
-      for (const item of items) {
-        const producto    = productoMap.get(item.productoId)!;
-        const itemSubtotal = item.precioUnit * item.cantidad;
-        subtotal += itemSubtotal;
-        itemsData.push({
-          productoId: producto.id,
-          nombre:     producto.nombre,
-          cantidad:   item.cantidad,
-          precioUnit: item.precioUnit,
-          subtotal:   itemSubtotal,
-        });
-      }
+  let subtotal = 0;
+  const itemsData: {
+    productoId: string | null; nombre: string; cantidad: number;
+    precioUnit: number; subtotal: number;
+  }[] = [];
+
+  // Items reales
+  for (const item of itemsReales) {
+    const producto     = productoMap.get(item.productoId)!;
+    const itemSubtotal = item.precioUnit * item.cantidad;
+    subtotal += itemSubtotal;
+    itemsData.push({
+      productoId: producto.id,
+      nombre:     producto.nombre,
+      cantidad:   item.cantidad,
+      precioUnit: item.precioUnit,
+      subtotal:   itemSubtotal,
+    });
+  }
+
+  // Items manuales — sin productoId
+  for (const item of itemsManuales) {
+    const itemSubtotal = item.precioUnit * item.cantidad;
+    subtotal += itemSubtotal;
+    itemsData.push({
+      productoId: null,
+      nombre:     item.nombre ?? "Item manual",
+      cantidad:   item.cantidad,
+      precioUnit: item.precioUnit,
+      subtotal:   itemSubtotal,
+    });
+  }
 
       const total = subtotal - descuento;
 
@@ -159,9 +175,18 @@ export async function POST(req: NextRequest) {
           clienteNombre: clienteNombre?.trim() || null,
           clienteDni:    clienteDni?.trim()    || null,
           observaciones: observaciones?.trim() || null,
-          usuarioId,
-          usuarioNombre: nombreUsuario ?? null, // ✅ viene de getTenantContext, sin query extra
-          items: { create: itemsData },
+          usuarioId:    vendedorId    || usuarioId,
+          usuarioNombre: vendedorNombre || nombreUsuario || null,
+          createdAt:    fechaManual ? new Date(fechaManual) : new Date(),
+          items: {
+            create: itemsData.map(i => ({
+              nombre:    i.nombre,
+              cantidad:  i.cantidad,
+              precioUnit: i.precioUnit,
+              subtotal:  i.subtotal,
+              ...(i.productoId && { productoId: i.productoId }),
+            })),
+          },
         },
         select: {
           id:    true,
@@ -169,10 +194,13 @@ export async function POST(req: NextRequest) {
           items: { select: { id: true, nombre: true, cantidad: true, precioUnit: true, subtotal: true } },
         },
       });
-
+      
+      const itemsConProducto = itemsData.filter(i => i.productoId !== null) as {
+        productoId: string; nombre: string; cantidad: number; precioUnit: number; subtotal: number;
+      }[];
       // ✅ Actualizar stock de todos los productos en paralelo
       await Promise.all(
-        itemsData.map((item) =>
+        itemsConProducto.map((item) =>
           tx.producto.update({
             where: { id: item.productoId },
             data:  { stock: { decrement: item.cantidad } },
@@ -203,7 +231,7 @@ export async function POST(req: NextRequest) {
 
       // ✅ Movimientos con stockAnterior correcto — calculado desde productoMap
       await tx.movimiento.createMany({
-        data: itemsData.map((item) => {
+        data: itemsConProducto.map((item) => {
           const producto     = productoMap.get(item.productoId)!;
           const stockAnterior = producto.stock;
           return {
@@ -217,7 +245,7 @@ export async function POST(req: NextRequest) {
             ventaId:         ventaCreada.id,
             usuarioId,
             usuarioNombre:   nombreUsuario ?? null,
-            createdAt:       new Date(),
+            createdAt: fechaManual ? new Date(fechaManual) : new Date(),
           };
         }),
       });

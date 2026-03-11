@@ -72,12 +72,16 @@ export type CreateVentaInput = {
     productoId: string;
     cantidad: number;
     precioUnit: number;
+    nombre?:    string; // ← para items manuales
   }[];
   metodoPago: string;
   descuento?: number;
   clienteNombre?: string;
   clienteDni?: string;
   observaciones?: string;
+  vendedorId?:     string;
+  vendedorNombre?: string;  
+  fechaManual?:    string;
 };
 
 // Datos para un movimiento manual

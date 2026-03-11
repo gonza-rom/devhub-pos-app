@@ -1,5 +1,6 @@
 // app/api/estadisticas/route.ts
 // OPTIMIZADO: cálculos en DB con groupBy en vez de traer todo a memoria
+// FIX: Excluye ventas canceladas de todas las estadísticas
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
 
     const whereVenta = {
       tenantId,
+      cancelado: false, // ← EXCLUIR VENTAS CANCELADAS
       ...(conFechas && { createdAt: { gte: gte!, lte: lte! } }),
     };
     const whereItem = { venta: whereVenta };
@@ -60,6 +62,7 @@ export async function GET(req: NextRequest) {
               SUM(total)::float AS total
             FROM "Venta"
             WHERE "tenantId" = ${tenantId}
+              AND "cancelado" = false
               AND "createdAt" >= ${gte!}
               AND "createdAt" <= ${lte!}
             GROUP BY 1
@@ -72,6 +75,7 @@ export async function GET(req: NextRequest) {
               SUM(total)::float AS total
             FROM "Venta"
             WHERE "tenantId" = ${tenantId}
+              AND "cancelado" = false
             GROUP BY 1
             ORDER BY 1 ASC
           `,
@@ -85,6 +89,7 @@ export async function GET(req: NextRequest) {
               SUM(total)::float AS total
             FROM "Venta"
             WHERE "tenantId" = ${tenantId}
+              AND "cancelado" = false
               AND "createdAt" >= ${gte!}
               AND "createdAt" <= ${lte!}
             GROUP BY 1
@@ -97,6 +102,7 @@ export async function GET(req: NextRequest) {
               SUM(total)::float AS total
             FROM "Venta"
             WHERE "tenantId" = ${tenantId}
+              AND "cancelado" = false
             GROUP BY 1
             ORDER BY 1 ASC
           `,
@@ -115,6 +121,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN "Producto" p  ON p.id = vi."productoId"
       LEFT JOIN "Categoria" c ON c.id = p."categoriaId"
       WHERE v."tenantId" = ${tenantId}
+        AND v."cancelado" = false
         AND v."createdAt" >= ${gte!}
         AND v."createdAt" <= ${lte!}
       GROUP BY vi."productoId", vi.nombre, c.nombre
@@ -133,6 +140,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN "Producto" p  ON p.id = vi."productoId"
       LEFT JOIN "Categoria" c ON c.id = p."categoriaId"
       WHERE v."tenantId" = ${tenantId}
+        AND v."cancelado" = false
       GROUP BY vi."productoId", vi.nombre, c.nombre
       ORDER BY cantidad DESC
       LIMIT 10
@@ -150,6 +158,7 @@ export async function GET(req: NextRequest) {
             LEFT JOIN "Producto" p  ON p.id = vi."productoId"
             LEFT JOIN "Categoria" c ON c.id = p."categoriaId"
             WHERE v."tenantId" = ${tenantId}
+              AND v."cancelado" = false
               AND v."createdAt" >= ${gte!}
               AND v."createdAt" <= ${lte!}
             GROUP BY 1
@@ -165,6 +174,7 @@ export async function GET(req: NextRequest) {
             LEFT JOIN "Producto" p  ON p.id = vi."productoId"
             LEFT JOIN "Categoria" c ON c.id = p."categoriaId"
             WHERE v."tenantId" = ${tenantId}
+              AND v."cancelado" = false
             GROUP BY 1
             ORDER BY ingreso DESC
           `,
@@ -210,8 +220,8 @@ export async function GET(req: NextRequest) {
     const productosMasVendidos = itemsPorProductoRaw.map((r) => ({
     productoId:      r.productoId,
     nombre:          r.nombre,
-    categoriaNombre: r.categoriaNombre,   // ← agregar
-    cantidadVendida: Number(r.cantidad),  // ← BigInt → number
+    categoriaNombre: r.categoriaNombre,
+    cantidadVendida: Number(r.cantidad),
     ingresoGenerado: r.ingreso,
   }));
 

@@ -171,22 +171,28 @@ model PrecioHistorico {
 }
 
 model Venta {
-  id            String       @id @default(cuid())
-  tenantId      String
-  total         Float
-  subtotal      Float?
-  descuento     Float?       @default(0)
-  metodoPago    String
-  clienteNombre String?
-  clienteDni    String?
-  observaciones String?
-  usuarioId     String?
-  usuarioNombre String?
-  createdAt     DateTime     @default(now())
-  movimientos   Movimiento[]
-  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  items         VentaItem[]
-  comprobante Comprobante?
+  id                String       @id @default(cuid())
+  tenantId          String
+  total             Float
+  subtotal          Float?
+  descuento         Float?       @default(0)
+  metodoPago        String
+  clienteNombre     String?
+  clienteDni        String?
+  observaciones     String?
+  usuarioId         String?
+  usuarioNombre     String?
+  createdAt         DateTime     @default(now())
+  
+  // ← AGREGAR ESTOS 3 CAMPOS
+  cancelado         Boolean      @default(false)
+  canceladoAt       DateTime?
+  motivoCancelacion String?
+  
+  movimientos       Movimiento[]
+  tenant            Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items             VentaItem[]
+  comprobante       Comprobante?
 
   @@index([tenantId])
   @@index([tenantId, metodoPago])
@@ -196,18 +202,19 @@ model Venta {
   @@index([tenantId, createdAt])
   @@index([tenantId, metodoPago, createdAt])
   @@index([tenantId, createdAt(sort: Desc)], map: "Venta_tenantId_createdAt_desc_idx")
+  @@index([tenantId, cancelado])  // ← AGREGAR ÍNDICE
 }
 
 model VentaItem {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   ventaId    String
-  productoId String
+  productoId String?   // ← agregar ?
   nombre     String
   cantidad   Int
   precioUnit Float
   subtotal   Float
-  producto   Producto @relation(fields: [productoId], references: [id])
-  venta      Venta    @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  producto   Producto? @relation(fields: [productoId], references: [id])  // ← agregar ?
+  venta      Venta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
 
   @@index([ventaId])
   @@index([productoId])
