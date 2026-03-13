@@ -21,6 +21,8 @@ import BarcodeScanner from "@/components/ventas/BarcodeScanner";
 import { ModalFacturaPDF } from "@/components/ventas/ModalFacturaPDF";
 import { ModalSeleccionFactura, DatosFactura } from "@/components/ventas/ModalSeleccionFactura";
 import { useConfigAFIP } from "@/hooks/UseConfigAFIP";
+import { ModalCrearProductoRapido } from "@/components/ventas/ModalCrearProductoRapido";
+
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -71,9 +73,9 @@ type Props = {
 
 // ─── Configuración del grid ───────────────────────────────────────────────────
 
-const MIN_CARD_WIDTH = 160;
-const CARD_HEIGHT    = 190;
-const GAP            = 8;
+const MIN_CARD_WIDTH = 150;
+const CARD_HEIGHT    = 170;
+const GAP            = 6;
 
 // Cache de productos por clave (categoría + búsqueda) — persiste entre renders
 const _productosCache: Record<string, { productos: any[]; ts: number }> = {};
@@ -147,6 +149,9 @@ export default function POSClient({
   // Item manual
   const [itemManualNombre, setItemManualNombre] = useState("");
   const [itemManualPrecio, setItemManualPrecio] = useState("");
+
+  const [modalCrearProducto, setModalCrearProducto] = useState(false);
+
 
   // ── Columnas dinámicas ──────────────────────────────────────────────────────
 
@@ -329,7 +334,7 @@ export default function POSClient({
   // ── Carrito ─────────────────────────────────────────────────────────────────
 
   const agregarAlCarrito = useCallback((producto: ProductoConCategoria) => {
-    if (producto.stock <= 0) return;
+    if (producto.stock <= 0) return;  // ← ELIMINAR ESTA LÍNEA
     setCarrito((prev) => {
       const existente = prev.find((i) => i.productoId === producto.id);
       if (existente) {
@@ -584,6 +589,29 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
     setEditando(false);
   }
 };
+
+
+const handleProductoCreado = useCallback((nuevoProducto: any) => {
+  // Agregar a la lista local
+  const productoConCategoria = {
+    id: nuevoProducto.id,
+    nombre: nuevoProducto.nombre,
+    precio: nuevoProducto.precio,
+    stock: nuevoProducto.stock,
+    stockMinimo: nuevoProducto.stockMinimo || 5,
+    imagen: nuevoProducto.imagen,
+    codigoBarras: nuevoProducto.codigoBarras,
+    codigoProducto: nuevoProducto.codigoProducto,
+    categoriaId: nuevoProducto.categoriaId,
+    categoria: nuevoProducto.categoria || null,
+  };
+  
+  setProductos((prev) => [productoConCategoria, ...prev]);
+  productosInicialesRef.current = [productoConCategoria, ...productosInicialesRef.current];
+  
+  // Agregar al carrito automáticamente
+  agregarAlCarrito(productoConCategoria);
+}, [agregarAlCarrito]);
   // ── FIX 3: Cell con useCallback + dependencias correctas ───────────────────
   // Así react-window NO desmonta/monta las celdas en cada render del padre.
 
@@ -601,7 +629,6 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
         <div style={{ ...style, padding: GAP / 2, boxSizing: 'border-box' }}>
           <button
             onClick={() => agregarAlCarrito(producto)}
-            disabled={producto.stock <= 0}  // ← agregar
             className="relative flex flex-col rounded-xl p-2.5 text-left transition-all active:scale-95 w-full h-full overflow-hidden"
             style={{
               background: enCarrito ? "rgba(220,38,38,0.12)" : "var(--bg-card)",
@@ -756,6 +783,20 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
               </div>
             )}
           </div>
+          {/* Botón crear producto rápido */}
+          <button
+            onClick={() => setModalCrearProducto(true)}
+            className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{
+              background: "rgba(220,38,38,0.1)",
+              border: "1px solid rgba(220,38,38,0.3)",
+              color: "#f87171",
+            }}
+            title="Crear producto rápido"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo
+          </button>
           {/* Botón scanner */}
           <button
             onClick={() => {
@@ -785,7 +826,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
       {/* Categorías */}
       {categorias.length > 0 && (
         <div
-          className="flex gap-2 px-3 md:px-4 py-2.5 overflow-x-auto border-b flex-shrink-0 scrollbar-hide"
+          className="flex gap-2 px-2 md:px3 py-2.5 overflow-x-auto border-b flex-shrink-0 scrollbar-hide"
           style={{ background: "var(--bg-surface)", borderColor: "var(--border-base)" }}
         >
           <button
@@ -807,7 +848,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
               key={cat.id}
               onClick={() => handleCategoriaChange(categoriaActiva === cat.id ? null : cat.id)}
               className={cn(
-                "flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
+                "flex-shrink-0 flex items-center gap-1.5 px-2 py-1.5 rounded-full text-xs font-medium transition-colors",
                 categoriaActiva === cat.id ? "bg-red-600 text-white" : "",
               )}
               style={
@@ -898,7 +939,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
 
       {/* Header */}
       <div
-        className="hidden md:flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
+        className="hidden md:flex items-center justify-between px-3 py-2.5 border-b flex-shrink-0"
         style={{ borderColor: "var(--border-base)" }}
       >
         <div className="flex items-center gap-2">
@@ -968,7 +1009,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
       </div>
 
       {/* Items */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {carrito.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full py-16 text-center px-6">
           <div
@@ -986,7 +1027,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
             {carrito.map((item) => (
-              <div key={item.productoId} className="flex items-center gap-2 px-3 md:px-4 py-3">
+              <div key={item.productoId} className="flex items-center gap-2 px-2 py-2.5">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
                     {item.nombre}
@@ -1051,7 +1092,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
             value={clienteNombre}
             onChange={(e) => setClienteNombre(e.target.value)}
             placeholder="Nombre del cliente (opcional)"
-            className="input-base w-full"
+            className="input-base w-full text-base py-1"
           />
 
           <div className="flex items-center gap-2">
@@ -1065,14 +1106,14 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
               value={descuento || ""}
               onChange={(e) => setDescuento(Math.max(0, parseFloat(e.target.value) || 0))}
               placeholder="0"
-              className="input-base flex-1"
+            className="input-base flex-1 w-full text-sm py-2"
             />
           </div>
 
           {/* Métodos de pago */}
           <div>
             <p className="text-xs font-medium mb-2" style={{ color: "var(--text-muted)" }}>Método de pago</p>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-5 gap-1">
               {METODOS_PAGO.map((mp) => {
                 const Icon   = mp.icono;
                 const activo = metodoPago === mp.value;
@@ -1080,7 +1121,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
                   <button
                     key={mp.value}
                     onClick={() => setMetodoPago(mp.value)}
-                    className="flex flex-col items-center gap-1 py-2 rounded-lg text-center transition-colors"
+                    className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-center transition-colors"
                     style={{
                       background: activo ? "rgba(220,38,38,0.15)" : "var(--bg-hover)",
                       border:     activo ? "1px solid rgba(220,38,38,0.4)" : "1px solid var(--border-base)",
@@ -1125,7 +1166,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
                 </div>
               </>
             )}
-            <div className="flex justify-between font-bold text-lg" style={{ color: "var(--text-primary)" }}>
+            <div className="flex justify-between font-bold text-base" style={{ color: "var(--text-primary)" }}>
               <span>Total</span>
               <span className="text-red-400">{formatPrecio(total)}</span>
             </div>
@@ -1183,7 +1224,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
           {/* Feedback */}
           {resultado === "error" && (
             <div
-              className="flex items-start gap-2 rounded-lg px-3 py-2.5"
+              className="flex items-start gap-2 rounded-lg px-2 py-2.5"
               style={{ background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.2)" }}
             >
               <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
@@ -1192,7 +1233,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
           )}
           {resultado === "exito" && (
             <div
-              className="flex items-center gap-2 rounded-lg px-3 py-2.5"
+              className="flex items-center gap-2 rounded-lg px-2 py-2.5"
               style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}
             >
               <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
@@ -1273,7 +1314,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
 
  // ── Layout ──────────────────────────────────────────────────────────────────
 
-  const alturaBase = isModal ? "h-full" : "h-[calc(100vh-3.5rem)]";
+  const alturaBase = isModal ? "h-full" : "h-[calc(100vh-4rem)] sm:h-[calc(100vh-3.5rem)]";
 
   return (
     <>
@@ -1285,7 +1326,7 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
         >
           {panelCatalogo}
         </div>
-        <div className="flex flex-col w-80 xl:w-96 flex-shrink-0 overflow-hidden">
+        <div className="flex flex-col w-72 lg:w-64 xl:w-96 flex-shrink-0 overflow-hidden">
           {panelCarrito}
         </div>
       </div>
@@ -1453,6 +1494,12 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
           </div>
         </div>
       )}
+      {/* Modal crear producto rápido */}
+      <ModalCrearProductoRapido
+        open={modalCrearProducto}
+        onClose={() => setModalCrearProducto(false)}
+        onProductoCreado={handleProductoCreado}
+      />
     </>
   );
 }

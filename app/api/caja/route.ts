@@ -22,15 +22,37 @@ function calcularTotales(movimientos: MovCaja[]) {
 
   for (const m of movimientos) {
     switch (m.tipo) {
-      case "APERTURA":       saldoInicial = m.monto; break;
-      case "VENTA_EFECTIVO": totalEfectivo += m.monto; break;
-      case "INGRESO":        totalIngresos += m.monto; break;
-      case "EGRESO":         totalEgresos  += m.monto; break;
+      case "APERTURA":       
+        saldoInicial = m.monto; 
+        break;
+        
+      case "VENTA_EFECTIVO": 
+        totalEfectivo += m.monto; 
+        break;
+        
+      case "INGRESO":        
+        totalIngresos += m.monto; 
+        break;
+        
+      case "EGRESO":         
+        totalEgresos  += m.monto; 
+        break;
+        
       case "VENTA_VIRTUAL":
-        if (m.metodoPago === "TRANSFERENCIA")   totalTransferencia  += m.monto;
-        if (m.metodoPago === "MERCADO_PAGO")    totalMercadoPago    += m.monto;
-        if (m.metodoPago === "TARJETA_CREDITO") totalTarjetaCredito += m.monto;
-        if (m.metodoPago === "TARJETA_DEBITO")  totalTarjetaDebito  += m.monto;
+        const metodo = (m.metodoPago || "").toUpperCase();
+        
+        if (metodo === "TRANSFERENCIA") {
+          totalTransferencia += m.monto;
+        } 
+        else if (metodo === "QR" || metodo === "MERCADOPAGO" || metodo === "MERCADO_PAGO") {
+          totalMercadoPago += m.monto;
+        } 
+        else if (metodo === "CREDITO" || metodo === "TARJETA_CREDITO") {
+          totalTarjetaCredito += m.monto;
+        } 
+        else if (metodo === "DEBITO" || metodo === "TARJETA_DEBITO") {
+          totalTarjetaDebito += m.monto;
+        }
         break;
     }
   }
@@ -44,7 +66,7 @@ function calcularTotales(movimientos: MovCaja[]) {
     totalMercadoPago,
     totalTarjetaCredito,
     totalTarjetaDebito,
-    totalVirtuales: totalTransferencia + totalMercadoPago + totalTarjetaCredito + totalTarjetaDebito,
+    totalVirtuales: totalTransferencia + totalMercadoPago,
     totalTarjetas:  totalTarjetaCredito + totalTarjetaDebito,
     saldoActual: saldoInicial + totalEfectivo + totalIngresos - totalEgresos,
   };

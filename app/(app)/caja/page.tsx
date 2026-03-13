@@ -100,17 +100,12 @@ export default function CajaPage() {
   useEffect(() => { fetchEstado(); }, [fetchEstado]);
 
     // Cargar productos para el POS
-    useEffect(() => {
-    if (!modalVenta) return;
+  useEffect(() => {
+  if (modalVenta) {
     setLoadingProd(true);
-    Promise.all([
-        fetch("/api/productos?pageSize=50&page=1").then(r => r.json()),
-        fetch("/api/categorias").then(r => r.json()),
-    ]).then(([prod, cats]) => {
-        setProdCaja(prod.data ?? prod ?? []);
-        setCatsCaja(cats.data ?? cats ?? []);
-    }).finally(() => setLoadingProd(false));
-    }, [modalVenta]);
+    cargarDatos().finally(() => setLoadingProd(false));
+  }
+}, [modalVenta]);
 
     useEffect(() => {
   fetch('/api/productos?solo=categorias')
@@ -127,7 +122,7 @@ const cargarDatos = async () => {
   try {
     const [cajaRes, prodRes, catRes] = await Promise.all([
       fetch("/api/caja"),
-      fetch("/api/productos?modo=pos&activos=true&pageSize=30"),
+      fetch("/api/productos?modo=pos&activos=true&pageSize=100"),  // ← modo=pos
       fetch("/api/productos?solo=categorias")
     ]);
 
@@ -142,14 +137,14 @@ const cargarDatos = async () => {
       setCaja(cajaData.caja);
     }
     
-    // Actualizar productos
-    if (prodData.ok) {
-      setProdCaja(prodData.productos || prodData.data || []);
+    // Actualizar productos CON stock
+    if (prodData.ok && prodData.productos) {
+      setProdCaja(prodData.productos);  // ← productos, no data
     }
     
     // Actualizar categorías
-    if (catData.ok) {
-      setCategorias(catData.data || []);
+    if (catData.ok && catData.data) {
+      setCategorias(catData.data);
     }
   } catch (err) {
     console.error("Error cargando datos:", err);
@@ -280,16 +275,15 @@ useEffect(() => {
     ? parseFloat(saldoContado) - (caja?.saldoActual ?? 0) : null;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-5">
-
+    <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse inline-block" />
-            <h1 className="text-2xl font-bold text-gray-900">Caja abierta</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Caja abierta</h1>
           </div>
-          <p className="text-sm text-gray-600 mt-0.5 flex items-center gap-1">
+          <p className="text-xs md:text-sm text-gray-600 mt-0.5 flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />
             Desde {caja ? fmtFecha(caja.abiertaAt) : ""}
             {caja?.usuarioNombre && ` · ${caja.usuarioNombre}`}
@@ -304,15 +298,15 @@ useEffect(() => {
       {error && <ErrorBanner mensaje={error} />}
 
       {/* Panel principal dividido */}
-<div className="grid md:grid-cols-2 gap-4">
+      <div className="grid lg:grid-cols-2 gap-4">
 
   {/* EFECTIVO */}
 <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "2px solid rgba(34,197,94,0.3)" }}>
-    <div className="px-5 py-3 flex items-center gap-2">
+    <div className="px-3 md:px-4 py-2.5 flex items-center gap-2">
       <Banknote className="w-5 h-5 text-white" />
       <h2 className="font-semibold">Efectivo en caja</h2>
     </div>
-    <div className="p-5 space-y-3">
+    <div className="p-3 md:p-4 space-y-2.5">
       <FilaCaja num="1" label="Saldo inicial"     valor={fmt(caja?.saldoInicial  ?? 0)} sub="Apertura del turno"  color="text-gray-700" />
       <FilaCaja num="2" label="(+) Ventas efec."  valor={`+ ${fmt(caja?.totalEfectivo  ?? 0)}`} sub="Ingresos del turno"  color="text-green-700" />
       <FilaCaja num="+" label="(+) Ingresos"      valor={`+ ${fmt(caja?.totalIngresos ?? 0)}`} sub="Ingresos manuales"   color="text-green-700" />
@@ -361,9 +355,9 @@ useEffect(() => {
 
 </div>
       {/* Botones acción */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
         <button onClick={() => { setError(null); setModalVenta(true); }}
-          className="flex flex-col items-center justify-center gap-1.5 font-semibold py-4 rounded-xl transition-colors"
+          className="flex flex-col items-center justify-center gap-1.5 font-semibold py-3 md:py-4 transition-colors"
           style={{ background: "#16a34a", color: "#ffffff" }}
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#15803d"}
           onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#16a34a"}>
@@ -391,7 +385,7 @@ useEffect(() => {
 
       {/* Movimientos del día */}
       <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "1px solid var(--border-base)" }}>
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-3 md:px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">Movimientos del día</h2>
           <span className="text-sm text-gray-600">{caja?.movimientos.length ?? 0} registros</span>
         </div>
@@ -399,7 +393,7 @@ useEffect(() => {
           {!caja?.movimientos.length ? (
             <p className="text-center text-gray-600 py-8 text-sm">Sin movimientos aún</p>
           ) : caja.movimientos.map((mov) => (
-            <div key={mov.id} className="flex items-center gap-3 px-6 py-3">
+            <div key={mov.id} className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2.5">
               <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${tipoColor[mov.tipo]}`}>
                 {tipoLabel[mov.tipo]}
               </span>
@@ -421,36 +415,47 @@ useEffect(() => {
       </div>
 
       {/* ── Modal Cobrar Venta ── */}
-      {modalVenta && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-0">
-            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cobrar venta</h3>
-                <button
-                onClick={() => { setModalVenta(false); setError(null); }}
-                className="text-gray-600 hover:text-gray-600 transition-colors"
-                >
-                <X className="w-5 h-5" />
-                </button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-                {loadingProd ? (
-                <div className="flex items-center justify-center h-full">
-                    <RefreshCw className="w-8 h-8 animate-spin text-gray-600" />
-                </div>
-                ) : (
-                <POSClient
-                  productosIniciales={prodCaja}
-                  categorias={categorias}
-                  isModal={true}
-                  onVentaExitosa={cargarDatos}  // ← Llama la función
-                />
-                )}
-            </div>
-            </div>
-        </div>
-        )}
+{modalVenta && (
+  <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
+    <div 
+      className="w-full h-full max-w-[1920px] max-h-[1080px] flex flex-col rounded-xl overflow-hidden shadow-2xl"
+      style={{ background: "var(--bg-surface)" }}
+    >
+      {/* Header */}
+      <div 
+        className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+        style={{ borderColor: "var(--border-base)" }}
+      >
+        <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+          Cobrar venta
+        </h3>
+        <button
+          onClick={() => { setModalVenta(false); setError(null); }}
+          className="flex items-center justify-center h-8 w-8 rounded-lg transition-colors"
+          style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
 
+      {/* POS */}
+      <div className="flex-1 overflow-hidden">
+        {loadingProd ? (
+          <div className="flex items-center justify-center h-full">
+            <RefreshCw className="w-8 h-8 animate-spin" style={{ color: "var(--text-muted)" }} />
+          </div>
+        ) : (
+          <POSClient
+            productosIniciales={prodCaja}
+            categorias={categorias}
+            isModal={true}
+            onVentaExitosa={cargarDatos}
+          />
+        )}
+      </div>
+    </div>
+  </div>
+)}
       {/* Modal movimiento manual */}
       {modalMovimiento && (
         <Modal title={modalMovimiento === "INGRESO" ? "Ingreso manual" : "Gasto / Retiro"} onClose={() => setModalMovimiento(null)}>
@@ -518,15 +523,15 @@ function FilaCaja({ num, label, valor, sub, color, icon }: {
 }) {
   return (
     <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        {num && <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-xs flex items-center justify-center font-semibold flex-shrink-0">{num}</span>}
+      <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
+        {num && <span className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-gray-100 text-gray-600 text-[10px] md:text-xs flex items-center justify-center font-semibold flex-shrink-0">{num}</span>}
         {icon && <span className="text-gray-600 flex-shrink-0">{icon}</span>}
-        <div>
-          <p className="text-xs font-medium text-gray-700">{label}</p>
-          {sub && <p className="text-xs text-gray-600">{sub}</p>}
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-gray-700 truncate">{label}</p>
+          {sub && <p className="text-[10px] md:text-xs text-gray-600 truncate">{sub}</p>}
         </div>
       </div>
-      <p className={`text-sm font-semibold ${color}`}>{valor}</p>
+      <p className={`text-xs md:text-sm font-semibold ${color} flex-shrink-0`}>{valor}</p>
     </div>
   );
 }
