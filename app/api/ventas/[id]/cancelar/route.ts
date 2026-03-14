@@ -1,6 +1,6 @@
 // app/api/ventas/[id]/cancelar/route.ts
 // POST /api/ventas/:id/cancelar
-// Cancela una venta y restaura el stock
+// Cancela una venta, restaura el stock Y elimina el movimiento de caja
 
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant";
@@ -96,13 +96,22 @@ export async function POST(
         });
       }
 
+      // 3. ✨ NUEVO: Eliminar movimiento de caja si existe
+      // Esto sincroniza la cancelación de la venta con la caja
+      await tx.movimientoCaja.deleteMany({
+        where: {
+          tenantId,
+          ventaId: id,
+        },
+      });
+
       return ventaCancelada;
     });
 
     return NextResponse.json({
       ok: true,
       data: result,
-      message: "Venta cancelada y stock restaurado",
+      message: "Venta cancelada, stock restaurado y movimiento de caja eliminado",
     });
   } catch (error: any) {
     console.error("Error cancelando venta:", error);
@@ -116,3 +125,5 @@ export async function POST(
     );
   }
 }
+
+export const dynamic = "force-dynamic";

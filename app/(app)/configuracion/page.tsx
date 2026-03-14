@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import TurnosConfig from "./TurnosConfig";
 
 type Comercio = {
   id: string;
@@ -351,6 +352,7 @@ export default function ConfiguracionPage() {
           </div>
         </div>
       </div>
+      <TurnosConfig />
 
       {/* ── Botón guardar bottom ── */}
       <div className="flex justify-end pb-4">

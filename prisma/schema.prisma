@@ -29,6 +29,7 @@ model Tenant {
   instagram   String?
   provincia   String?
   sitioWeb    String?
+  horariosTurnos Json?  // Almacena horarios personalizados por empresa
   cajas       Caja[]
   categorias  Categoria[]
   movimientos Movimiento[]
@@ -260,6 +261,7 @@ model Caja {
   tenantId      String
   usuarioId     String?
   usuarioNombre String?
+  turno         String?  // "mañana", "tarde", "noche", "personalizado"
   saldoInicial  Float
   saldoFinal    Float?
   saldoContado  Float?
@@ -486,3 +488,24 @@ model Comprobante {
   @@map("comprobantes")
 }
 
+model ConfiguracionTurnos {
+  id        String   @id @default(cuid())
+  tenantId  String
+  
+  // Turno mañana
+  mananaInicio  String  // "08:30"
+  mananaFin     String  // "13:00"
+  
+  // Turno tarde
+  tardeInicio   String  // "17:30"
+  tardeFin      String  // "22:00"
+  
+  // Turno noche (opcional)
+  nocheInicio   String? // "22:00"
+  nocheFin      String? // "08:30"
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([tenantId])
+}

@@ -1,12 +1,14 @@
 // app/api/caja/route.ts
 // OPTIMIZADO:
 // - GET: select mínimo en movimientos, caché corto para polling del front
+// - POST: herencia automática de saldo desde última caja cerrada
 // - PATCH (cierre): sin doble cálculo de totales
 // - calcularTotales: tipado correcto, sin any[]
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant";
+import { detectarTurno } from "@/lib/turnos";
 
 type MovCaja = {
   tipo:      string;
@@ -124,9 +126,23 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const { tenantId, usuarioId, nombreUsuario: usuarioNombre } = await getTenantContext();
-    const { saldoInicial = 0, observaciones } = await req.json();
+    const { saldoInicial = 0, observaciones, turno: turnoManual } = await req.json();
 
-    if (saldoInicial < 0)
+    // ✨ DETECTAR TURNO AUTOMÁTICAMENTE
+    const { turno, label } = detectarTurno();
+    const turnoFinal = turnoManual || turno; // Usar manual si se proporcionó
+
+    // ✨ NUEVO: Obtener el saldo contado de la última caja cerrada
+    const ultimaCajaCerrada = await prisma.caja.findFirst({
+      where: { tenantId, estado: "CERRADA" },
+      select: { saldoContado: true },
+      orderBy: { cerradaAt: "desc" },
+    });
+
+    // ✨ NUEVO: Usar saldo heredado si existe, sino usar el proporcionado
+    const saldoInicialFinal = ultimaCajaCerrada?.saldoContado ?? saldoInicial;
+
+    if (saldoInicialFinal < 0)
       return NextResponse.json({ error: "Saldo inválido" }, { status: 400 });
 
     // ✅ Verificar caja abierta con select mínimo
@@ -139,13 +155,28 @@ export async function POST(req: NextRequest) {
 
     const caja = await prisma.$transaction(async (tx) => {
       const nueva = await tx.caja.create({
-        data: { tenantId, usuarioId, usuarioNombre, saldoInicial, observaciones, estado: "ABIERTA" },
-        select: { id: true, saldoInicial: true, usuarioNombre: true, abiertaAt: true, estado: true },
+        data: { 
+          tenantId, 
+          usuarioId, 
+          usuarioNombre, 
+          saldoInicial: saldoInicialFinal,  // ← USAR SALDO HEREDADO
+          turno: turnoFinal,
+          observaciones, 
+          estado: "ABIERTA" 
+        },
+        select: { id: true, saldoInicial: true, turno: true, usuarioNombre: true, abiertaAt: true, estado: true },
       });
       await tx.movimientoCaja.create({
         data: {
-          tenantId, cajaId: nueva.id, tipo: "APERTURA", monto: saldoInicial,
-          descripcion: `Apertura con $${saldoInicial.toFixed(2)}`, usuarioId, usuarioNombre,
+          tenantId, 
+          cajaId: nueva.id, 
+          tipo: "APERTURA", 
+          monto: saldoInicialFinal,  // ← USAR SALDO HEREDADO
+          descripcion: ultimaCajaCerrada 
+            ? `Apertura con $${saldoInicialFinal.toFixed(2)} (heredado del cierre anterior)`
+            : `Apertura con $${saldoInicialFinal.toFixed(2)}`,
+          usuarioId, 
+          usuarioNombre,
         },
       });
       return nueva;
@@ -205,5 +236,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Error al cerrar caja" }, { status: 500 });
   }
 }
+
+
 
 export const dynamic = "force-dynamic";

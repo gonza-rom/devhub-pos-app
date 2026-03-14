@@ -1,13 +1,12 @@
 "use client";
 // app/(app)/caja/historial/page.tsx
-// Historial de cierres de caja con detalle por sesión
+// ✅ FIXED: Celdas de Fecha y Turno separadas + filtro turno funcionando
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  History, ChevronLeft, ChevronRight, Calendar, Clock,
-  TrendingUp, TrendingDown, Banknote, Smartphone, Plus,
-  Minus, X, AlertTriangle, CheckCircle, User, Search,
-  RefreshCw, ArrowUpRight, ArrowDownRight,
+  History, ChevronLeft, ChevronRight, Clock,
+  Banknote, Smartphone, X, AlertTriangle, User, Search,
+  RefreshCw, ArrowUpRight, ArrowDownRight, Edit, Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -23,6 +22,7 @@ type Movimiento = {
 type CajaCerrada = {
   id: string;
   usuarioNombre: string | null;
+  turno: string | null;
   saldoInicial: number;
   saldoFinal: number | null;
   saldoContado: number | null;
@@ -36,6 +36,12 @@ type CajaCerrada = {
   totalEgresos: number;
   cantidadVentas: number;
   movimientos: Movimiento[];
+};
+
+type ModalEdicion = {
+  caja: CajaCerrada;
+  saldoContado: string;
+  observaciones: string;
 };
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -102,13 +108,23 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Info cajero */}
-          {caja.usuarioNombre && (
-            <div className="flex items-center gap-2 text-sm text-zinc-400">
-              <User className="h-4 w-4 text-zinc-600" />
-              Turno de <span className="text-zinc-200 font-medium ml-1">{caja.usuarioNombre}</span>
-            </div>
-          )}
+          {/* Info cajero + turno */}
+          <div className="flex items-center gap-3 text-sm text-zinc-400 flex-wrap">
+            {caja.usuarioNombre && (
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-zinc-600" />
+                Turno de <span className="text-zinc-200 font-medium ml-1">{caja.usuarioNombre}</span>
+              </div>
+            )}
+            {caja.turno && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-medium inline-flex items-center gap-1">
+                {caja.turno === "mañana" && "🌅 Mañana"}
+                {caja.turno === "tarde" && "🌆 Tarde"}
+                {caja.turno === "noche" && "🌙 Noche"}
+                {caja.turno === "fuera_horario" && "⚠️ Fuera de horario"}
+              </span>
+            )}
+          </div>
 
           {/* Resumen numérico */}
           <div className="grid grid-cols-2 gap-3">
@@ -152,11 +168,11 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
             )}
           >
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-400">Saldo esperado</span>
+              <span className="text-zinc-300">Saldo esperado</span>
               <span className="text-zinc-200 font-medium">{fmt(caja.saldoFinal ?? 0)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-400">Saldo contado</span>
+              <span className="text-zinc-300">Saldo contado</span>
               <span className="text-zinc-200 font-medium">{fmt(caja.saldoContado ?? 0)}</span>
             </div>
             <div
@@ -244,7 +260,12 @@ export default function HistorialCajaPage() {
   const [total,   setTotal]   = useState(0);
   const [desde,   setDesde]   = useState("");
   const [hasta,   setHasta]   = useState("");
+  const [turnoFiltro, setTurnoFiltro] = useState("");
   const [detalle, setDetalle] = useState<CajaCerrada | null>(null);
+
+  const [modalEditar,     setModalEditar]     = useState<ModalEdicion | null>(null);
+  const [modalEliminar,   setModalEliminar]   = useState<string | null>(null);
+  const [cargandoAccion,  setCargandoAccion]  = useState(false);
 
   const limit = 15;
 
@@ -256,6 +277,7 @@ export default function HistorialCajaPage() {
         limit: String(limit),
         ...(desde && { desde }),
         ...(hasta && { hasta }),
+        ...(turnoFiltro && { turno: turnoFiltro }),
       });
       const res  = await fetch(`/api/caja/historial?${params}`);
       const data = await res.json();
@@ -267,9 +289,60 @@ export default function HistorialCajaPage() {
     } finally {
       setLoading(false);
     }
-  }, [desde, hasta]);
+  }, [desde, hasta, turnoFiltro]);
 
   useEffect(() => { fetchHistorial(1); }, [fetchHistorial]);
+
+  const handleEditar = async () => {
+    if (!modalEditar) return;
+    
+    const saldo = parseFloat(modalEditar.saldoContado);
+    if (isNaN(saldo) || saldo < 0) {
+      alert("Saldo contado inválido");
+      return;
+    }
+    
+    setCargandoAccion(true);
+    try {
+      const res = await fetch(`/api/caja/historial/${modalEditar.caja.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          saldoContado: saldo,
+          observaciones: modalEditar.observaciones.trim() || null,
+        }),
+      });
+
+      if (res.ok) {
+        setModalEditar(null);
+        fetchHistorial(page);
+      } else {
+        const err = await res.json();
+        alert(err.error || "Error al editar");
+      }
+    } finally {
+      setCargandoAccion(false);
+    }
+  };
+
+  const handleEliminar = async (id: string) => {
+    setCargandoAccion(true);
+    try {
+      const res = await fetch(`/api/caja/historial/${id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setModalEliminar(null);
+        fetchHistorial(page);
+      } else {
+        const err = await res.json();
+        alert(err.error || "Error al eliminar");
+      }
+    } finally {
+      setCargandoAccion(false);
+    }
+  };
 
   const totalPages = Math.ceil(total / limit);
 
@@ -284,7 +357,6 @@ export default function HistorialCajaPage() {
 
   return (
     <div className="space-y-5 max-w-5xl">
-
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
@@ -304,10 +376,8 @@ export default function HistorialCajaPage() {
         </div>
       </div>
 
-      {/* Filtros por fecha */}
-      <div
-        className="card p-4 flex flex-wrap items-end gap-3"
-      >
+      {/* Filtros */}
+      <div className="card p-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="label-base">Desde</label>
           <input
@@ -326,6 +396,20 @@ export default function HistorialCajaPage() {
             className="input-base w-44"
           />
         </div>
+        <div>
+          <label className="label-base">Turno</label>
+          <select
+            value={turnoFiltro}
+            onChange={e => setTurnoFiltro(e.target.value)}
+            className="input-base w-44"
+          >
+            <option value="">Todos</option>
+            <option value="mañana">🌅 Mañana</option>
+            <option value="tarde">🌆 Tarde</option>
+            <option value="noche">🌙 Noche</option>
+            <option value="fuera_horario">⚠️ Fuera de horario</option>
+          </select>
+        </div>
         <button
           onClick={() => fetchHistorial(1)}
           className="btn-primary"
@@ -333,9 +417,9 @@ export default function HistorialCajaPage() {
           <Search className="h-4 w-4" />
           Filtrar
         </button>
-        {(desde || hasta) && (
+        {(desde || hasta || turnoFiltro) && (
           <button
-            onClick={() => { setDesde(""); setHasta(""); }}
+            onClick={() => { setDesde(""); setHasta(""); setTurnoFiltro(""); }}
             className="btn-ghost"
           >
             Limpiar
@@ -347,9 +431,9 @@ export default function HistorialCajaPage() {
       {cajas.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Efectivo",   valor: totalesPeriodo.efectivo,  icon: Banknote,    color: "text-green-400" },
-            { label: "Virtuales",  valor: totalesPeriodo.virtuales, icon: Smartphone,  color: "text-purple-400" },
-            { label: "Ingresos",   valor: totalesPeriodo.ingresos,  icon: ArrowUpRight, color: "text-emerald-400" },
+            { label: "Efectivo",   valor: totalesPeriodo.efectivo,  icon: Banknote,      color: "text-green-400" },
+            { label: "Virtuales",  valor: totalesPeriodo.virtuales, icon: Smartphone,    color: "text-purple-400" },
+            { label: "Ingresos",   valor: totalesPeriodo.ingresos,  icon: ArrowUpRight,  color: "text-emerald-400" },
             { label: "Egresos",    valor: totalesPeriodo.egresos,   icon: ArrowDownRight, color: "text-red-400" },
           ].map(({ label, valor, icon: Icon, color }) => (
             <div key={label} className="card p-4">
@@ -366,7 +450,7 @@ export default function HistorialCajaPage() {
       {/* Tabla */}
       {loading ? (
         <div className="card py-20 flex items-center justify-center">
-          <RefreshCw className="h-8 w-8 animate-spin text-zinc-600" />
+          <RefreshCw className="h-8 h-8 animate-spin text-zinc-600" />
         </div>
       ) : cajas.length === 0 ? (
         <div className="card py-20 text-center">
@@ -380,12 +464,12 @@ export default function HistorialCajaPage() {
             <table className="w-full text-sm">
               <thead style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                 <tr>
-                  {["Fecha", "Turno", "Efectivo", "Virtuales", "Diferencia", "Ventas", ""].map((h) => (
+                  {["Fecha", "Turno", "Efectivo", "Virtuales", "Diferencia", "Ventas", "Acciones"].map((h) => (
                     <th
                       key={h}
                       className={cn(
                         "px-4 py-3 text-xs font-semibold text-zinc-600 uppercase tracking-wider",
-                        h === "Efectivo" || h === "Virtuales" || h === "Diferencia"
+                        h === "Efectivo" || h === "Virtuales" || h === "Diferencia" || h === "Acciones"
                           ? "text-right"
                           : h === "Ventas" ? "text-center"
                           : "text-left"
@@ -402,9 +486,9 @@ export default function HistorialCajaPage() {
                   return (
                     <tr
                       key={caja.id}
-                      className="table-row cursor-pointer"
-                      onClick={() => setDetalle(caja)}
+                      className="table-row"
                     >
+                      {/* ✅ CELDA FECHA (separada) */}
                       <td className="px-4 py-3">
                         <p className="text-zinc-200 font-medium">{fmtFecha(caja.abiertaAt)}</p>
                         <p className="text-xs text-zinc-600 flex items-center gap-1 mt-0.5">
@@ -415,9 +499,22 @@ export default function HistorialCajaPage() {
                           )}
                         </p>
                       </td>
-                      <td className="px-4 py-3 text-zinc-400">
-                        {caja.usuarioNombre ?? <span className="text-zinc-700">—</span>}
+
+                      {/* ✅ CELDA TURNO (separada) */}
+                      <td className="px-4 py-3">
+                        {caja.turno ? (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-medium inline-flex items-center gap-1">
+                            {caja.turno === "mañana" && "🌅"}
+                            {caja.turno === "tarde" && "🌆"}
+                            {caja.turno === "noche" && "🌙"}
+                            {caja.turno === "fuera_horario" && "⚠️"}
+                            <span className="capitalize">{caja.turno.replace("_", " ")}</span>
+                          </span>
+                        ) : (
+                          <span className="text-zinc-700">—</span>
+                        )}
                       </td>
+
                       <td className="px-4 py-3 text-right text-green-400 font-semibold">
                         {fmt(caja.totalEfectivo)}
                       </td>
@@ -440,8 +537,33 @@ export default function HistorialCajaPage() {
                           {caja.cantidadVentas}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-xs text-zinc-600 hover:text-zinc-300">Ver →</span>
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => setModalEditar({
+                              caja,
+                              saldoContado: String(caja.saldoContado || 0),
+                              observaciones: caja.observaciones || "",
+                            })}
+                            className="text-xs text-zinc-400 hover:text-blue-400 transition-colors flex items-center gap-1"
+                          >
+                            <Edit className="h-3 w-3" />
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => setModalEliminar(caja.id)}
+                            className="text-xs text-zinc-400 hover:text-red-400 transition-colors flex items-center gap-1"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Eliminar
+                          </button>
+                          <button
+                            onClick={() => setDetalle(caja)}
+                            className="text-xs text-zinc-600 hover:text-zinc-300"
+                          >
+                            Ver →
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -483,6 +605,107 @@ export default function HistorialCajaPage() {
       {/* Modal detalle */}
       {detalle && (
         <DetalleCaja caja={detalle} onClose={() => setDetalle(null)} />
+      )}
+
+      {/* Modal Editar */}
+      {modalEditar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)" }}
+          onClick={() => setModalEditar(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-6 space-y-4"
+            style={{ background: "#161616", border: "1px solid rgba(255,255,255,0.1)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-white">Editar cierre de caja</h3>
+            
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1">
+                Saldo contado
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={modalEditar.saldoContado}
+                onChange={(e) => setModalEditar({ ...modalEditar, saldoContado: e.target.value })}
+                className="input-base w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1">
+                Observaciones
+              </label>
+              <textarea
+                value={modalEditar.observaciones}
+                onChange={(e) => setModalEditar({ ...modalEditar, observaciones: e.target.value })}
+                className="input-base w-full"
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setModalEditar(null)}
+                className="flex-1 py-2 border border-zinc-700 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEditar}
+                disabled={cargandoAccion}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+              >
+                {cargandoAccion ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Eliminar */}
+      {modalEliminar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)" }}
+          onClick={() => setModalEliminar(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-6 space-y-4"
+            style={{ background: "#161616", border: "1px solid rgba(255,255,255,0.1)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-900/20 flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Eliminar caja</h3>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Esta acción no se puede deshacer. Se eliminarán todos los movimientos asociados.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setModalEliminar(null)}
+                className="flex-1 py-2 border border-zinc-700 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleEliminar(modalEliminar)}
+                disabled={cargandoAccion}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+              >
+                {cargandoAccion ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

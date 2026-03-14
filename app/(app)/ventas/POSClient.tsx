@@ -3,7 +3,7 @@
 // OPTIMIZADO con react-window para 1500+ productos
 // FIX: ref propio en Grid, Cell con useCallback, sin overflow:auto, retry en resize
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useLayoutEffect} from "react";
 import { debounce } from "lodash";
 import InfiniteLoader from "react-window-infinite-loader";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -73,9 +73,9 @@ type Props = {
 
 // ─── Configuración del grid ───────────────────────────────────────────────────
 
-const MIN_CARD_WIDTH = 150;
-const CARD_HEIGHT    = 170;
-const GAP            = 6;
+ const MIN_CARD_WIDTH = 160;  // (antes 150)
+ const CARD_HEIGHT    = 170;  // (antes 170)
+ const GAP            = 6; 
 
 // Cache de productos por clave (categoría + búsqueda) — persiste entre renders
 const _productosCache: Record<string, { productos: any[]; ts: number }> = {};
@@ -125,8 +125,8 @@ export default function POSClient({
   const categoriaActivaRef = useRef<string | null>(null);
   const productosInicialesRef = useRef(productosIniciales);
 
-  const [gridWidth,  setGridWidth]  = useState(800); // valor inicial razonable, se corrige en useEffect
-  const [gridHeight, setGridHeight] = useState(600);
+  const [gridWidth,  setGridWidth]  = useState(1200); // valor inicial razonable, se corrige en useEffect
+  const [gridHeight, setGridHeight] = useState(750);
 
   const [generarFactura, setGenerarFactura] = useState(false);
   const [comprobanteGenerado, setComprobanteGenerado] = useState<string | null>(null);
@@ -155,8 +155,9 @@ export default function POSClient({
 
   // ── Columnas dinámicas ──────────────────────────────────────────────────────
 
-  const columnCount = Math.max(2, Math.floor((gridWidth - GAP) / (MIN_CARD_WIDTH + GAP)));
-  const cardWidth   = Math.floor((gridWidth - GAP * (columnCount + 1)) / columnCount);
+  const columnCount = Math.max(2, Math.min(8, Math.floor(gridWidth / (MIN_CARD_WIDTH + GAP))));
+  const totalGapWidth = GAP * (columnCount + 1); // gaps entre cards + bordes
+  const cardWidth = Math.floor((gridWidth - totalGapWidth) / columnCount);
 
   useEffect(() => {
     fetch("/api/usuarios")
@@ -191,36 +192,127 @@ export default function POSClient({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+  const updateSize = () => {
     const el = gridContainerRef.current;
-    if (!el) return;
-
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width  > 50) setGridWidth(width);
-        if (height > 50) setGridHeight(height);  // ignorar mediciones espurias de 0
-      }
+    if (!el) {
+      console.log('⚠️ gridContainerRef.current es null');
+      return;
+    }
+ 
+    // Probar múltiples métodos de medición
+    const rect = el.getBoundingClientRect();
+    const offsetW = el.offsetWidth;
+    const offsetH = el.offsetHeight;
+    const clientW = el.clientWidth;
+    const clientH = el.clientHeight;
+ 
+    console.log('📐 Intentando medir:', { 
+      rect: { w: rect.width, h: rect.height },
+      offset: { w: offsetW, h: offsetH },
+      client: { w: clientW, h: clientH },
     });
-
+ 
+    // Usar el primer valor válido que encontremos
+    const w = Math.floor(Math.min(
+      rect.width || 9999,
+      offsetW || 9999,
+      clientW || 9999,
+      1200  // ← MÁXIMO: evita grids gigantes
+    ));
+    const h = Math.floor(rect.height || offsetH || clientH || 0);
+ 
+    if (w > 100) {
+      console.log('✅ Actualizando gridWidth:', w);
+      setGridWidth(w);
+    }
+    if (h > 100) {
+      console.log('✅ Actualizando gridHeight:', h);
+      setGridHeight(h);
+    }
+  };
+ 
+  // Ejecutar en el próximo frame (después de que React renderice)
+  requestAnimationFrame(() => {
+    updateSize();
+  });
+ 
+  // Múltiples retries con delays crecientes
+  const timers = [
+    setTimeout(() => requestAnimationFrame(updateSize), 0),
+    setTimeout(() => requestAnimationFrame(updateSize), 50),
+    setTimeout(() => requestAnimationFrame(updateSize), 100),
+    setTimeout(() => requestAnimationFrame(updateSize), 200),
+    setTimeout(() => requestAnimationFrame(updateSize), 400),
+    setTimeout(() => requestAnimationFrame(updateSize), 800),
+  ];
+ 
+  // ResizeObserver para cambios dinámicos
+  const el = gridContainerRef.current;
+  let ro: ResizeObserver | null = null;
+ 
+  if (el) {
+    ro = new ResizeObserver((entries) => {
+      requestAnimationFrame(() => {
+        for (const entry of entries) {
+          const w = Math.floor(entry.contentRect.width);
+          const h = Math.floor(entry.contentRect.height);
+          
+          console.log('🔄 ResizeObserver detectó cambio:', { w, h });
+          
+          if (w > 100) setGridWidth(w);
+          if (h > 100) setGridHeight(h);
+        }
+      });
+    });
+    
     ro.observe(el);
+  }
+ 
+  // Window resize como fallback
+  const handleResize = () => {
+    requestAnimationFrame(updateSize);
+  };
+  
+  window.addEventListener('resize', handleResize);
+ 
+  return () => {
+    timers.forEach(clearTimeout);
+    ro?.disconnect();
+    window.removeEventListener('resize', handleResize);
+  };
+}, []);
 
-    // Medición inicial con fallback al padre si el propio elemento mide 0
-    const measureEl = () => {
-      const w = el.offsetWidth  || el.parentElement?.offsetWidth  || 800;
-      const h = el.offsetHeight || el.parentElement?.offsetHeight || 600;
-      if (w > 50) setGridWidth(w);
-      if (h > 50) setGridHeight(h);
-    };
 
-    measureEl();
-    // Retry por si el layout flex no terminó aún
-    setTimeout(measureEl, 0);
-    setTimeout(measureEl, 100);
-
-    return () => ro.disconnect();
-  }, []);
-
+useEffect(() => {
+  if (isModal) {
+    console.log('🎯 Modal detectado, forzando re-medición...');
+    
+    // Esperar a que el modal termine de renderizar
+    const timers = [
+      setTimeout(() => {
+        const el = gridContainerRef.current;
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          console.log('📐 Medición en modal:', rect.width, rect.height);
+          
+          if (rect.width > 100) setGridWidth(Math.floor(rect.width));
+          if (rect.height > 100) setGridHeight(Math.floor(rect.height));
+        }
+      }, 100),
+      setTimeout(() => {
+        const el = gridContainerRef.current;
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 100) setGridWidth(Math.floor(rect.width));
+          if (rect.height > 100) setGridHeight(Math.floor(rect.height));
+        }
+      }, 300),
+    ];
+    
+    return () => timers.forEach(clearTimeout);
+  }
+}, [isModal]);// ← Dependencias vacías, solo ejecutar al montar
   // ── Búsqueda remota con debounce ────────────────────────────────────────────
   // Usamos refs para busqueda/categoria para evitar closures obsoletos en debounce
 
@@ -629,7 +721,7 @@ const handleProductoCreado = useCallback((nuevoProducto: any) => {
         <div style={{ ...style, padding: GAP / 2, boxSizing: 'border-box' }}>
           <button
             onClick={() => agregarAlCarrito(producto)}
-            className="relative flex flex-col rounded-xl p-2.5 text-left transition-all active:scale-95 w-full h-full overflow-hidden"
+            className="relative flex flex-col rounded-lg p-2 text-left transition-all active:scale-95 w-full h-full overflow-hidden"
             style={{
               background: enCarrito ? "rgba(220,38,38,0.12)" : "var(--bg-card)",
               border:     enCarrito ? "1px solid rgba(220,38,38,0.4)" : "1px solid var(--border-base)",
@@ -754,7 +846,7 @@ const handleProductoCreado = useCallback((nuevoProducto: any) => {
 
       {/* Buscador */}
       <div
-        className="p-3 md:p-4 border-b flex-shrink-0"
+        className="p-2 md:p-3 border-b flex-shrink-0"
         style={{ background: "var(--bg-surface)", borderColor: "var(--border-base)" }}
       >
         <div className="flex items-center gap-2">
@@ -826,7 +918,7 @@ const handleProductoCreado = useCallback((nuevoProducto: any) => {
       {/* Categorías */}
       {categorias.length > 0 && (
         <div
-          className="flex gap-2 px-2 md:px3 py-2.5 overflow-x-auto border-b flex-shrink-0 scrollbar-hide"
+          className="flex gap-2 px-2 md:px-3 py-2 overflow-x-auto border-b flex-shrink-0 scrollbar-hide"
           style={{ background: "var(--bg-surface)", borderColor: "var(--border-base)" }}
         >
           <button
@@ -865,7 +957,7 @@ const handleProductoCreado = useCallback((nuevoProducto: any) => {
       )}
 
       {/* Grid Virtualizado */}
-      <div className="flex-1 relative" style={{ minHeight: 0, overflow: "hidden" }} ref={gridContainerRef}>
+      <div className="flex-1 relative" style={{ minHeight: 0 }} ref={gridContainerRef}>
         {buscandoRemoto && productos.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-20">
             <Loader2 className="h-12 w-12 animate-spin mb-3" style={{ color: "var(--text-muted)" }} />
@@ -888,7 +980,7 @@ const handleProductoCreado = useCallback((nuevoProducto: any) => {
             isItemLoaded={(index) => !hayMas || index < productos.length}
             itemCount={itemCount}
             loadMoreItems={cargarMasProductos}
-            threshold={5}
+            threshold={15}
           >
             {({ onItemsRendered }) => (
               <Grid
@@ -898,14 +990,14 @@ const handleProductoCreado = useCallback((nuevoProducto: any) => {
                 height={gridHeight}
                 rowCount={rowCount}
                 rowHeight={CARD_HEIGHT}
-                width={gridWidth}
+                width={gridWidth} 
                   onItemsRendered={(gridProps: any) => {
                     (onItemsRendered as any)({
                       visibleStartIndex: gridProps.visibleRowStartIndex * columnCount,
                       visibleStopIndex: gridProps.visibleRowStopIndex * columnCount + columnCount - 1,
                     });
                   }}
-                  style={{ overflowX: "hidden" }}
+                  style={{ overflowX: "hidden", overflowY: "auto" }}
                 >
                   {Cell}
                 </Grid>
@@ -931,7 +1023,14 @@ const handleProductoCreado = useCallback((nuevoProducto: any) => {
       </div>
     </div>
   );
-
+console.log({
+  gridWidth,
+  gridHeight,
+  columnCount,
+  cardWidth,
+  totalWidth: (cardWidth + GAP) * columnCount + GAP,  // Debe ser ≈ gridWidth
+  spaceLeft: gridWidth - ((cardWidth + GAP) * columnCount + GAP),  // Debe ser ~0-5px
+});
   // ── Panel Carrito ───────────────────────────────────────────────────────────
 
   const panelCarrito = (

@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   LockOpen, Lock, Plus, Minus, RefreshCw, ShoppingCart,
-  AlertTriangle, CheckCircle, Clock, Banknote, Smartphone, CreditCard, X, Search, Landmark, History
+  AlertTriangle, CheckCircle, Clock, Banknote, Smartphone, CreditCard, X, Search, Landmark, History,Sunset, Moon, Sunrise
 } from "lucide-react";
 import POSClient from "@/app/(app)/ventas/POSClient";
 import Link from "next/link";
+import { detectarTurno, obtenerTurnosDisponibles, TURNO_ICONS, formatearNombreTurno, type ConfigTurnos } from "@/lib/turnos";
+
 
 type TipoMov = "APERTURA" | "VENTA_EFECTIVO" | "VENTA_VIRTUAL" | "INGRESO" | "EGRESO" | "CIERRE";
 type MetodoPago = "EFECTIVO" | "TRANSFERENCIA" | "MERCADO_PAGO" | "TARJETA_CREDITO" | "TARJETA_DEBITO";
@@ -22,6 +24,7 @@ interface CajaData {
   totalTransferencia: number; totalMercadoPago: number;
   totalTarjetaCredito: number; totalTarjetaDebito: number;
   totalVirtuales: number; totalTarjetas: number; saldoActual: number;
+  turno: string | null;
 }
 interface UltimaCaja {
   saldoInicial: number; saldoFinal: number; saldoContado: number;
@@ -88,6 +91,19 @@ export default function CajaPage() {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState<string | null>(null);
 
+  const [saldoSugerido, setSaldoSugerido] = useState<number | null>(null);
+
+  const [turnoSeleccionado, setTurnoSeleccionado] = useState("");
+  const [turnoDetectado, setTurnoDetectado] = useState<{
+    turno: string;
+    label: string;
+    horario: string;
+    icon: "sunrise" | "sunset" | "moon" | "alert";
+  } | null>(null)
+
+  const [configTurnos, setConfigTurnos] = useState<ConfigTurnos | undefined>(undefined);
+
+
   const fetchEstado = useCallback(async () => {
     try {
       const res = await fetch("/api/caja");
@@ -117,6 +133,40 @@ export default function CajaPage() {
     })
     .catch(err => console.error('Error cargando categorías:', err));
 }, []);
+
+// AGREGAR useEffect para obtener último cierre:
+useEffect(() => {
+  if (estado === "cerrada" && ultima) {
+    setSaldoSugerido(ultima.saldoContado);
+  }
+}, [estado, ultima]);
+
+useEffect(() => {
+  if (modalApertura) {
+    // ✅ Cargar configuración de turnos del tenant
+    fetch("/api/configuracion/turnos")
+      .then(r => r.json())
+      .then(configData => {
+        const config = configData.ok ? configData.data : undefined;
+        setConfigTurnos(config); // ✨ GUARDAR EN STATE
+        const turno = detectarTurno(new Date(), config);
+        setTurnoDetectado(turno);
+        setTurnoSeleccionado(turno.turno);
+      })
+      .catch(console.error);
+
+    // Saldo sugerido
+    fetch("/api/caja/saldo-sugerido")
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok && d.saldoSugerido !== null) {
+          setSaldoSugerido(d.saldoSugerido);
+          setSaldoInicial(String(d.saldoSugerido));
+        }
+      })
+      .catch(console.error);
+  }
+}, [modalApertura]);
 
 const cargarDatos = async () => {
   try {
@@ -162,10 +212,10 @@ useEffect(() => {
     setLoading(true); setError(null);
     try {
       const res = await fetch("/api/caja", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ saldoInicial: monto, observaciones: obsApertura || null }) });
+        body: JSON.stringify({ saldoInicial: monto, turno: turnoSeleccionado, observaciones: obsApertura || null }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setModalApertura(false); setSaldoInicial(""); setObsApertura("");
+      setModalApertura(false); setSaldoInicial(""); setObsApertura("");setTurnoSeleccionado("");
       await fetchEstado();
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
@@ -252,24 +302,160 @@ useEffect(() => {
       {modalApertura && (
         <Modal title="Abrir caja" onClose={() => setModalApertura(false)}>
           <div className="space-y-4">
+            {/* ✨ NUEVO: Banner con saldo sugerido */}
+            {saldoSugerido !== null && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                    <Banknote className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-blue-900">
+                      Saldo del último cierre
+                    </p>
+                    <p className="text-xs text-blue-700 mt-0.5">
+                      El sistema sugiere abrir con {fmt(saldoSugerido)} basado en el cierre anterior
+                    </p>
+                    <button
+                      onClick={() => setSaldoInicial(String(saldoSugerido))}
+                      className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Usar este saldo
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* ✨ NUEVO: Selector de turno */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Saldo inicial en efectivo</label>
-              <InputMoneda value={saldoInicial} onChange={setSaldoInicial} autoFocus />
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Turno
+              </label>
+              
+              {/* Banner de detección */}
+              {turnoDetectado && (
+              <div className={`mb-3 p-3 rounded-lg ${
+                turnoDetectado.turno === "fuera_horario"
+                  ? "bg-yellow-50 border border-yellow-200"
+                  : "bg-green-50 border border-green-200"
+              }`}>
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const Icon = TURNO_ICONS[turnoDetectado.icon];
+                    return <Icon className={`h-5 w-5 ${
+                      turnoDetectado.turno === "fuera_horario" 
+                        ? "text-yellow-700" 
+                        : "text-green-700"
+                    }`} />;
+                  })()}
+                    <div className="flex-1">
+                      <p className={`text-sm font-medium ${
+                        turnoDetectado.turno === "fuera_horario" 
+                          ? "text-yellow-900" 
+                          : "text-green-900"
+                      }`}>
+                        {turnoDetectado.label}
+                      </p>
+                      <p className={`text-xs ${
+                        turnoDetectado.turno === "fuera_horario"
+                          ? "text-yellow-700"
+                          : "text-green-700"
+                      }`}>
+                        {turnoDetectado.turno === "fuera_horario"
+                          ? "Los turnos habituales son: Mañana (8:30-13:00) y Tarde (17:30-22:00)"
+                          : "Turno detectado automáticamente según la hora actual"
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Botones de selección */}
+              <div className="grid grid-cols-2 gap-2">
+                {obtenerTurnosDisponibles(configTurnos).map((t) => {
+                  const Icon = TURNO_ICONS[t.icon];
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setTurnoSeleccionado(t.value)}
+                      className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all ${
+                        turnoSeleccionado === t.value
+                          ? "border-green-500 bg-green-50"
+                          : "border-gray-300 bg-white hover:border-gray-400"
+                      }`}
+                    >
+                      <Icon className="h-6 w-6 mb-1 text-gray-700" />
+                      <span className="text-xs font-medium text-gray-700">{t.label}</span>
+                      <span className="text-[10px] text-gray-500">{t.horario}</span>
+                    </button>
+                  );
+                })}
+                
+                {/* ✨ OPCIÓN FUERA DE HORARIO */}
+                <button
+                  type="button"
+                  onClick={() => setTurnoSeleccionado("fuera_horario")}
+                  className={`flex flex-col items-center justify-center p-3 rounded-lg border-2 transition-all col-span-2 ${
+                    turnoSeleccionado === "fuera_horario"
+                      ? "border-yellow-500 bg-yellow-50"
+                      : "border-gray-300 bg-white hover:border-gray-400"
+                  }`}
+                >
+                  <AlertTriangle className="h-6 w-6 mb-1 text-gray-700" />
+                  <span className="text-xs font-medium text-gray-700">Fuera de horario</span>
+                  <span className="text-[10px] text-gray-500">Horario excepcional</span>
+                </button>
+              </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-600">(opcional)</span></label>
-              <input type="text" value={obsApertura} onChange={(e) => setObsApertura(e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Saldo inicial en efectivo
+              </label>
+              <InputMoneda 
+                value={saldoInicial} 
+                onChange={setSaldoInicial} 
+                autoFocus 
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {saldoSugerido !== null 
+                  ? "Puedes modificar el saldo si es necesario"
+                  : "Ingresa el efectivo con el que abres la caja"
+                }
+              </p>
+            </div>
+      
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Observaciones <span className="text-gray-600">(opcional)</span>
+              </label>
+              <input 
+                type="text" 
+                value={obsApertura} 
+                onChange={(e) => setObsApertura(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                placeholder="Ej: Turno mañana" />
+                placeholder="Ej: Turno mañana" 
+              />
             </div>
+      
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <BotonesModal onCancel={() => setModalApertura(false)} onConfirm={abrirCaja} loading={loading} labelConfirm="Abrir caja" colorConfirm="green" />
+            
+            <BotonesModal 
+              onCancel={() => setModalApertura(false)} 
+              onConfirm={abrirCaja} 
+              loading={loading} 
+              labelConfirm="Abrir caja" 
+              colorConfirm="green" 
+            />
           </div>
         </Modal>
       )}
     </div>
   );
 
+  
+  
   // ── ABIERTA ───────────────────────────────────────────────────
   const diferenciaCierre = saldoContado !== "" && !isNaN(parseFloat(saldoContado))
     ? parseFloat(saldoContado) - (caja?.saldoActual ?? 0) : null;
@@ -282,6 +468,16 @@ useEffect(() => {
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse inline-block" />
             <h1 className="text-xl md:text-2xl font-bold text-gray-900">Caja abierta</h1>
+            {/* ✨ NUEVO: Mostrar turno */}
+            {caja?.turno && (
+              <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-medium inline-flex items-center gap-1">
+                {caja.turno === "mañana" && <Sunrise className="h-3 w-3" />}
+                {caja.turno === "tarde" && <Sunset className="h-3 w-3" />}
+                {caja.turno === "noche" && <Moon className="h-3 w-3" />}
+                {caja.turno === "fuera_horario" && <AlertTriangle className="h-3 w-3" />}
+                {formatearNombreTurno(caja.turno)}
+              </span>
+            )}
           </div>
           <p className="text-xs md:text-sm text-gray-600 mt-0.5 flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />
@@ -289,75 +485,88 @@ useEffect(() => {
             {caja?.usuarioNombre && ` · ${caja.usuarioNombre}`}
           </p>
         </div>
-        <button onClick={() => { setError(null); setModalCierre(true); }}
-          className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 font-semibold px-4 py-2 rounded-lg transition-colors border border-red-200">
-          <Lock className="w-4 h-4" /> Cerrar caja
-        </button>
+      <div className="flex items-center gap-2">
+          {/* ✨ NUEVO: Botón historial */}
+          <Link
+            href="/caja/historial"
+            className="flex items-center gap-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold px-4 py-2 rounded-lg transition-colors border border-zinc-300"
+          >
+            <History className="w-4 h-4" />
+            Historial
+          </Link>
+          
+          <button 
+            onClick={() => { setError(null); setModalCierre(true); }}
+            className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 font-semibold px-4 py-2 rounded-lg transition-colors border border-red-200"
+          >
+            <Lock className="w-4 h-4" /> Cerrar caja
+          </button>
+        </div>
       </div>
 
       {error && <ErrorBanner mensaje={error} />}
 
       {/* Panel principal dividido */}
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid lg:grid-cols-2 gap-4 py-4">
 
-  {/* EFECTIVO */}
-<div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "2px solid rgba(34,197,94,0.3)" }}>
-    <div className="px-3 md:px-4 py-2.5 flex items-center gap-2">
-      <Banknote className="w-5 h-5 text-white" />
-      <h2 className="font-semibold">Efectivo en caja</h2>
-    </div>
-    <div className="p-3 md:p-4 space-y-2.5">
-      <FilaCaja num="1" label="Saldo inicial"     valor={fmt(caja?.saldoInicial  ?? 0)} sub="Apertura del turno"  color="text-gray-700" />
-      <FilaCaja num="2" label="(+) Ventas efec."  valor={`+ ${fmt(caja?.totalEfectivo  ?? 0)}`} sub="Ingresos del turno"  color="text-green-700" />
-      <FilaCaja num="+" label="(+) Ingresos"      valor={`+ ${fmt(caja?.totalIngresos ?? 0)}`} sub="Ingresos manuales"   color="text-green-700" />
-      <FilaCaja num="3" label="(-) Gastos/Retiros" valor={`- ${fmt(caja?.totalEgresos ?? 0)}`} sub="Salidas de capital"  color="text-red-700" />
-      <div className="border-t border-gray-200 pt-3 mt-1">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-gray-600 font-medium">4. (=) En caja</p>
-            <p className="text-xs text-gray-600">Saldo esperado actual</p>
+      {/* EFECTIVO */}
+      <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "2px solid rgba(34,197,94,0.3)" }}>
+        <div className="px-3 md:px-4 py-2.5 flex items-center gap-2">
+          <Banknote className="w-5 h-5 text-white" />
+          <h2 className="font-semibold">Efectivo en caja</h2>
+        </div>
+        <div className="p-3 md:p-4 space-y-2.5">
+          <FilaCaja num="1" label="Saldo inicial"     valor={fmt(caja?.saldoInicial  ?? 0)} sub="Apertura del turno"  color="text-gray-700" />
+          <FilaCaja num="2" label="(+) Ventas efec."  valor={`+ ${fmt(caja?.totalEfectivo  ?? 0)}`} sub="Ingresos del turno"  color="text-green-700" />
+          <FilaCaja num="+" label="(+) Ingresos"      valor={`+ ${fmt(caja?.totalIngresos ?? 0)}`} sub="Ingresos manuales"   color="text-green-700" />
+          <FilaCaja num="3" label="(-) Gastos/Retiros" valor={`- ${fmt(caja?.totalEgresos ?? 0)}`} sub="Salidas de capital"  color="text-red-700" />
+          <div className="border-t border-gray-200 pt-3 mt-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-600 font-medium">4. (=) En caja</p>
+                <p className="text-xs text-gray-600">Saldo esperado actual</p>
+              </div>
+              <p className="text-2xl font-bold text-green-700">{fmt(caja?.saldoActual ?? 0)}</p>
+            </div>
           </div>
-          <p className="text-2xl font-bold text-green-700">{fmt(caja?.saldoActual ?? 0)}</p>
         </div>
       </div>
-    </div>
-  </div>
 
-  {/* VIRTUAL */}
-<div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "2px solid rgba(34,197,94,0.3)" }}>
-    <div className="px-5 py-3 flex items-center gap-2" style={{ background: "#6b7280", color: "#ffffff" }}>
-      <Smartphone className="w-5 h-5" style={{ color: "#ffffff" }} />
-      <h2 className="font-semibold" style={{ color: "#ffffff" }}>Ventas virtuales</h2>
-      <span className="ml-auto text-xs" style={{ color: "rgba(255,255,255,0.8)" }}>No afectan la caja física</span>
-    </div>
-    <div className="p-5 space-y-3">
-      <FilaCaja label="Transferencia"     valor={fmt(caja?.totalTransferencia ?? 0)} color="text-purple-700" icon={<Landmark   className="w-3.5 h-3.5" />} />
-      <FilaCaja label="Mercado Pago / QR" valor={fmt(caja?.totalMercadoPago   ?? 0)} color="text-purple-700" icon={<Smartphone className="w-3.5 h-3.5" />} />
-      <div className="pt-3" style={{ borderTop: "1px solid var(--border-base)" }}>
-        <div className="bg-gray-50 rounded-lg p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <CreditCard className="w-4 h-4 text-gray-600" />
-            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Tarjetas</p>
-            <span className="text-xs text-gray-600 ml-auto">Acred. diferida</span>
+      {/* VIRTUAL */}
+      <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "2px solid rgba(34,197,94,0.3)" }}>
+          <div className="px-5 py-3 flex items-center gap-2" style={{ background: "#6b7280", color: "#ffffff" }}>
+            <Smartphone className="w-5 h-5" style={{ color: "#ffffff" }} />
+            <h2 className="font-semibold" style={{ color: "#ffffff" }}>Ventas virtuales</h2>
+            <span className="ml-auto text-xs" style={{ color: "rgba(255,255,255,0.8)" }}>No afectan la caja física</span>
           </div>
-          <FilaCaja label="Débito"  valor={fmt(caja?.totalTarjetaDebito  ?? 0)} color="text-blue-700" icon={<CreditCard className="w-3.5 h-3.5" />} />
-          <FilaCaja label="Crédito" valor={fmt(caja?.totalTarjetaCredito ?? 0)} color="text-blue-700" icon={<CreditCard className="w-3.5 h-3.5" />} />
+          <div className="p-5 space-y-3">
+            <FilaCaja label="Transferencia"     valor={fmt(caja?.totalTransferencia ?? 0)} color="text-purple-700" icon={<Landmark   className="w-3.5 h-3.5" />} />
+            <FilaCaja label="Mercado Pago / QR" valor={fmt(caja?.totalMercadoPago   ?? 0)} color="text-purple-700" icon={<Smartphone className="w-3.5 h-3.5" />} />
+            <div className="pt-3" style={{ borderTop: "1px solid var(--border-base)" }}>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <CreditCard className="w-4 h-4 text-gray-600" />
+                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Tarjetas</p>
+                  <span className="text-xs text-gray-600 ml-auto">Acred. diferida</span>
+                </div>
+                <FilaCaja label="Débito"  valor={fmt(caja?.totalTarjetaDebito  ?? 0)} color="text-blue-700" icon={<CreditCard className="w-3.5 h-3.5" />} />
+                <FilaCaja label="Crédito" valor={fmt(caja?.totalTarjetaCredito ?? 0)} color="text-blue-700" icon={<CreditCard className="w-3.5 h-3.5" />} />
+              </div>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: "var(--bg-surface)" }}>
+              <div className="flex justify-between items-center">
+                <p className="text-sm font-semibold text-gray-700">Total virtual</p>
+                <p className="text-lg font-bold text-gray-800">{fmt((caja?.totalVirtuales ?? 0) + (caja?.totalTarjetas ?? 0))}</p>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="rounded-lg p-3" style={{ background: "var(--bg-surface)" }}>
-        <div className="flex justify-between items-center">
-          <p className="text-sm font-semibold text-gray-700">Total virtual</p>
-          <p className="text-lg font-bold text-gray-800">{fmt((caja?.totalVirtuales ?? 0) + (caja?.totalTarjetas ?? 0))}</p>
-        </div>
-      </div>
-    </div>
-  </div>
 
-</div>
+      </div>
       {/* Botones acción */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3 py-2.5">
         <button onClick={() => { setError(null); setModalVenta(true); }}
-          className="flex flex-col items-center justify-center gap-1.5 font-semibold py-3 md:py-4 transition-colors"
+          className="flex flex-col items-center justify-center gap-1.5 font-semibold py-3 md:py-4 transition-colors rounded-xl"
           style={{ background: "#16a34a", color: "#ffffff" }}
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#15803d"}
           onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#16a34a"}>
@@ -415,47 +624,47 @@ useEffect(() => {
       </div>
 
       {/* ── Modal Cobrar Venta ── */}
-{modalVenta && (
-  <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
-    <div 
-      className="w-full h-full max-w-[1920px] max-h-[1080px] flex flex-col rounded-xl overflow-hidden shadow-2xl"
-      style={{ background: "var(--bg-surface)" }}
-    >
-      {/* Header */}
-      <div 
-        className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
-        style={{ borderColor: "var(--border-base)" }}
-      >
-        <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-          Cobrar venta
-        </h3>
-        <button
-          onClick={() => { setModalVenta(false); setError(null); }}
-          className="flex items-center justify-center h-8 w-8 rounded-lg transition-colors"
-          style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </div>
+      {modalVenta && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
+          <div 
+            className="w-full h-full max-w-[1920px] max-h-[1080px] flex flex-col rounded-xl overflow-hidden shadow-2xl"
+            style={{ background: "var(--bg-surface)" }}
+          >
+            {/* Header */}
+            <div 
+              className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
+              style={{ borderColor: "var(--border-base)" }}
+            >
+              <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
+                Cobrar venta
+              </h3>
+              <button
+                onClick={() => { setModalVenta(false); setError(null); }}
+                className="flex items-center justify-center h-8 w-8 rounded-lg transition-colors"
+                style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-      {/* POS */}
-      <div className="flex-1 overflow-hidden">
-        {loadingProd ? (
-          <div className="flex items-center justify-center h-full">
-            <RefreshCw className="w-8 h-8 animate-spin" style={{ color: "var(--text-muted)" }} />
+            {/* POS */}
+            <div className="flex-1 overflow-hidden">
+              {loadingProd ? (
+                <div className="flex items-center justify-center h-full">
+                  <RefreshCw className="w-8 h-8 animate-spin" style={{ color: "var(--text-muted)" }} />
+                </div>
+              ) : (
+                <POSClient
+                  productosIniciales={prodCaja}
+                  categorias={categorias}
+                  isModal={true}
+                  onVentaExitosa={cargarDatos}
+                />
+              )}
+            </div>
           </div>
-        ) : (
-          <POSClient
-            productosIniciales={prodCaja}
-            categorias={categorias}
-            isModal={true}
-            onVentaExitosa={cargarDatos}
-          />
-        )}
-      </div>
-    </div>
-  </div>
-)}
+        </div>
+      )}
       {/* Modal movimiento manual */}
       {modalMovimiento && (
         <Modal title={modalMovimiento === "INGRESO" ? "Ingreso manual" : "Gasto / Retiro"} onClose={() => setModalMovimiento(null)}>
