@@ -156,6 +156,12 @@ export default async function ProductosPage({
         productos={productos}
         categorias={categorias}
         proveedores={proveedores}
+        totalProductos={total}           // ✨ NUEVO
+        filtrosActivos={{                 // ✨ NUEVO
+          busqueda,
+          categoriaId,
+          soloStockBajo,
+        }}
       />
 
       {/* Paginación — se queda en el Server Component */}

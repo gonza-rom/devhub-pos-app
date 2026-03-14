@@ -161,7 +161,6 @@ useEffect(() => {
       .then(d => {
         if (d.ok && d.saldoSugerido !== null) {
           setSaldoSugerido(d.saldoSugerido);
-          setSaldoInicial(String(d.saldoSugerido));
         }
       })
       .catch(console.error);
@@ -314,13 +313,13 @@ useEffect(() => {
                       Saldo del último cierre
                     </p>
                     <p className="text-xs text-blue-700 mt-0.5">
-                      El sistema sugiere abrir con {fmt(saldoSugerido)} basado en el cierre anterior
+                      Este fue el efectivo contado en el último cierre
                     </p>
                     <button
                       onClick={() => setSaldoInicial(String(saldoSugerido))}
                       className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-800 underline"
                     >
-                      Usar este saldo
+                      Usar {fmt(saldoSugerido)} como saldo inicial
                     </button>
                   </div>
                 </div>
@@ -417,10 +416,11 @@ useEffect(() => {
                 value={saldoInicial} 
                 onChange={setSaldoInicial} 
                 autoFocus 
+                placeholder={saldoSugerido !== null ? String(saldoSugerido) : "0.00"}
               />
               <p className="text-xs text-gray-500 mt-1">
                 {saldoSugerido !== null 
-                  ? "Puedes modificar el saldo si es necesario"
+                  ? `Sugerido: ${fmt(saldoSugerido)} - Ingresa el efectivo real que tienes`
                   : "Ingresa el efectivo con el que abres la caja"
                 }
               </p>
@@ -745,15 +745,15 @@ function FilaCaja({ num, label, valor, sub, color, icon }: {
   );
 }
 
-function InputMoneda({ value, onChange, autoFocus }: {
-  value: string; onChange: (v: string) => void; autoFocus?: boolean;
+function InputMoneda({ value, onChange, autoFocus, placeholder = "0.00" }: {
+  value: string; onChange: (v: string) => void; autoFocus?: boolean; placeholder?: string;
 }) {
   return (
     <div className="relative">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 font-medium">$</span>
       <input type="number" min="0" step="0.01" value={value} onChange={(e) => onChange(e.target.value)}
         className="input-base w-full pl-8 pr-4 py-3 text-lg"
-        placeholder="0.00" autoFocus={autoFocus} />
+        placeholder={placeholder} autoFocus={autoFocus} />
     </div>
   );
 }
