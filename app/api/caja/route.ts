@@ -130,19 +130,10 @@ export async function POST(req: NextRequest) {
 
     // ✨ DETECTAR TURNO AUTOMÁTICAMENTE
     const { turno, label } = detectarTurno();
-    const turnoFinal = turnoManual || turno; // Usar manual si se proporcionó
+    const turnoFinal = turnoManual || turno;
 
-    // ✨ NUEVO: Obtener el saldo contado de la última caja cerrada
-    const ultimaCajaCerrada = await prisma.caja.findFirst({
-      where: { tenantId, estado: "CERRADA" },
-      select: { saldoContado: true },
-      orderBy: { cerradaAt: "desc" },
-    });
-
-    // ✨ NUEVO: Usar saldo heredado si existe, sino usar el proporcionado
-    const saldoInicialFinal = ultimaCajaCerrada?.saldoContado ?? saldoInicial;
-
-    if (saldoInicialFinal < 0)
+    // ✅ VALIDAR SALDO (usar el que envía el usuario)
+    if (saldoInicial < 0)
       return NextResponse.json({ error: "Saldo inválido" }, { status: 400 });
 
     // ✅ Verificar caja abierta con select mínimo
@@ -159,26 +150,33 @@ export async function POST(req: NextRequest) {
           tenantId, 
           usuarioId, 
           usuarioNombre, 
-          saldoInicial: saldoInicialFinal,  // ← USAR SALDO HEREDADO
+          saldoInicial,  // ← USAR EL PROPORCIONADO POR EL USUARIO
           turno: turnoFinal,
           observaciones, 
           estado: "ABIERTA" 
         },
-        select: { id: true, saldoInicial: true, turno: true, usuarioNombre: true, abiertaAt: true, estado: true },
+        select: { 
+          id: true, 
+          saldoInicial: true, 
+          turno: true, 
+          usuarioNombre: true, 
+          abiertaAt: true, 
+          estado: true 
+        },
       });
+      
       await tx.movimientoCaja.create({
         data: {
           tenantId, 
           cajaId: nueva.id, 
           tipo: "APERTURA", 
-          monto: saldoInicialFinal,  // ← USAR SALDO HEREDADO
-          descripcion: ultimaCajaCerrada 
-            ? `Apertura con $${saldoInicialFinal.toFixed(2)} (heredado del cierre anterior)`
-            : `Apertura con $${saldoInicialFinal.toFixed(2)}`,
+          monto: saldoInicial,
+          descripcion: `Apertura con $${saldoInicial.toFixed(2)}`,
           usuarioId, 
           usuarioNombre,
         },
       });
+      
       return nueva;
     });
 

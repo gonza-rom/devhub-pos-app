@@ -8,6 +8,8 @@ import Sidebar            from "@/components/layout/Sidebar";
 import Topbar             from "@/components/layout/Topbar";
 import Link               from "next/link";
 import { AlertTriangle }  from "lucide-react";
+import { SessionKeepAlive } from "@/components/Supabase/SessionKeepAlive";
+
 
 const getTenantCached = unstable_cache(
   async (supabaseId: string) =>
@@ -100,6 +102,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           className="flex-1 overflow-y-auto p-4 md:p-6"
           style={{ background: "var(--bg-base)" }}
         >
+          <SessionKeepAlive />
           {children}
         </main>
       </div>

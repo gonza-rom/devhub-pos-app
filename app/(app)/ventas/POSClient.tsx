@@ -549,7 +549,11 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
         fechaManual:    fechaManual && fechaVenta ? fechaVenta : undefined,
       }),
     });
-
+    // Sesión expirada → redirigir al login
+    if (res.status === 401) {
+      window.location.href = `/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
     const data = await res.json();
 
     if (!data.ok) {
@@ -628,9 +632,13 @@ const { config: configAFIP, loading: loadingConfigAFIP } = useConfigAFIP();
         onVentaExitosa?.();
       }, 1200);
     }
-  } catch {
-    setMensajeError("Error de conexión");
-    setResultado("error");
+  } catch (err: any) {
+  // Error de red real (sin conexión, timeout, etc.)
+  setMensajeError(
+    err?.message?.includes("fetch")
+      ? "Sin conexión. Verificá tu internet."
+      : "Error al registrar la venta"
+  );
   } finally {
     setCargando(false);
   }

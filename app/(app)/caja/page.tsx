@@ -776,12 +776,28 @@ function BotonesModal({ onCancel, onConfirm, loading, labelConfirm, colorConfirm
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="rounded-2xl shadow-xl w-full max-w-md" style={{ background: "var(--bg-card)" }}>
-        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--border-base)" }}>
+      <div 
+        className="rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col" 
+        style={{ background: "var(--bg-card)" }}
+      >
+        {/* Header fijo */}
+        <div 
+          className="flex items-center justify-between px-6 py-4 flex-shrink-0" 
+          style={{ borderBottom: "1px solid var(--border-base)" }}
+        >
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-600 text-2xl leading-none">×</button>
+          <button 
+            onClick={onClose} 
+            className="text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        
+        {/* Contenido scrolleable */}
+        <div className="px-6 py-5 overflow-y-auto flex-1">
+          {children}
+        </div>
       </div>
     </div>
   );
