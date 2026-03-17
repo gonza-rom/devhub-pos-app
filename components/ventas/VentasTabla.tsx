@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Package, Receipt, Ban, AlertTriangle, X } from "lucide-react";
 import { formatPrecio } from "@/lib/utils";
+import { fmtFecha24HoraAR } from "@/lib/dateAR";
 import { useRouter } from "next/navigation";
 
 type ItemVenta = {
@@ -60,26 +61,13 @@ const METODO_TEXT: Record<string, string> = {
   MERCADOPAGO:   "#60a5fa",
 };
 
-function formatFecha(fecha: Date | string) {
-  const d = typeof fecha === "string" ? new Date(fecha) : fecha;
-  
-  return new Intl.DateTimeFormat("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  }).format(d);
-}
-
 export default function VentasTabla({ ventas }: Props) {
   const router = useRouter();
-  const [expandido, setExpandido] = useState<string | null>(null);
-  const [modalCancelar, setModalCancelar] = useState<Venta | null>(null);
+  const [expandido,         setExpandido]         = useState<string | null>(null);
+  const [modalCancelar,     setModalCancelar]     = useState<Venta | null>(null);
   const [motivoCancelacion, setMotivoCancelacion] = useState("");
-  const [cancelando, setCancelando] = useState(false);
-  const [error, setError] = useState("");
+  const [cancelando,        setCancelando]        = useState(false);
+  const [error,             setError]             = useState("");
 
   function toggle(id: string) {
     setExpandido((prev) => (prev === id ? null : id));
@@ -87,10 +75,8 @@ export default function VentasTabla({ ventas }: Props) {
 
   async function confirmarCancelacion() {
     if (!modalCancelar) return;
-    
     setCancelando(true);
     setError("");
-    
     try {
       const res = await fetch(`/api/ventas/${modalCancelar.id}/cancelar`, {
         method: "POST",
@@ -99,19 +85,12 @@ export default function VentasTabla({ ventas }: Props) {
           motivoCancelacion: motivoCancelacion || "Cancelado por administrador",
         }),
       });
-
       const data = await res.json();
-
-      if (!data.ok) {
-        setError(data.error ?? "Error al cancelar venta");
-        return;
-      }
-
-      // Cerrar modal y refrescar
+      if (!data.ok) { setError(data.error ?? "Error al cancelar venta"); return; }
       setModalCancelar(null);
       setMotivoCancelacion("");
       router.refresh();
-    } catch (err) {
+    } catch {
       setError("Error de conexión");
     } finally {
       setCancelando(false);
@@ -129,7 +108,7 @@ export default function VentasTabla({ ventas }: Props) {
                   <th
                     key={i}
                     className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider
-                      ${h === "Total" ? "text-right" : h === "Items" ? "text-center" : h === "Estado" ? "text-center" : "text-left"}`}
+                      ${h === "Total" ? "text-right" : h === "Items" || h === "Estado" ? "text-center" : "text-left"}`}
                     style={{ color: "var(--text-secondary)" }}
                   >
                     {h}
@@ -146,11 +125,17 @@ export default function VentasTabla({ ventas }: Props) {
                     className={`table-row cursor-pointer ${venta.cancelado ? "opacity-60" : ""}`}
                     onClick={() => toggle(venta.id)}
                   >
-                    {/* Fecha */}
+                    {/* Fecha — formato 24hs en AR */}
                     <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
                       <div className="flex items-center gap-2">
                         <Receipt className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "var(--text-faint)" }} />
-                        <span className="whitespace-nowrap">{formatFecha(venta.createdAt)}</span>
+                        <span className="whitespace-nowrap">
+                          {fmtFecha24HoraAR(
+                            typeof venta.createdAt === "string"
+                              ? venta.createdAt
+                              : venta.createdAt.toISOString()
+                          )}
+                        </span>
                       </div>
                       {venta.usuarioNombre && (
                         <p className="text-xs mt-0.5 pl-5" style={{ color: "var(--text-faint)" }}>
@@ -199,8 +184,7 @@ export default function VentasTabla({ ventas }: Props) {
                     <td className="px-4 py-3 text-center">
                       {venta.cancelado ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">
-                          <Ban className="h-3 w-3" />
-                          Cancelada
+                          <Ban className="h-3 w-3" /> Cancelada
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
@@ -235,8 +219,7 @@ export default function VentasTabla({ ventas }: Props) {
                             className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                             style={{ border: "1px solid rgba(220,38,38,0.3)" }}
                           >
-                            <Ban className="h-3 w-3" />
-                            Cancelar
+                            <Ban className="h-3 w-3" /> Cancelar
                           </button>
                         )}
                         <button
@@ -247,29 +230,22 @@ export default function VentasTabla({ ventas }: Props) {
                           }}
                           onClick={(e) => { e.stopPropagation(); toggle(venta.id); }}
                         >
-                          {abierto
-                            ? <ChevronUp className="h-3.5 w-3.5" />
-                            : <ChevronDown className="h-3.5 w-3.5" />
-                          }
+                          {abierto ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                         </button>
                       </div>
                     </td>
                   </tr>,
                 ];
 
-                // Fila de detalle
+                // Fila de detalle expandido
                 if (abierto) {
                   filas.push(
                     <tr key={`${venta.id}-detalle`}>
                       <td colSpan={7} className="px-4 pb-4 pt-0">
                         <div
                           className="rounded-xl overflow-hidden"
-                          style={{
-                            background: "var(--bg-surface)",
-                            border:     "1px solid var(--border-base)",
-                          }}
+                          style={{ background: "var(--bg-surface)", border: "1px solid var(--border-base)" }}
                         >
-                          {/* Motivo cancelación si existe */}
                           {venta.cancelado && venta.motivoCancelacion && (
                             <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
                               <p className="text-xs text-red-600 dark:text-red-400">
@@ -277,7 +253,6 @@ export default function VentasTabla({ ventas }: Props) {
                               </p>
                             </div>
                           )}
-                          
                           <table className="w-full text-xs">
                             <thead>
                               <tr style={{ borderBottom: "1px solid var(--border-base)" }}>
@@ -299,7 +274,7 @@ export default function VentasTabla({ ventas }: Props) {
                                     <div className="flex items-center gap-2">
                                       {item.producto?.imagen ? (
                                         <img
-                                          src={item.producto.imagen?.replace('/upload/', '/upload/f_auto,q_auto,w_200/')}
+                                          src={item.producto.imagen.replace("/upload/", "/upload/f_auto,q_auto,w_200/")}
                                           alt={item.nombre}
                                           loading="lazy"
                                           className="h-7 w-7 rounded-md object-cover flex-shrink-0"
@@ -330,7 +305,6 @@ export default function VentasTabla({ ventas }: Props) {
                             </tbody>
                           </table>
 
-                          {/* Footer detalle */}
                           <div
                             className="flex items-center justify-between px-4 py-3"
                             style={{ borderTop: "1px solid var(--border-base)" }}
@@ -346,8 +320,7 @@ export default function VentasTabla({ ventas }: Props) {
                               {(venta.descuento ?? 0) > 0 && (
                                 <p className="text-xs" style={{ color: "var(--text-faint)" }}>
                                   Subtotal: {formatPrecio(venta.subtotal ?? venta.total)}
-                                  {" · "}
-                                  Descuento:{" "}
+                                  {" · "}Descuento:{" "}
                                   <span style={{ color: "#f87171" }}>-{formatPrecio(venta.descuento!)}</span>
                                 </p>
                               )}
@@ -394,7 +367,11 @@ export default function VentasTabla({ ventas }: Props) {
                 Venta #{modalCancelar.id.slice(0, 8)}
               </p>
               <p className="text-gray-600 dark:text-gray-400">
-                {formatFecha(modalCancelar.createdAt)}
+                {fmtFecha24HoraAR(
+                  typeof modalCancelar.createdAt === "string"
+                    ? modalCancelar.createdAt
+                    : modalCancelar.createdAt.toISOString()
+                )}
               </p>
               <p className="text-lg font-bold text-red-600 dark:text-red-400">
                 {formatPrecio(modalCancelar.total)}
@@ -443,4 +420,4 @@ export default function VentasTabla({ ventas }: Props) {
       )}
     </>
   );
-} 
+}

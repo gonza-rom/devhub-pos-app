@@ -76,6 +76,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           nombreTenant={ut.tenant.nombre}
           plan={ut.tenant.plan}
           logoUrl={ut.tenant.logoUrl}
+          tieneAFIP={tieneAFIP}  // ← agregar esta línea
         />
 
         {/* ── Banner trial vencido ── */}

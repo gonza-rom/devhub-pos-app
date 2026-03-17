@@ -25,19 +25,22 @@ export default async function HistorialVentasPage({
   }>;
 }) {
   const headersList = await headers();
-  const tenantId = headersList.get("x-tenant-id")!;
+  const tenantId    = headersList.get("x-tenant-id")!;
+  const rol         = headersList.get("x-user-rol") ?? "EMPLEADO";
+  const esEmpleado  = rol === "EMPLEADO";
+
   const params = await searchParams;
 
-  const desde = params.desde ?? "";
-  const hasta = params.hasta ?? "";
-  const metodoPago = params.metodoPago ?? "";
-  const cliente = params.cliente ?? "";
-  const page = Math.max(1, parseInt(params.page ?? "1"));
+  const desde             = params.desde ?? "";
+  const hasta             = params.hasta ?? "";
+  const metodoPago        = params.metodoPago ?? "";
+  const cliente           = params.cliente ?? "";
+  const page              = Math.max(1, parseInt(params.page ?? "1"));
   const mostrarCanceladas = params.mostrarCanceladas === "true";
 
-  const where: any = { 
+  const where: any = {
     tenantId,
-    cancelado: mostrarCanceladas ? undefined : false, // ← EXCLUIR CANCELADAS por defecto
+    cancelado: mostrarCanceladas ? undefined : false,
   };
 
   if (desde || hasta) {
@@ -65,8 +68,8 @@ export default async function HistorialVentasPage({
         observaciones: true,
         usuarioNombre: true,
         createdAt: true,
-        cancelado: true,  // ← Agregar campo
-        motivoCancelacion: true, // ← Agregar campo
+        cancelado: true,
+        motivoCancelacion: true,
         items: {
           select: {
             id: true,
@@ -85,22 +88,25 @@ export default async function HistorialVentasPage({
     prisma.venta.count({ where }),
   ]);
 
-  const resumen = await prisma.venta.aggregate({
-    where,
-    _sum: { total: true },
-    _count: { id: true },
-  });
+  // Solo calcular resumen si no es empleado (evita query innecesaria)
+  const resumen = !esEmpleado
+    ? await prisma.venta.aggregate({
+        where,
+        _sum:   { total: true },
+        _count: { id: true },
+      })
+    : null;
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const desde_n = (page - 1) * PAGE_SIZE + 1;
-  const hasta_n = Math.min(page * PAGE_SIZE, total);
+  const desde_n    = (page - 1) * PAGE_SIZE + 1;
+  const hasta_n    = Math.min(page * PAGE_SIZE, total);
 
   const buildQuery = (newPage: number) => {
     const q = new URLSearchParams();
-    if (desde) q.set("desde", desde);
-    if (hasta) q.set("hasta", hasta);
-    if (metodoPago) q.set("metodoPago", metodoPago);
-    if (cliente) q.set("cliente", cliente);
+    if (desde)             q.set("desde",             desde);
+    if (hasta)             q.set("hasta",             hasta);
+    if (metodoPago)        q.set("metodoPago",        metodoPago);
+    if (cliente)           q.set("cliente",           cliente);
     if (mostrarCanceladas) q.set("mostrarCanceladas", "true");
     q.set("page", String(newPage));
     return `?${q.toString()}`;
@@ -119,6 +125,7 @@ export default async function HistorialVentasPage({
           Historial de ventas
         </Link>
       </div>
+
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
@@ -129,25 +136,27 @@ export default async function HistorialVentasPage({
         </p>
       </div>
 
-      {/* Resumen del período */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="card p-4">
-          <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: "var(--text-faint)" }}>
-            Ventas
-          </p>
-          <p className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-            {resumen._count.id}
-          </p>
+      {/* Resumen del período — oculto para empleados */}
+      {!esEmpleado && resumen && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="card p-4">
+            <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: "var(--text-faint)" }}>
+              Ventas
+            </p>
+            <p className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+              {resumen._count.id}
+            </p>
+          </div>
+          <div className="card p-4">
+            <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: "var(--text-faint)" }}>
+              Total recaudado
+            </p>
+            <p className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+              {formatPrecio(resumen._sum.total ?? 0)}
+            </p>
+          </div>
         </div>
-        <div className="card p-4">
-          <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: "var(--text-faint)" }}>
-            Total recaudado
-          </p>
-          <p className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
-            {formatPrecio(resumen._sum.total ?? 0)}
-          </p>
-        </div>
-      </div>
+      )}
 
       {/* Filtros */}
       <VentasFiltros
@@ -213,8 +222,8 @@ export default async function HistorialVentasPage({
                       className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
                       style={{
                         background: p === page ? "#DC2626" : "transparent",
-                        color: p === page ? "#ffffff" : "var(--text-secondary)",
-                        border: p === page ? "none" : "1px solid var(--border-base)",
+                        color:      p === page ? "#ffffff" : "var(--text-secondary)",
+                        border:     p === page ? "none" : "1px solid var(--border-base)",
                       }}>
                       {p}
                     </Link>

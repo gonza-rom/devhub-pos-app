@@ -6,42 +6,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import {
-  LayoutDashboard, ShoppingCart, Package, ArrowLeftRight,
-  BarChart3, Tag, Truck, Settings, Store, Crown, Users, DollarSign,
-  ChevronRight, ChevronDown, AlertTriangle, History, FileText,
+  Store, Crown, ChevronRight, ChevronDown, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import type { PlanTipo, RolTenant } from "@/types";
 import { getPlanUsoCache, setPlanUsoCache } from "@/lib/planUsoCache";
-
-
-type SubItem = { label: string; href: string; icon?: React.ElementType; soloPropietario?: boolean };
-type NavItem = { label: string; href: string; icon: React.ElementType; soloAdmin?: boolean; children?: SubItem[] };
-
-const navItems: NavItem[] = [
-  { label: "Dashboard",    href: "/dashboard",    icon: LayoutDashboard },
-  // ✅ CAMBIO 1: POS como item simple (sin children)
-  { label: "Punto de venta", href: "/ventas", icon: ShoppingCart },
-  // ✅ CAMBIO 2: Historial como item separado
-  { label: "Historial de ventas", href: "/historial-ventas", icon: History },
-  { label: "Caja",         href: "/caja",         icon: DollarSign },
-  { label: "Productos",    href: "/productos",    icon: Package },
-  { label: "Movimientos",  href: "/movimientos",  icon: ArrowLeftRight },
-  { label: "Estadísticas", href: "/estadisticas", icon: BarChart3, soloAdmin: true },
-  { label: "Categorías",   href: "/categorias",   icon: Tag,   soloAdmin: true },
-  { label: "Proveedores",  href: "/proveedores",  icon: Truck, soloAdmin: true },
-  { label: "Comprobantes", href: "/comprobantes", icon: FileText, soloAdmin: true },
-  {
-    label: "Configuración", href: "/configuracion", icon: Settings, soloAdmin: true,
-    children: [
-      { label: "Mi comercio",        href: "/configuracion" },
-      { label: "Plan y suscripción", href: "/configuracion/plan",     icon: Crown },
-      { label: "Usuarios",           href: "/configuracion/usuarios", icon: Users, soloPropietario: true },
-      { label: "Configuración AFIP", href: "/configuracion/afip",     icon: FileText },
-    ],
-  },
-];
+import { NAV_ITEMS, filtrarNavItems } from "@/lib/nav";
 
 const PLAN_BADGE: Record<PlanTipo, { label: string }> = {
   FREE:       { label: "Free"       },
@@ -80,7 +51,6 @@ function BarraUso({ label, uso, limite }: { label: string; uso: number; limite: 
 
 export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = false }: Props) {
   const pathname      = usePathname();
-  const esAdmin       = rol === "ADMINISTRADOR" || rol === "PROPIETARIO";
   const esPropietario = rol === "PROPIETARIO";
   const badge         = PLAN_BADGE[plan];
 
@@ -88,10 +58,12 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
   const [nombreLocal, setNombreLocal] = useState(nombreTenant);
   const [uso,         setUso]         = useState<UsoData>(null);
 
+  const items = filtrarNavItems(NAV_ITEMS, rol, tieneAFIP);
+
   // Grupos expandidos — arranca con el grupo activo según la ruta
   const [expandidos, setExpandidos] = useState<Set<string>>(() => {
     const inicial = new Set<string>();
-    navItems.forEach((item) => {
+    NAV_ITEMS.forEach((item) => {
       if (item.children && pathname.startsWith(item.href)) inicial.add(item.href);
     });
     return inicial;
@@ -104,35 +76,34 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
 
   // Expandir grupo automáticamente si la ruta cambia hacia él
   useEffect(() => {
-    navItems.forEach((item) => {
+    NAV_ITEMS.forEach((item) => {
       if (item.children && pathname.startsWith(item.href)) {
         setExpandidos((prev) => new Set(prev).add(item.href));
       }
     });
   }, [pathname]);
 
-useEffect(() => {
-  if (plan !== "FREE") return;
+  useEffect(() => {
+    if (plan !== "FREE") return;
 
-  // Usar cache si está vigente
-  const cached = getPlanUsoCache();
-  if (cached) {
-    setUso({ ...cached.uso, trial: cached.trial });
-    return;
-  }
+    const cached = getPlanUsoCache();
+    if (cached) {
+      setUso({ ...cached.uso, trial: cached.trial });
+      return;
+    }
 
-  apiFetch("/api/plan/uso")
-    .then((r) => r.json())
-    .then((d) => {
-      if (d.ok) {
-        setPlanUsoCache(d.data);
-        setUso({ ...d.data.uso, trial: d.data.trial });
-      }
-    })
-    .catch((err) => {
-      if (err?.message !== "SESSION_EXPIRED") console.error(err);
-    });
-}, [plan]);
+    apiFetch("/api/plan/uso")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok) {
+          setPlanUsoCache(d.data);
+          setUso({ ...d.data.uso, trial: d.data.trial });
+        }
+      })
+      .catch((err) => {
+        if (err?.message !== "SESSION_EXPIRED") console.error(err);
+      });
+  }, [plan]);
 
   useEffect(() => {
     const onLogo   = (e: Event) => { setLogoLocal((e as CustomEvent).detail.url); };
@@ -158,9 +129,6 @@ useEffect(() => {
     });
   }
 
-  const items = navItems
-    .filter((i) => !i.soloAdmin || esAdmin)
-    .filter((i) => i.href !== "/comprobantes" || tieneAFIP);
   const productosAlerta = plan === "FREE" && uso !== null && uso.productos >= 45;
 
   return (
@@ -209,7 +177,11 @@ useEffect(() => {
               <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>Trial</span>
               <span className="text-[10px] font-bold"
                 style={{ color: uso.trial.vencido ? "#f87171" : uso.trial.diasRestantes! <= 2 ? "#fbbf24" : "var(--text-secondary)" }}>
-                {uso.trial.vencido ? "Vencido" : uso.trial.diasRestantes === 1 ? "1 día restante" : `${uso.trial.diasRestantes} días restantes`}
+                {uso.trial.vencido
+                  ? "Vencido"
+                  : uso.trial.diasRestantes === 1
+                  ? "1 día restante"
+                  : `${uso.trial.diasRestantes} días restantes`}
               </span>
             </div>
           )}
@@ -287,7 +259,7 @@ useEffect(() => {
                     .map((sub) => {
                       const SubIcon   = sub.icon;
                       const subActivo =
-                        sub.href === "/configuracion"  ? pathname === "/configuracion"  :
+                        sub.href === "/configuracion" ? pathname === "/configuracion" :
                         pathname.startsWith(sub.href);
 
                       return (

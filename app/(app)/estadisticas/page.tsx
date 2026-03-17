@@ -375,7 +375,7 @@ export default function EstadisticasPage() {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
                 {productosMasVendidos.map((item, i) => (
-                <tr key={item.productoId} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                <tr key={item.productoId ?? `manual-${i}`} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                   <td className="px-5 py-3.5 font-bold text-gray-400 dark:text-gray-500 w-10">{i + 1}</td>
                   <td className="px-5 py-3.5 font-medium text-gray-900 dark:text-gray-100">{item.nombre}</td>
                   <td className="px-5 py-3.5">

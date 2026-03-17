@@ -1,6 +1,5 @@
 "use client";
 // app/(app)/caja/historial/page.tsx
-// ✅ FIXED: Celdas de Fecha y Turno separadas + filtro turno funcionando
 
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -10,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { fmtFechaAR, fmtHora24AR, fechaHoyAR } from "@/lib/dateAR";
 
 // ── Types ─────────────────────────────────────────────────────
 type TipoMov = "APERTURA" | "VENTA_EFECTIVO" | "VENTA_VIRTUAL" | "INGRESO" | "EGRESO" | "CIERRE";
@@ -48,14 +48,6 @@ type ModalEdicion = {
 const fmt = (n: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n);
 
-const fmtFecha = (iso: string) =>
-  new Date(iso).toLocaleDateString("es-AR", {
-    weekday: "short", day: "2-digit", month: "short", year: "numeric",
-  });
-
-const fmtHora = (iso: string) =>
-  new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
-
 const duracion = (desde: string, hasta: string) => {
   const diff = new Date(hasta).getTime() - new Date(desde).getTime();
   const h    = Math.floor(diff / 3600000);
@@ -93,16 +85,13 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
           <div>
             <h3 className="text-base font-semibold text-zinc-100">Detalle de cierre</h3>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {fmtFecha(caja.abiertaAt)} · {fmtHora(caja.abiertaAt)} → {caja.cerradaAt ? fmtHora(caja.cerradaAt) : "—"}
+              {fmtFechaAR(caja.abiertaAt)} · {fmtHora24AR(caja.abiertaAt)} → {caja.cerradaAt ? fmtHora24AR(caja.cerradaAt) : "—"}
               {caja.cerradaAt && (
                 <span className="ml-1.5 text-zinc-600">({duracion(caja.abiertaAt, caja.cerradaAt)})</span>
               )}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-200 transition-colors"
-          >
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -118,9 +107,9 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
             )}
             {caja.turno && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-medium inline-flex items-center gap-1">
-                {caja.turno === "mañana" && "🌅 Mañana"}
-                {caja.turno === "tarde" && "🌆 Tarde"}
-                {caja.turno === "noche" && "🌙 Noche"}
+                {caja.turno === "mañana"        && "🌅 Mañana"}
+                {caja.turno === "tarde"         && "🌆 Tarde"}
+                {caja.turno === "noche"         && "🌙 Noche"}
                 {caja.turno === "fuera_horario" && "⚠️ Fuera de horario"}
               </span>
             )}
@@ -129,16 +118,13 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
           {/* Resumen numérico */}
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: "Saldo inicial",     valor: caja.saldoInicial,   color: "text-zinc-300" },
-              { label: "Ventas efectivo",   valor: caja.totalEfectivo,  color: "text-green-400" },
-              { label: "Ingresos",          valor: caja.totalIngresos,  color: "text-green-400" },
-              { label: "Egresos",           valor: caja.totalEgresos,   color: "text-red-400" },
+              { label: "Saldo inicial",   valor: caja.saldoInicial,  color: "text-zinc-300"  },
+              { label: "Ventas efectivo", valor: caja.totalEfectivo,  color: "text-green-400" },
+              { label: "Ingresos",        valor: caja.totalIngresos,  color: "text-green-400" },
+              { label: "Egresos",         valor: caja.totalEgresos,   color: "text-red-400"   },
             ].map(({ label, valor, color }) => (
-              <div
-                key={label}
-                className="rounded-xl p-3"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
-              >
+              <div key={label} className="rounded-xl p-3"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
                 <p className="text-xs text-zinc-500 mb-1">{label}</p>
                 <p className={cn("text-base font-semibold", color)}>{fmt(valor)}</p>
               </div>
@@ -147,26 +133,18 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
 
           {/* Virtuales */}
           {caja.totalVirtuales > 0 && (
-            <div
-              className="rounded-xl p-4"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-            >
+            <div className="rounded-xl p-4"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
               <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">Ventas virtuales</p>
               <p className="text-base font-semibold text-purple-400">{fmt(caja.totalVirtuales)}</p>
             </div>
           )}
 
           {/* Cierre */}
-          <div
-            className={cn(
-              "rounded-xl p-4 space-y-2",
-              diff === 0
-                ? "border border-green-800/50 bg-green-900/10"
-                : diff > 0
-                ? "border border-blue-800/50 bg-blue-900/10"
-                : "border border-red-800/50 bg-red-900/10"
-            )}
-          >
+          <div className={cn("rounded-xl p-4 space-y-2",
+            diff === 0 ? "border border-green-800/50 bg-green-900/10"
+            : diff > 0 ? "border border-blue-800/50 bg-blue-900/10"
+            : "border border-red-800/50 bg-red-900/10")}>
             <div className="flex justify-between text-sm">
               <span className="text-zinc-300">Saldo esperado</span>
               <span className="text-zinc-200 font-medium">{fmt(caja.saldoFinal ?? 0)}</span>
@@ -175,15 +153,10 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
               <span className="text-zinc-300">Saldo contado</span>
               <span className="text-zinc-200 font-medium">{fmt(caja.saldoContado ?? 0)}</span>
             </div>
-            <div
-              className="flex justify-between text-sm pt-2"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
-            >
+            <div className="flex justify-between text-sm pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
               <span className="text-zinc-300 font-semibold">Diferencia</span>
-              <span className={cn(
-                "font-bold text-base",
-                diff === 0 ? "text-green-400" : diff > 0 ? "text-blue-400" : "text-red-400"
-              )}>
+              <span className={cn("font-bold text-base",
+                diff === 0 ? "text-green-400" : diff > 0 ? "text-blue-400" : "text-red-400")}>
                 {diff >= 0 ? "+" : ""}{fmt(diff)}
               </span>
             </div>
@@ -191,10 +164,8 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
 
           {/* Observaciones */}
           {caja.observaciones && (
-            <div
-              className="rounded-xl px-4 py-3 text-sm text-zinc-400"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-            >
+            <div className="rounded-xl px-4 py-3 text-sm text-zinc-400"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
               <p className="text-xs text-zinc-600 mb-1">Observaciones</p>
               {caja.observaciones}
             </div>
@@ -205,26 +176,19 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
             <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">
               Movimientos ({caja.movimientos.length})
             </p>
-            <div
-              className="rounded-xl overflow-hidden divide-y"
-              style={{ border: "1px solid rgba(255,255,255,0.07)", borderColor: "rgba(255,255,255,0.07)" }}
-            >
+            <div className="rounded-xl overflow-hidden divide-y"
+              style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
               {caja.movimientos.length === 0 ? (
                 <p className="text-center text-zinc-600 py-6 text-sm">Sin movimientos</p>
               ) : caja.movimientos.map((mov) => (
-                <div
-                  key={mov.id}
-                  className="flex items-center gap-3 px-4 py-3"
-                  style={{ borderColor: "rgba(255,255,255,0.05)" }}
-                >
-                  <span
-                    className="text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0"
+                <div key={mov.id} className="flex items-center gap-3 px-4 py-3"
+                  style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0"
                     style={{
                       background: esPositivo(mov.tipo) ? "rgba(34,197,94,0.12)" : "rgba(220,38,38,0.12)",
-                      color: esPositivo(mov.tipo) ? "#4ade80" : "#f87171",
-                      border: `1px solid ${esPositivo(mov.tipo) ? "rgba(34,197,94,0.2)" : "rgba(220,38,38,0.2)"}`,
-                    }}
-                  >
+                      color:      esPositivo(mov.tipo) ? "#4ade80" : "#f87171",
+                      border:     `1px solid ${esPositivo(mov.tipo) ? "rgba(34,197,94,0.2)" : "rgba(220,38,38,0.2)"}`,
+                    }}>
                     {tipoLabel[mov.tipo]}
                   </span>
                   <div className="flex-1 min-w-0">
@@ -234,13 +198,11 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
                     )}
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className={cn(
-                      "text-sm font-semibold",
-                      esPositivo(mov.tipo) ? "text-green-400" : "text-red-400"
-                    )}>
+                    <p className={cn("text-sm font-semibold", esPositivo(mov.tipo) ? "text-green-400" : "text-red-400")}>
                       {esPositivo(mov.tipo) ? "+" : "−"}{fmt(mov.monto)}
                     </p>
-                    <p className="text-xs text-zinc-600">{fmtHora(mov.createdAt)}</p>
+                    {/* ✅ Hora en AR */}
+                    <p className="text-xs text-zinc-600">{fmtHora24AR(mov.createdAt)}</p>
                   </div>
                 </div>
               ))}
@@ -260,12 +222,11 @@ export default function HistorialCajaPage() {
   const [total,   setTotal]   = useState(0);
   const [desde,   setDesde]   = useState("");
   const [hasta,   setHasta]   = useState("");
-  const [turnoFiltro, setTurnoFiltro] = useState("");
-  const [detalle, setDetalle] = useState<CajaCerrada | null>(null);
-
-  const [modalEditar,     setModalEditar]     = useState<ModalEdicion | null>(null);
-  const [modalEliminar,   setModalEliminar]   = useState<string | null>(null);
-  const [cargandoAccion,  setCargandoAccion]  = useState(false);
+  const [turnoFiltro,    setTurnoFiltro]    = useState("");
+  const [detalle,        setDetalle]        = useState<CajaCerrada | null>(null);
+  const [modalEditar,    setModalEditar]    = useState<ModalEdicion | null>(null);
+  const [modalEliminar,  setModalEliminar]  = useState<string | null>(null);
+  const [cargandoAccion, setCargandoAccion] = useState(false);
 
   const limit = 15;
 
@@ -275,8 +236,8 @@ export default function HistorialCajaPage() {
       const params = new URLSearchParams({
         page:  String(p),
         limit: String(limit),
-        ...(desde && { desde }),
-        ...(hasta && { hasta }),
+        ...(desde       && { desde }),
+        ...(hasta       && { hasta }),
         ...(turnoFiltro && { turno: turnoFiltro }),
       });
       const res  = await fetch(`/api/caja/historial?${params}`);
@@ -295,58 +256,31 @@ export default function HistorialCajaPage() {
 
   const handleEditar = async () => {
     if (!modalEditar) return;
-    
     const saldo = parseFloat(modalEditar.saldoContado);
-    if (isNaN(saldo) || saldo < 0) {
-      alert("Saldo contado inválido");
-      return;
-    }
-    
+    if (isNaN(saldo) || saldo < 0) { alert("Saldo contado inválido"); return; }
     setCargandoAccion(true);
     try {
       const res = await fetch(`/api/caja/historial/${modalEditar.caja.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          saldoContado: saldo,
-          observaciones: modalEditar.observaciones.trim() || null,
-        }),
+        body: JSON.stringify({ saldoContado: saldo, observaciones: modalEditar.observaciones.trim() || null }),
       });
-
-      if (res.ok) {
-        setModalEditar(null);
-        fetchHistorial(page);
-      } else {
-        const err = await res.json();
-        alert(err.error || "Error al editar");
-      }
-    } finally {
-      setCargandoAccion(false);
-    }
+      if (res.ok) { setModalEditar(null); fetchHistorial(page); }
+      else { const err = await res.json(); alert(err.error || "Error al editar"); }
+    } finally { setCargandoAccion(false); }
   };
 
   const handleEliminar = async (id: string) => {
     setCargandoAccion(true);
     try {
-      const res = await fetch(`/api/caja/historial/${id}`, {
-        method: "DELETE",
-      });
-
-      if (res.ok) {
-        setModalEliminar(null);
-        fetchHistorial(page);
-      } else {
-        const err = await res.json();
-        alert(err.error || "Error al eliminar");
-      }
-    } finally {
-      setCargandoAccion(false);
-    }
+      const res = await fetch(`/api/caja/historial/${id}`, { method: "DELETE" });
+      if (res.ok) { setModalEliminar(null); fetchHistorial(page); }
+      else { const err = await res.json(); alert(err.error || "Error al eliminar"); }
+    } finally { setCargandoAccion(false); }
   };
 
   const totalPages = Math.ceil(total / limit);
 
-  // Totales del período visible
   const totalesPeriodo = cajas.reduce((acc, c) => ({
     efectivo:  acc.efectivo  + c.totalEfectivo,
     virtuales: acc.virtuales + c.totalVirtuales,
@@ -360,16 +294,12 @@ export default function HistorialCajaPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Link
-            href="/caja"
-            className="text-zinc-500 hover:text-zinc-200 transition-colors"
-          >
+          <Link href="/caja" className="text-zinc-500 hover:text-zinc-200 transition-colors">
             <ChevronLeft className="h-5 w-5" />
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <History className="h-6 w-6 text-zinc-400" />
-              Historial de caja
+              <History className="h-6 w-6 text-zinc-400" /> Historial de caja
             </h1>
             <p className="text-sm text-zinc-500 mt-0.5">{total} sesiones cerradas</p>
           </div>
@@ -380,29 +310,15 @@ export default function HistorialCajaPage() {
       <div className="card p-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="label-base">Desde</label>
-          <input
-            type="date"
-            value={desde}
-            onChange={e => setDesde(e.target.value)}
-            className="input-base w-44"
-          />
+          <input type="date" value={desde} onChange={e => setDesde(e.target.value)} className="input-base w-44" />
         </div>
         <div>
           <label className="label-base">Hasta</label>
-          <input
-            type="date"
-            value={hasta}
-            onChange={e => setHasta(e.target.value)}
-            className="input-base w-44"
-          />
+          <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} className="input-base w-44" />
         </div>
         <div>
           <label className="label-base">Turno</label>
-          <select
-            value={turnoFiltro}
-            onChange={e => setTurnoFiltro(e.target.value)}
-            className="input-base w-44"
-          >
+          <select value={turnoFiltro} onChange={e => setTurnoFiltro(e.target.value)} className="input-base w-44">
             <option value="">Todos</option>
             <option value="mañana">🌅 Mañana</option>
             <option value="tarde">🌆 Tarde</option>
@@ -410,18 +326,11 @@ export default function HistorialCajaPage() {
             <option value="fuera_horario">⚠️ Fuera de horario</option>
           </select>
         </div>
-        <button
-          onClick={() => fetchHistorial(1)}
-          className="btn-primary"
-        >
-          <Search className="h-4 w-4" />
-          Filtrar
+        <button onClick={() => fetchHistorial(1)} className="btn-primary">
+          <Search className="h-4 w-4" /> Filtrar
         </button>
         {(desde || hasta || turnoFiltro) && (
-          <button
-            onClick={() => { setDesde(""); setHasta(""); setTurnoFiltro(""); }}
-            className="btn-ghost"
-          >
+          <button onClick={() => { setDesde(""); setHasta(""); setTurnoFiltro(""); }} className="btn-ghost">
             Limpiar
           </button>
         )}
@@ -431,10 +340,10 @@ export default function HistorialCajaPage() {
       {cajas.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Efectivo",   valor: totalesPeriodo.efectivo,  icon: Banknote,      color: "text-green-400" },
-            { label: "Virtuales",  valor: totalesPeriodo.virtuales, icon: Smartphone,    color: "text-purple-400" },
-            { label: "Ingresos",   valor: totalesPeriodo.ingresos,  icon: ArrowUpRight,  color: "text-emerald-400" },
-            { label: "Egresos",    valor: totalesPeriodo.egresos,   icon: ArrowDownRight, color: "text-red-400" },
+            { label: "Efectivo",  valor: totalesPeriodo.efectivo,  icon: Banknote,       color: "text-green-400"   },
+            { label: "Virtuales", valor: totalesPeriodo.virtuales, icon: Smartphone,     color: "text-purple-400"  },
+            { label: "Ingresos",  valor: totalesPeriodo.ingresos,  icon: ArrowUpRight,   color: "text-emerald-400" },
+            { label: "Egresos",   valor: totalesPeriodo.egresos,   icon: ArrowDownRight, color: "text-red-400"     },
           ].map(({ label, valor, icon: Icon, color }) => (
             <div key={label} className="card p-4">
               <div className="flex items-center gap-2 mb-1">
@@ -450,7 +359,7 @@ export default function HistorialCajaPage() {
       {/* Tabla */}
       {loading ? (
         <div className="card py-20 flex items-center justify-center">
-          <RefreshCw className="h-8 h-8 animate-spin text-zinc-600" />
+          <RefreshCw className="h-8 w-8 animate-spin text-zinc-600" />
         </div>
       ) : cajas.length === 0 ? (
         <div className="card py-20 text-center">
@@ -465,18 +374,11 @@ export default function HistorialCajaPage() {
               <thead style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                 <tr>
                   {["Fecha", "Turno", "Efectivo", "Virtuales", "Diferencia", "Ventas", "Acciones"].map((h) => (
-                    <th
-                      key={h}
-                      className={cn(
-                        "px-4 py-3 text-xs font-semibold text-zinc-600 uppercase tracking-wider",
-                        h === "Efectivo" || h === "Virtuales" || h === "Diferencia" || h === "Acciones"
-                          ? "text-right"
-                          : h === "Ventas" ? "text-center"
-                          : "text-left"
-                      )}
-                    >
-                      {h}
-                    </th>
+                    <th key={h} className={cn(
+                      "px-4 py-3 text-xs font-semibold text-zinc-600 uppercase tracking-wider",
+                      ["Efectivo", "Virtuales", "Diferencia", "Acciones"].includes(h) ? "text-right"
+                      : h === "Ventas" ? "text-center" : "text-left"
+                    )}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -484,83 +386,56 @@ export default function HistorialCajaPage() {
                 {cajas.map((caja) => {
                   const diff = caja.diferencia ?? 0;
                   return (
-                    <tr
-                      key={caja.id}
-                      className="table-row"
-                    >
-                      {/* ✅ CELDA FECHA (separada) */}
+                    <tr key={caja.id} className="table-row">
+                      {/* ✅ Fecha y hora en AR */}
                       <td className="px-4 py-3">
-                        <p className="text-zinc-200 font-medium">{fmtFecha(caja.abiertaAt)}</p>
+                        <p className="text-zinc-200 font-medium">{fmtFechaAR(caja.abiertaAt)}</p>
                         <p className="text-xs text-zinc-600 flex items-center gap-1 mt-0.5">
                           <Clock className="h-3 w-3" />
-                          {fmtHora(caja.abiertaAt)} → {caja.cerradaAt ? fmtHora(caja.cerradaAt) : "—"}
-                          {caja.cerradaAt && (
-                            <span className="ml-1">· {duracion(caja.abiertaAt, caja.cerradaAt)}</span>
-                          )}
+                          {fmtHora24AR(caja.abiertaAt)} → {caja.cerradaAt ? fmtHora24AR(caja.cerradaAt) : "—"}
+                          {caja.cerradaAt && <span className="ml-1">· {duracion(caja.abiertaAt, caja.cerradaAt)}</span>}
                         </p>
                       </td>
 
-                      {/* ✅ CELDA TURNO (separada) */}
                       <td className="px-4 py-3">
                         {caja.turno ? (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-medium inline-flex items-center gap-1">
-                            {caja.turno === "mañana" && "🌅"}
-                            {caja.turno === "tarde" && "🌆"}
-                            {caja.turno === "noche" && "🌙"}
+                            {caja.turno === "mañana"        && "🌅"}
+                            {caja.turno === "tarde"         && "🌆"}
+                            {caja.turno === "noche"         && "🌙"}
                             {caja.turno === "fuera_horario" && "⚠️"}
                             <span className="capitalize">{caja.turno.replace("_", " ")}</span>
                           </span>
-                        ) : (
-                          <span className="text-zinc-700">—</span>
-                        )}
+                        ) : <span className="text-zinc-700">—</span>}
                       </td>
 
-                      <td className="px-4 py-3 text-right text-green-400 font-semibold">
-                        {fmt(caja.totalEfectivo)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-purple-400 font-semibold">
-                        {fmt(caja.totalVirtuales)}
-                      </td>
+                      <td className="px-4 py-3 text-right text-green-400 font-semibold">{fmt(caja.totalEfectivo)}</td>
+                      <td className="px-4 py-3 text-right text-purple-400 font-semibold">{fmt(caja.totalVirtuales)}</td>
                       <td className="px-4 py-3 text-right">
-                        <span className={cn(
-                          "font-semibold",
-                          diff === 0 ? "text-zinc-400" : diff > 0 ? "text-blue-400" : "text-red-400"
-                        )}>
+                        <span className={cn("font-semibold",
+                          diff === 0 ? "text-zinc-400" : diff > 0 ? "text-blue-400" : "text-red-400")}>
                           {diff >= 0 ? "+" : ""}{fmt(diff)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span
-                          className="text-xs font-medium px-2 py-0.5 rounded-full"
-                          style={{ background: "rgba(255,255,255,0.06)", color: "#a1a1aa" }}
-                        >
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(255,255,255,0.06)", color: "#a1a1aa" }}>
                           {caja.cantidadVentas}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => setModalEditar({
-                              caja,
-                              saldoContado: String(caja.saldoContado || 0),
-                              observaciones: caja.observaciones || "",
-                            })}
-                            className="text-xs text-zinc-400 hover:text-blue-400 transition-colors flex items-center gap-1"
-                          >
-                            <Edit className="h-3 w-3" />
-                            Editar
+                            onClick={() => setModalEditar({ caja, saldoContado: String(caja.saldoContado || 0), observaciones: caja.observaciones || "" })}
+                            className="text-xs text-zinc-400 hover:text-blue-400 transition-colors flex items-center gap-1">
+                            <Edit className="h-3 w-3" /> Editar
                           </button>
                           <button
                             onClick={() => setModalEliminar(caja.id)}
-                            className="text-xs text-zinc-400 hover:text-red-400 transition-colors flex items-center gap-1"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            Eliminar
+                            className="text-xs text-zinc-400 hover:text-red-400 transition-colors flex items-center gap-1">
+                            <Trash2 className="h-3 w-3" /> Eliminar
                           </button>
-                          <button
-                            onClick={() => setDetalle(caja)}
-                            className="text-xs text-zinc-600 hover:text-zinc-300"
-                          >
+                          <button onClick={() => setDetalle(caja)} className="text-xs text-zinc-600 hover:text-zinc-300">
                             Ver →
                           </button>
                         </div>
@@ -572,28 +447,17 @@ export default function HistorialCajaPage() {
             </table>
           </div>
 
-          {/* Paginación */}
           {totalPages > 1 && (
-            <div
-              className="flex items-center justify-between px-4 py-3"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
-            >
-              <p className="text-xs text-zinc-600">
-                Página {page} de {totalPages} · {total} sesiones
-              </p>
+            <div className="flex items-center justify-between px-4 py-3"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <p className="text-xs text-zinc-600">Página {page} de {totalPages} · {total} sesiones</p>
               <div className="flex gap-2">
-                <button
-                  onClick={() => fetchHistorial(page - 1)}
-                  disabled={page <= 1}
-                  className="btn-ghost px-3 py-1.5 text-xs disabled:opacity-30"
-                >
+                <button onClick={() => fetchHistorial(page - 1)} disabled={page <= 1}
+                  className="btn-ghost px-3 py-1.5 text-xs disabled:opacity-30">
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <button
-                  onClick={() => fetchHistorial(page + 1)}
-                  disabled={page >= totalPages}
-                  className="btn-ghost px-3 py-1.5 text-xs disabled:opacity-30"
-                >
+                <button onClick={() => fetchHistorial(page + 1)} disabled={page >= totalPages}
+                  className="btn-ghost px-3 py-1.5 text-xs disabled:opacity-30">
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
@@ -603,61 +467,36 @@ export default function HistorialCajaPage() {
       )}
 
       {/* Modal detalle */}
-      {detalle && (
-        <DetalleCaja caja={detalle} onClose={() => setDetalle(null)} />
-      )}
+      {detalle && <DetalleCaja caja={detalle} onClose={() => setDetalle(null)} />}
 
       {/* Modal Editar */}
       {modalEditar && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.7)" }}
-          onClick={() => setModalEditar(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl p-6 space-y-4"
+          onClick={() => setModalEditar(null)}>
+          <div className="w-full max-w-md rounded-2xl p-6 space-y-4"
             style={{ background: "#161616", border: "1px solid rgba(255,255,255,0.1)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+            onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-white">Editar cierre de caja</h3>
-            
             <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-1">
-                Saldo contado
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={modalEditar.saldoContado}
+              <label className="block text-sm font-medium text-zinc-400 mb-1">Saldo contado</label>
+              <input type="number" step="0.01" value={modalEditar.saldoContado}
                 onChange={(e) => setModalEditar({ ...modalEditar, saldoContado: e.target.value })}
-                className="input-base w-full"
-              />
+                className="input-base w-full" />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-1">
-                Observaciones
-              </label>
-              <textarea
-                value={modalEditar.observaciones}
+              <label className="block text-sm font-medium text-zinc-400 mb-1">Observaciones</label>
+              <textarea value={modalEditar.observaciones}
                 onChange={(e) => setModalEditar({ ...modalEditar, observaciones: e.target.value })}
-                className="input-base w-full"
-                rows={3}
-              />
+                className="input-base w-full" rows={3} />
             </div>
-
             <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setModalEditar(null)}
-                className="flex-1 py-2 border border-zinc-700 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors"
-              >
+              <button onClick={() => setModalEditar(null)}
+                className="flex-1 py-2 border border-zinc-700 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors">
                 Cancelar
               </button>
-              <button
-                onClick={handleEditar}
-                disabled={cargandoAccion}
-                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors"
-              >
+              <button onClick={handleEditar} disabled={cargandoAccion}
+                className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors">
                 {cargandoAccion ? "Guardando..." : "Guardar"}
               </button>
             </div>
@@ -667,16 +506,12 @@ export default function HistorialCajaPage() {
 
       {/* Modal Eliminar */}
       {modalEliminar && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.7)" }}
-          onClick={() => setModalEliminar(null)}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl p-6 space-y-4"
+          onClick={() => setModalEliminar(null)}>
+          <div className="w-full max-w-sm rounded-2xl p-6 space-y-4"
             style={{ background: "#161616", border: "1px solid rgba(255,255,255,0.1)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+            onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-900/20 flex items-center justify-center">
                 <AlertTriangle className="h-5 w-5 text-red-400" />
@@ -688,19 +523,13 @@ export default function HistorialCajaPage() {
                 </p>
               </div>
             </div>
-
             <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setModalEliminar(null)}
-                className="flex-1 py-2 border border-zinc-700 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors"
-              >
+              <button onClick={() => setModalEliminar(null)}
+                className="flex-1 py-2 border border-zinc-700 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors">
                 Cancelar
               </button>
-              <button
-                onClick={() => handleEliminar(modalEliminar)}
-                disabled={cargandoAccion}
-                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 transition-colors"
-              >
+              <button onClick={() => handleEliminar(modalEliminar)} disabled={cargandoAccion}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 transition-colors">
                 {cargandoAccion ? "Eliminando..." : "Eliminar"}
               </button>
             </div>

@@ -10,6 +10,10 @@ import {
   Edit, Save, CreditCard, Download
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  fechaHoyAR, horaAhoraAR, fmtHora24AR, fmtFechaHoraAR,
+  isoAFechaInputAR, isoAHoraInputAR,
+} from "@/lib/dateAR";
 
 // ── Tipos ─────────────────────────────────────────────────────
 
@@ -59,7 +63,7 @@ type ItemCarrito = {
   stock: number;
   imagen: string | null;
   esManual: boolean;
-  id?: string; // solo ítems manuales
+  id?: string;
 };
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -82,67 +86,64 @@ export default function MovimientosPage() {
   const [paginacion, setPaginacion]     = useState<Paginacion>({ page: 1, total: 0, totalPages: 1, hasNext: false, hasPrev: false });
   const [paginaActual, setPaginaActual] = useState(1);
 
-  // ── Modo formulario: 'ENTRADA' | 'SALIDA' | 'VENTA' | null ──
   const [modoFormulario, setModoFormulario] = useState<"ENTRADA" | "SALIDA" | "VENTA" | null>(null);
 
   // ── Formulario ENTRADA / SALIDA ──
-  const [busquedaProducto, setBusquedaProducto]     = useState("");
-  const busquedaDebounced                           = useDebounce(busquedaProducto, 350);
-  const [sugerencias, setSugerencias]               = useState<Producto[]>([]);
-  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const [busquedaProducto, setBusquedaProducto]       = useState("");
+  const busquedaDebounced                             = useDebounce(busquedaProducto, 350);
+  const [sugerencias, setSugerencias]                 = useState<Producto[]>([]);
+  const [mostrarSugerencias, setMostrarSugerencias]   = useState(false);
   const [buscandoSugerencias, setBuscandoSugerencias] = useState(false);
   const [formData, setFormData] = useState({
     productoId: "", productoNombre: "",
     cantidad: "", motivo: "",
-    fecha: new Date().toISOString().split("T")[0],
-    hora: new Date().toTimeString().slice(0, 5),
+    fecha:    fechaHoyAR(),
+    hora:     horaAhoraAR(),
     horaAuto: true,
   });
 
   // ── POS (VENTA) ──
-  const [posProductos, setPosProductos]     = useState<Producto[]>([]);
-  const [posTotalPaginas, setPosTotalPaginas] = useState(1);
-  const [posPaginaActual, setPosPaginaActual] = useState(1);
-  const [posLoading, setPosLoading]         = useState(false);
-  const [posBusqueda, setPosBusqueda]       = useState("");
-  const posBusquedaDebounced                = useDebounce(posBusqueda, 400);
-  const [carrito, setCarrito]               = useState<ItemCarrito[]>([]);
-  const [metodoPago, setMetodoPago]         = useState("EFECTIVO");
-  const [clienteNombre, setClienteNombre]   = useState("");
-  const [clienteDni, setClienteDni]         = useState("");
-  const [fechaVenta, setFechaVenta]         = useState(new Date().toISOString().split("T")[0]);
-  const [horaVenta, setHoraVenta]           = useState(new Date().toTimeString().slice(0, 5));
-  const [horaVentaAuto, setHoraVentaAuto]   = useState(true);
-  const [procesandoVenta, setProcesandoVenta] = useState(false);
-  const [ventaExito, setVentaExito]         = useState("");
-  const [ventaError, setVentaError]         = useState("");
+  const [posProductos, setPosProductos]         = useState<Producto[]>([]);
+  const [posTotalPaginas, setPosTotalPaginas]   = useState(1);
+  const [posPaginaActual, setPosPaginaActual]   = useState(1);
+  const [posLoading, setPosLoading]             = useState(false);
+  const [posBusqueda, setPosBusqueda]           = useState("");
+  const posBusquedaDebounced                    = useDebounce(posBusqueda, 400);
+  const [carrito, setCarrito]                   = useState<ItemCarrito[]>([]);
+  const [metodoPago, setMetodoPago]             = useState("EFECTIVO");
+  const [clienteNombre, setClienteNombre]       = useState("");
+  const [clienteDni, setClienteDni]             = useState("");
+  const [fechaVenta, setFechaVenta]             = useState(fechaHoyAR());
+  const [horaVenta, setHoraVenta]               = useState(horaAhoraAR());
+  const [horaVentaAuto, setHoraVentaAuto]       = useState(true);
+  const [procesandoVenta, setProcesandoVenta]   = useState(false);
+  const [ventaExito, setVentaExito]             = useState("");
+  const [ventaError, setVentaError]             = useState("");
 
   // ── Modal ítem manual POS ──
-  const [modalManual, setModalManual]       = useState(false);
-  const [itemManualDesc, setItemManualDesc] = useState("");
+  const [modalManual, setModalManual]           = useState(false);
+  const [itemManualDesc, setItemManualDesc]     = useState("");
   const [itemManualPrecio, setItemManualPrecio] = useState("");
-  const [itemManualCant, setItemManualCant] = useState("1");
+  const [itemManualCant, setItemManualCant]     = useState("1");
 
   // ── Modales editar / cancelar ──
-  const [modalCancelar, setModalCancelar]   = useState<Movimiento | null>(null);
-  const [motivoCancelacion, setMotivoCancelacion] = useState("");
-  const [cancelando, setCancelando]         = useState(false);
-  const [cancelError, setCancelError]       = useState("");
-  const [modalEditar, setModalEditar]       = useState<Movimiento | null>(null);
-  const [editForm, setEditForm]             = useState({ cantidad: "", motivo: "", fecha: "", hora: "" });
-  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
-  const [editError, setEditError]           = useState("");
+  const [modalCancelar, setModalCancelar]             = useState<Movimiento | null>(null);
+  const [motivoCancelacion, setMotivoCancelacion]     = useState("");
+  const [cancelando, setCancelando]                   = useState(false);
+  const [cancelError, setCancelError]                 = useState("");
+  const [modalEditar, setModalEditar]                 = useState<Movimiento | null>(null);
+  const [editForm, setEditForm]                       = useState({ cantidad: "", motivo: "", fecha: "", hora: "" });
+  const [guardandoEdicion, setGuardandoEdicion]       = useState(false);
+  const [editError, setEditError]                     = useState("");
 
   // ── Filtros historial ──
-  const [busquedaInput, setBusquedaInput]   = useState("");
-  const [mostrarFiltros, setMostrarFiltros] = useState(false);
-  const [filtroFechaInicio, setFiltroFechaInicio] = useState("");
-  const [filtroFechaFin, setFiltroFechaFin] = useState("");
-  const [filtroTipo, setFiltroTipo]         = useState("");
+  const [busquedaInput, setBusquedaInput]             = useState("");
+  const [mostrarFiltros, setMostrarFiltros]           = useState(false);
+  const [filtroFechaInicio, setFiltroFechaInicio]     = useState("");
+  const [filtroFechaFin, setFiltroFechaFin]           = useState("");
+  const [filtroTipo, setFiltroTipo]                   = useState("");
 
-  // ════════════════════════════════════════
-  // Fetch movimientos
-  // ════════════════════════════════════════
+  // ── Fetch movimientos ──────────────────────────────────────
   const fetchMovimientos = useCallback(async (pagina = 1) => {
     setLoading(true);
     try {
@@ -157,9 +158,7 @@ export default function MovimientosPage() {
 
   useEffect(() => { fetchMovimientos(); }, [fetchMovimientos]);
 
-  // ════════════════════════════════════════
-  // POS — productos
-  // ════════════════════════════════════════
+  // ── POS — productos ────────────────────────────────────────
   const fetchPosProductos = useCallback(async (pagina = 1, busq = "") => {
     setPosLoading(true);
     try {
@@ -183,9 +182,7 @@ export default function MovimientosPage() {
     fetchPosProductos(1, posBusquedaDebounced);
   }, [posBusquedaDebounced, modoFormulario, fetchPosProductos]);
 
-  // ════════════════════════════════════════
-  // POS — carrito
-  // ════════════════════════════════════════
+  // ── POS — carrito ──────────────────────────────────────────
   const agregarAlCarrito = (producto: Producto) => {
     setCarrito((prev) => {
       const existente = prev.find((i) => i.productoId === producto.id);
@@ -196,12 +193,12 @@ export default function MovimientosPage() {
       if (producto.stock === 0) return prev;
       return [...prev, {
         productoId: producto.id,
-        nombre: producto.nombre,
+        nombre:     producto.nombre,
         precioUnit: producto.precio,
-        cantidad: 1,
-        stock: producto.stock,
-        imagen: producto.imagenes?.[0] ?? producto.imagen ?? null,
-        esManual: false,
+        cantidad:   1,
+        stock:      producto.stock,
+        imagen:     producto.imagenes?.[0] ?? producto.imagen ?? null,
+        esManual:   false,
       }];
     });
   };
@@ -213,9 +210,9 @@ export default function MovimientosPage() {
     const idTemp = `manual_${Date.now()}_${Math.random()}`;
     setCarrito((prev) => [...prev, {
       id: idTemp, productoId: null,
-      nombre: itemManualDesc.trim(),
+      nombre:     itemManualDesc.trim(),
       precioUnit: precio, cantidad: cant,
-      stock: Infinity, imagen: null, esManual: true,
+      stock:      Infinity, imagen: null, esManual: true,
     }]);
     setItemManualDesc(""); setItemManualPrecio(""); setItemManualCant("1");
     setModalManual(false);
@@ -238,9 +235,7 @@ export default function MovimientosPage() {
 
   const calcularTotal = () => carrito.reduce((s, i) => s + i.precioUnit * i.cantidad, 0);
 
-  // ════════════════════════════════════════
-  // POS — finalizar venta
-  // ════════════════════════════════════════
+  // ── POS — finalizar venta ──────────────────────────────────
   const finalizarVenta = async () => {
     if (!carrito.length) return;
     setProcesandoVenta(true);
@@ -270,20 +265,18 @@ export default function MovimientosPage() {
       setCarrito([]);
       setClienteNombre(""); setClienteDni("");
       setMetodoPago("EFECTIVO");
-      setFechaVenta(new Date().toISOString().split("T")[0]);
-      setHoraVenta(new Date().toTimeString().slice(0, 5));
+      setFechaVenta(fechaHoyAR());
+      setHoraVenta(horaAhoraAR());
       setHoraVentaAuto(true);
       setPosBusqueda("");
       fetchMovimientos();
       setTimeout(() => { setVentaExito(""); setModoFormulario(null); }, 2000);
-    } catch (err: any) {
-      setVentaError(err.message ?? "Error al procesar la venta");
+    } catch (err: unknown) {
+      setVentaError((err as { message?: string })?.message ?? "Error al procesar la venta");
     } finally { setProcesandoVenta(false); }
   };
 
-  // ════════════════════════════════════════
-  // Formulario ENTRADA / SALIDA
-  // ════════════════════════════════════════
+  // ── Formulario ENTRADA / SALIDA ────────────────────────────
   useEffect(() => {
     if (!busquedaDebounced.trim()) { setSugerencias([]); setMostrarSugerencias(false); return; }
     (async () => {
@@ -333,9 +326,7 @@ export default function MovimientosPage() {
     } catch { setSubmitError("Error de conexión"); }
   };
 
-  // ════════════════════════════════════════
-  // Cancelar / Editar movimientos
-  // ════════════════════════════════════════
+  // ── Cancelar / Editar movimientos ──────────────────────────
   const confirmarCancelacion = async () => {
     if (!modalCancelar) return;
     setCancelando(true); setCancelError("");
@@ -356,12 +347,11 @@ export default function MovimientosPage() {
   const abrirEdicion = (m: Movimiento) => {
     if (m.cancelado) return;
     setModalEditar(m);
-    const fechaAR = new Date(new Date(m.createdAt).toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
     setEditForm({
       cantidad: String(m.cantidad),
       motivo:   m.motivo ?? "",
-      fecha:    fechaAR.toISOString().split("T")[0],
-      hora:     `${String(fechaAR.getHours()).padStart(2, "0")}:${String(fechaAR.getMinutes()).padStart(2, "0")}`,
+      fecha:    isoAFechaInputAR(m.createdAt),
+      hora:     isoAHoraInputAR(m.createdAt),
     });
     setEditError("");
   };
@@ -385,19 +375,17 @@ export default function MovimientosPage() {
     finally { setGuardandoEdicion(false); }
   };
 
-  // ════════════════════════════════════════
-  // Filtros historial (client-side)
-  // ════════════════════════════════════════
+  // ── Filtros historial (client-side) ───────────────────────
   const movimientosFiltrados = movimientos.filter((m) => {
     if (busquedaInput.trim()) {
-      const t = busquedaInput.toLowerCase();
-      const matchNombre   = m.productoNombre.toLowerCase().includes(t);
+      const t              = busquedaInput.toLowerCase();
+      const matchNombre    = m.productoNombre.toLowerCase().includes(t);
       const matchCategoria = m.producto?.categoria?.nombre?.toLowerCase().includes(t) ?? false;
-      const matchMotivo   = (m.motivo ?? "").toLowerCase().includes(t);
+      const matchMotivo    = (m.motivo ?? "").toLowerCase().includes(t);
       if (!matchNombre && !matchCategoria && !matchMotivo) return false;
     }
-    if (filtroFechaInicio && new Date(m.createdAt).toISOString().split("T")[0] < filtroFechaInicio) return false;
-    if (filtroFechaFin   && new Date(m.createdAt).toISOString().split("T")[0] > filtroFechaFin)   return false;
+    if (filtroFechaInicio && isoAFechaInputAR(m.createdAt) < filtroFechaInicio) return false;
+    if (filtroFechaFin   && isoAFechaInputAR(m.createdAt) > filtroFechaFin)     return false;
     if (filtroTipo && m.tipo !== filtroTipo) return false;
     return true;
   });
@@ -418,16 +406,39 @@ export default function MovimientosPage() {
     setFormData({
       productoId: "", productoNombre: "",
       cantidad: "", motivo: "",
-      fecha: new Date().toISOString().split("T")[0],
-      hora:  new Date().toTimeString().slice(0, 5),
+      fecha:    fechaHoyAR(),
+      hora:     horaAhoraAR(),
       horaAuto: true,
     });
   };
 
-  // ════════════════════════════════════════
-  // Render
-  // ════════════════════════════════════════
+  // ── Exportar CSV ───────────────────────────────────────────
+  function exportarVentasCSV(movs: Movimiento[]) {
+    const ventas = movs.filter((m) => m.tipo === "VENTA" && !m.cancelado);
+    if (!ventas.length) { alert("No hay ventas para exportar."); return; }
 
+    const SEP       = ";";
+    const encabezado = ["fecha", "producto", "codigo", "categoria", "cantidad", "stock_resultante", "usuario", "venta_id"];
+    const filas     = ventas.map((m) => [
+      fmtFechaHoraAR(m.createdAt),
+      m.productoNombre,
+      m.producto?.codigoProducto ?? "",
+      m.producto?.categoria?.nombre ?? "",
+      m.cantidad,
+      m.stockResultante ?? "",
+      m.usuarioNombre ?? "",
+      m.ventaId ?? "",
+    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(SEP));
+
+    const csv  = "\uFEFF" + [encabezado.join(SEP), ...filas].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = `ventas_${fechaHoyAR()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Render ─────────────────────────────────────────────────
   if (loading && movimientos.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -435,42 +446,6 @@ export default function MovimientosPage() {
       </div>
     );
   }
-
-function exportarVentasCSV(movimientos: Movimiento[]) {
-  const ventas = movimientos.filter((m) => m.tipo === "VENTA" && !m.cancelado);
-
-  if (!ventas.length) {
-    alert("No hay ventas para exportar con los filtros actuales.");
-    return;
-  }
-
-  const SEP = ";";
-  const encabezado = [
-    "fecha", "producto", "codigo", "categoria",
-    "cantidad", "stock_resultante", "usuario", "venta_id",
-  ];
-
-  const filas = ventas.map((m) => [
-    new Date(m.createdAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false }),
-    m.productoNombre,
-    m.producto?.codigoProducto ?? "",
-    m.producto?.categoria?.nombre ?? "",
-    m.cantidad,
-    m.stockResultante ?? "",
-    m.usuarioNombre ?? "",
-    m.ventaId ?? "",
-  ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(SEP));
-
-  const BOM  = "\uFEFF";
-  const csv  = BOM + [encabezado.join(SEP), ...filas].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = `ventas_${new Date().toISOString().split("T")[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
   return (
     <div className="space-y-6">
@@ -503,19 +478,15 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors"
               style={{ borderColor: "rgba(255,255,255,0.12)", color: "#a1a1aa", background: "rgba(255,255,255,0.04)" }}
             >
-              <Download className="h-4 w-4" />
-              Exportar ventas
+              <Download className="h-4 w-4" /> Exportar ventas
             </button>
           </div>
         )}
       </div>
 
-      {/* ══════════════════════════════════════════
-          FORMULARIO POS (VENTA)
-      ══════════════════════════════════════════ */}
+      {/* ── FORMULARIO POS (VENTA) ── */}
       {modoFormulario === "VENTA" && (
         <div className="card overflow-hidden">
-          {/* Cabecera */}
           <div className="bg-green-600 px-6 py-4 flex items-center justify-between">
             <h2 className="text-white font-bold text-xl flex items-center gap-2">
               <DollarSign className="h-6 w-6" /> Registrar Venta
@@ -532,42 +503,38 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
           )}
 
           <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
-
             {/* Panel izquierdo — catálogo */}
             <div className="lg:col-span-2 space-y-4">
-              {/* Buscador */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-5 w-5" />
                 <input type="text" placeholder="Buscar producto por nombre o código..."
                   value={posBusqueda} onChange={(e) => setPosBusqueda(e.target.value)}
                   className="input-base pl-10" autoFocus />
                 {posBusqueda && (
-                  <button onClick={() => setPosBusqueda("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-400">
+                  <button onClick={() => setPosBusqueda("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                     <X className="h-4 w-4" />
                   </button>
                 )}
               </div>
 
-              {/* Paginación catálogo */}
               {posTotalPaginas > 1 && (
-                <div className="flex items-center justify-between text-sm text-zinc-300 dark:text-gray-400">
+                <div className="flex items-center justify-between text-sm text-zinc-300">
                   <span>Página {posPaginaActual}/{posTotalPaginas}</span>
                   <div className="flex gap-1">
                     <button onClick={() => { const p = Math.max(1, posPaginaActual - 1); setPosPaginaActual(p); fetchPosProductos(p, posBusquedaDebounced); }}
                       disabled={posPaginaActual === 1}
-                      className="p-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">
+                      className="p-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40">
                       <ChevronLeft className="h-4 w-4" />
                     </button>
                     <button onClick={() => { const p = Math.min(posTotalPaginas, posPaginaActual + 1); setPosPaginaActual(p); fetchPosProductos(p, posBusquedaDebounced); }}
                       disabled={posPaginaActual === posTotalPaginas}
-                      className="p-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700">
+                      className="p-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40">
                       <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Grilla de productos */}
               {posLoading ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {Array.from({ length: 8 }).map((_, i) => (
@@ -579,7 +546,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                   ))}
                 </div>
               ) : posProductos.length === 0 ? (
-                <div className="text-center py-12 text-zinc-300 dark:text-gray-400">
+                <div className="text-center py-12 text-zinc-300">
                   <Package className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                   No se encontraron productos
                 </div>
@@ -594,8 +561,8 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                           "relative border dark:border-gray-700 rounded-xl p-2 transition-all",
                           producto.stock === 0
                             ? "bg-gray-50 dark:bg-gray-900/50 cursor-not-allowed opacity-60"
-                            : "hover:shadow-md hover:border-green-400 dark:hover:border-green-500 cursor-pointer bg-white dark:bg-gray-800",
-                          enCarrito && "border-green-400 dark:border-green-500 ring-1 ring-green-400"
+                            : "hover:shadow-md hover:border-green-400 cursor-pointer bg-white dark:bg-gray-800",
+                          enCarrito && "border-green-400 ring-1 ring-green-400"
                         )}
                       >
                         <div className="relative w-full h-20 mb-2 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden">
@@ -618,14 +585,12 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                             </span>
                           )}
                         </div>
-                        <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight">
-                          {producto.nombre}
-                        </p>
+                        <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight">{producto.nombre}</p>
                         {producto.codigoProducto && (
                           <p className="text-xs text-primary-600 dark:text-primary-400 font-medium truncate">{producto.codigoProducto}</p>
                         )}
                         <p className="text-sm font-bold text-green-600 dark:text-green-400 mt-0.5">${producto.precio.toFixed(2)}</p>
-                        <p className={cn("text-xs mt-0.5", producto.stock <= producto.stockMinimo && producto.stock > 0 ? "text-orange-500" : "text-zinc-300 dark:text-gray-400")}>
+                        <p className={cn("text-xs mt-0.5", producto.stock <= producto.stockMinimo && producto.stock > 0 ? "text-orange-500" : "text-zinc-300")}>
                           Stock: {producto.stock}
                         </p>
                       </div>
@@ -641,12 +606,9 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                 <h3 className="font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-2">
                   <ShoppingCart className="h-5 w-5" /> Carrito ({carrito.length})
                 </h3>
-
                 <div className="space-y-2 max-h-52 overflow-y-auto">
                   {carrito.length === 0 ? (
-                    <p className="text-sm text-zinc-300 dark:text-gray-400 text-center py-4">
-                      Seleccioná productos del catálogo
-                    </p>
+                    <p className="text-sm text-zinc-300 text-center py-4">Seleccioná productos del catálogo</p>
                   ) : carrito.map((item) => {
                     const itemId = item.esManual ? item.id! : item.productoId!;
                     return (
@@ -679,20 +641,17 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     );
                   })}
                 </div>
-
                 <div className="border-t dark:border-gray-600 pt-2 flex justify-between items-center font-bold">
                   <span className="text-gray-800 dark:text-gray-100">TOTAL:</span>
                   <span className="text-green-600 dark:text-green-400 text-xl">${calcularTotal().toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* Ítem manual */}
               <button onClick={() => setModalManual(true)}
                 className="w-full border-2 border-dashed border-orange-300 dark:border-orange-600 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 py-2 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors">
                 <Tag className="h-4 w-4" /> + Ítem manual (Varios)
               </button>
 
-              {/* Método de pago */}
               <div>
                 <label className="label-base flex items-center gap-1"><CreditCard className="h-4 w-4" /> Método de Pago</label>
                 <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="input-base">
@@ -704,33 +663,30 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                 </select>
               </div>
 
-              {/* Fecha */}
               <div>
                 <label className="label-base flex items-center gap-1"><Calendar className="h-4 w-4" /> Fecha</label>
-                <input type="date" value={fechaVenta} onChange={(e) => setFechaVenta(e.target.value)}
-                  max={new Date().toISOString().split("T")[0]} className="input-base" />
+                <input type="date" value={fechaVenta}
+                  onChange={(e) => setFechaVenta(e.target.value)}
+                  max={fechaHoyAR()} className="input-base" />
               </div>
 
-              {/* Hora */}
               <div>
                 <label className="label-base">🕐 Hora</label>
                 <div className="flex gap-2">
                   <input type="time" value={horaVenta}
                     onChange={(e) => { setHoraVenta(e.target.value); setHoraVentaAuto(false); }}
-                    disabled={horaVentaAuto}
-                    className="input-base flex-1 disabled:opacity-50" />
+                    disabled={horaVentaAuto} className="input-base flex-1 disabled:opacity-50" />
                   <button type="button"
-                    onClick={() => { setHoraVenta(new Date().toTimeString().slice(0, 5)); setHoraVentaAuto((p) => !p); }}
+                    onClick={() => { setHoraVenta(horaAhoraAR()); setHoraVentaAuto((p) => !p); }}
                     className={cn("px-3 py-2 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap",
                       horaVentaAuto
                         ? "bg-green-600 text-white border-green-600"
-                        : "bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50")}>
+                        : "bg-white dark:bg-gray-700 text-gray-400 border-gray-300 dark:border-gray-600")}>
                     {horaVentaAuto ? "⚡ Ahora" : "Manual"}
                   </button>
                 </div>
               </div>
 
-              {/* Cliente */}
               <div>
                 <label className="label-base flex items-center gap-1"><UserCircle className="h-4 w-4" /> Cliente (opcional)</label>
                 <input type="text" placeholder="Nombre" value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)} className="input-base mb-2" />
@@ -759,9 +715,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════
-          FORMULARIO ENTRADA / SALIDA
-      ══════════════════════════════════════════ */}
+      {/* ── FORMULARIO ENTRADA / SALIDA ── */}
       {(modoFormulario === "ENTRADA" || modoFormulario === "SALIDA") && (
         <form onSubmit={handleSubmitMovimiento} className="card overflow-hidden">
           <div className={cn("px-6 py-4 flex items-center justify-between",
@@ -769,8 +723,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
             <h2 className="text-white font-bold text-xl flex items-center gap-2">
               {modoFormulario === "ENTRADA"
                 ? <><TrendingUp className="h-6 w-6" /> Entrada de Stock</>
-                : <><TrendingDown className="h-6 w-6" /> Salida de Stock</>
-              }
+                : <><TrendingDown className="h-6 w-6" /> Salida de Stock</>}
             </h2>
             <button type="button" onClick={cerrarFormulario} className="text-white/80 hover:text-white transition-colors">
               <X className="h-6 w-6" />
@@ -778,7 +731,6 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
           </div>
 
           <div className="p-6 space-y-4">
-            {/* Buscador de producto con autocomplete */}
             <div className="relative">
               <label className="label-base">Buscar Producto *</label>
               <div className="relative">
@@ -793,7 +745,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                   </div>
                 )}
                 {busquedaProducto && !buscandoSugerencias && (
-                  <button type="button" onClick={limpiarSeleccion} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-400">
+                  <button type="button" onClick={limpiarSeleccion} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                     <X className="h-4 w-4" />
                   </button>
                 )}
@@ -804,7 +756,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     <button key={p.id} type="button" onClick={() => seleccionarProducto(p)}
                       className="w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-600 border-b dark:border-gray-600 last:border-b-0">
                       <div className="font-medium text-gray-900 dark:text-gray-100">{p.nombre}</div>
-                      <div className="text-xs text-zinc-300 dark:text-gray-400">
+                      <div className="text-xs text-zinc-300">
                         {p.codigoProducto && `Código: ${p.codigoProducto} · `}
                         Stock: {p.stock} · Precio: ${p.precio.toFixed(2)}
                       </div>
@@ -825,7 +777,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                 <label className="label-base flex items-center gap-1"><Calendar className="h-4 w-4" /> Fecha *</label>
                 <input type="date" value={formData.fecha}
                   onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                  required max={new Date().toISOString().split("T")[0]} className="input-base" />
+                  required max={fechaHoyAR()} className="input-base" />
               </div>
               <div>
                 <label className="label-base">🕐 Hora</label>
@@ -834,11 +786,11 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     onChange={(e) => setFormData({ ...formData, hora: e.target.value, horaAuto: false })}
                     disabled={formData.horaAuto} className="input-base flex-1 disabled:opacity-50" />
                   <button type="button"
-                    onClick={() => setFormData({ ...formData, horaAuto: !formData.horaAuto, hora: new Date().toTimeString().slice(0, 5) })}
+                    onClick={() => setFormData({ ...formData, horaAuto: !formData.horaAuto, hora: horaAhoraAR() })}
                     className={cn("px-3 py-2 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap",
                       formData.horaAuto
                         ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50")}>
+                        : "bg-white dark:bg-gray-700 text-gray-400 border-gray-300 dark:border-gray-600")}>
                     {formData.horaAuto ? "⚡ Ahora" : "Manual"}
                   </button>
                 </div>
@@ -866,7 +818,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                 Registrar {modoFormulario === "ENTRADA" ? "Entrada" : "Salida"}
               </button>
               <button type="button" onClick={cerrarFormulario}
-                className="rounded-xl border border-gray-200 dark:border-gray-700 px-6 py-2.5 text-sm font-semibold text-gray-400 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                className="rounded-xl border border-gray-200 dark:border-gray-700 px-6 py-2.5 text-sm font-semibold text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                 Cancelar
               </button>
             </div>
@@ -874,9 +826,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
         </form>
       )}
 
-      {/* ══════════════════════════════════════════
-          FILTROS + BÚSQUEDA + HISTORIAL
-      ══════════════════════════════════════════ */}
+      {/* ── FILTROS + BÚSQUEDA + HISTORIAL ── */}
       <div className="card p-4 space-y-4">
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
@@ -885,7 +835,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               value={busquedaInput} onChange={(e) => setBusquedaInput(e.target.value)}
               className="input-base pl-10 pr-9" />
             {busquedaInput && (
-              <button onClick={() => setBusquedaInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-400">
+              <button onClick={() => setBusquedaInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
                 <X className="h-4 w-4" />
               </button>
             )}
@@ -920,30 +870,28 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               </div>
             </div>
             {hayFiltrosActivos && (
-              <button onClick={limpiarFiltros}
-                className="flex items-center gap-2 text-sm text-zinc-300 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+              <button onClick={limpiarFiltros} className="flex items-center gap-2 text-sm text-zinc-300 hover:text-gray-300 transition-colors">
                 <X className="h-4 w-4" /> Limpiar filtros
               </button>
             )}
           </div>
         )}
 
-        {/* Info resultados + paginación */}
         <div className="flex items-center justify-between border-t dark:border-gray-700 pt-3">
-          <p className="text-sm text-zinc-300 dark:text-gray-400">
+          <p className="text-sm text-zinc-300">
             {movimientosFiltrados.length} de {movimientos.length} mostrados · {paginacion.total} totales
           </p>
           {paginacion.totalPages > 1 && (
             <div className="flex gap-1">
               <button onClick={() => fetchMovimientos(paginaActual - 1)} disabled={!paginacion.hasPrev}
-                className="p-1.5 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                className="p-1.5 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40">
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <span className="px-3 py-1 text-sm font-medium text-gray-500 dark:text-gray-300">
                 {paginacion.page}/{paginacion.totalPages}
               </span>
               <button onClick={() => fetchMovimientos(paginaActual + 1)} disabled={!paginacion.hasNext}
-                className="p-1.5 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                className="p-1.5 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-40">
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
@@ -951,9 +899,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════
-          TABLA DE HISTORIAL
-      ══════════════════════════════════════════ */}
+      {/* ── TABLA DE HISTORIAL ── */}
       {movimientosFiltrados.length === 0 ? (
         <div className="card py-20 text-center">
           <ArrowLeftRight className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-400 mb-4" />
@@ -975,15 +921,14 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
                 {movimientosFiltrados.map((m) => (
-                  <tr key={m.id} className={cn(
-                    "hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors",
-                    m.cancelado && "opacity-50"
-                  )}>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-zinc-300 dark:text-gray-400">
-                      {new Date(m.createdAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false })}
+                  <tr key={m.id} className={cn("hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors", m.cancelado && "opacity-50")}>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {/* Fecha en AR con formato estilo movimientos */}
+                      <p className="text-xs text-zinc-300">{isoAFechaInputAR(m.createdAt)}</p>
+                      <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{fmtHora24AR(m.createdAt)}</p>
                       {m.cancelado && (
                         <div className="text-[10px] text-red-500 mt-0.5">
-                          Cancelado {m.canceladoAt ? new Date(m.canceladoAt).toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" }) : ""}
+                          Cancelado {m.canceladoAt ? isoAFechaInputAR(m.canceladoAt) : ""}
                         </div>
                       )}
                     </td>
@@ -998,7 +943,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {m.cancelado ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 dark:bg-gray-700 text-zinc-300 dark:text-gray-400">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-100 dark:bg-gray-700 text-zinc-300">
                           <Ban className="h-3 w-3" /> Cancelado
                         </span>
                       ) : m.tipo === "ENTRADA" ? (
@@ -1020,25 +965,21 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={cn(
-                        "text-sm font-bold",
+                      <span className={cn("text-sm font-bold",
                         m.cancelado ? "text-gray-400 line-through" :
-                        m.tipo === "ENTRADA" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-                      )}>
+                        m.tipo === "ENTRADA" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
                         {m.tipo === "ENTRADA" ? "+" : "-"}{m.cantidad}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-zinc-300 dark:text-gray-400 max-w-[160px]">
+                    <td className="px-4 py-3 text-xs text-zinc-300 max-w-[160px]">
                       {m.cancelado && m.motivoCancelacion
                         ? <span className="text-red-500">↩ {m.motivoCancelacion}</span>
-                        : (m.motivo ?? <span className="text-zinc-300 dark:text-gray-400">Sin motivo</span>)
-                      }
+                        : (m.motivo ?? <span className="text-zinc-300">Sin motivo</span>)}
                     </td>
-                    <td className="px-4 py-3 text-xs text-zinc-300 dark:text-gray-400 whitespace-nowrap">
+                    <td className="px-4 py-3 text-xs text-zinc-300 whitespace-nowrap">
                       {m.usuarioNombre
                         ? <span className="flex items-center gap-1"><UserCircle className="h-3.5 w-3.5" />{m.usuarioNombre}</span>
-                        : "—"
-                      }
+                        : "—"}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                       {m.stockResultante ?? "—"}
@@ -1046,8 +987,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                     <td className="px-4 py-3 whitespace-nowrap text-xs">
                       {m.tipo === "VENTA" && m.ventaId
                         ? <span className="text-green-600 dark:text-green-400 font-semibold">Venta</span>
-                        : <span className="text-gray-400">—</span>
-                      }
+                        : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {!m.cancelado ? (
@@ -1071,9 +1011,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════
-          MODAL EDITAR MOVIMIENTO
-      ══════════════════════════════════════════ */}
+      {/* ── MODAL EDITAR MOVIMIENTO ── */}
       {modalEditar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !guardandoEdicion && setModalEditar(null)} />
@@ -1084,9 +1022,9 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               </div>
               <div className="flex-1">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Editar Movimiento</h2>
-                <p className="text-sm text-zinc-300 dark:text-gray-400 mt-0.5">Producto: {modalEditar.productoNombre}</p>
+                <p className="text-sm text-zinc-300 mt-0.5">Producto: {modalEditar.productoNombre}</p>
               </div>
-              <button onClick={() => setModalEditar(null)} className="text-gray-400 hover:text-gray-400"><X className="h-5 w-5" /></button>
+              <button onClick={() => setModalEditar(null)} className="text-gray-400"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-4">
               <div>
@@ -1109,7 +1047,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                 <Save className="h-4 w-4" /> {guardandoEdicion ? "Guardando..." : "Guardar Cambios"}
               </button>
               <button onClick={() => setModalEditar(null)}
-                className="flex-1 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 py-2.5 text-sm transition-colors">
+                className="flex-1 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-800 dark:text-gray-100 py-2.5 text-sm transition-colors">
                 Cancelar
               </button>
             </div>
@@ -1117,9 +1055,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════
-          MODAL CANCELAR MOVIMIENTO
-      ══════════════════════════════════════════ */}
+      {/* ── MODAL CANCELAR MOVIMIENTO ── */}
       {modalCancelar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !cancelando && setModalCancelar(null)} />
@@ -1130,12 +1066,12 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Cancelar Movimiento</h2>
-                <p className="text-sm text-zinc-300 dark:text-gray-400 mt-1">Esto revertirá el efecto sobre el stock del producto.</p>
+                <p className="text-sm text-zinc-300 mt-1">Esto revertirá el efecto sobre el stock del producto.</p>
               </div>
             </div>
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 mb-4 text-sm space-y-1">
               <p className="font-medium text-gray-900 dark:text-gray-100">{modalCancelar.productoNombre}</p>
-              <p className="text-zinc-300 dark:text-gray-400">
+              <p className="text-zinc-300">
                 {modalCancelar.tipo === "ENTRADA" ? "📥 Entrada" : modalCancelar.tipo === "VENTA" ? "💰 Venta" : "📤 Salida"} de {modalCancelar.cantidad} unidades
               </p>
               <p className="text-xs text-gray-400">
@@ -1147,8 +1083,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
             <div className="mb-4">
               <label className="label-base">Motivo de cancelación (opcional)</label>
               <input type="text" value={motivoCancelacion} onChange={(e) => setMotivoCancelacion(e.target.value)}
-                placeholder="Ej: Error de carga, devolución rechazada..."
-                className="input-base" />
+                placeholder="Ej: Error de carga, devolución rechazada..." className="input-base" />
             </div>
             {cancelError && (
               <p className="mb-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{cancelError}</p>
@@ -1159,7 +1094,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                 {cancelando ? "Cancelando..." : "Sí, cancelar movimiento"}
               </button>
               <button onClick={() => { setModalCancelar(null); setMotivoCancelacion(""); }}
-                className="flex-1 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 py-2.5 text-sm transition-colors">
+                className="flex-1 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-800 dark:text-gray-100 py-2.5 text-sm transition-colors">
                 No, volver
               </button>
             </div>
@@ -1167,9 +1102,7 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════
-          MODAL ÍTEM MANUAL POS
-      ══════════════════════════════════════════ */}
+      {/* ── MODAL ÍTEM MANUAL POS ── */}
       {modalManual && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setModalManual(false)} />
@@ -1178,9 +1111,9 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
               <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <Tag className="h-5 w-5 text-orange-500" /> Ítem manual — Varios
               </h2>
-              <button onClick={() => setModalManual(false)} className="text-gray-400 hover:text-gray-400"><X className="h-5 w-5" /></button>
+              <button onClick={() => setModalManual(false)} className="text-gray-400"><X className="h-5 w-5" /></button>
             </div>
-            <p className="text-xs text-zinc-300 dark:text-gray-400 mb-4">
+            <p className="text-xs text-zinc-300 mb-4">
               Se registra como ítem de la venta pero <strong>no descuenta stock</strong>.
             </p>
             <div className="space-y-3">
@@ -1215,14 +1148,13 @@ function exportarVentasCSV(movimientos: Movimiento[]) {
                 <Plus className="h-4 w-4" /> Agregar al carrito
               </button>
               <button onClick={() => setModalManual(false)}
-                className="flex-1 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 py-2.5 text-sm transition-colors">
+                className="flex-1 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-800 dark:text-gray-100 py-2.5 text-sm transition-colors">
                 Cancelar
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

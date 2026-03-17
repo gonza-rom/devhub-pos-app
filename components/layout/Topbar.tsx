@@ -6,12 +6,12 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   LogOut, ChevronDown, Settings, Crown, Users, Bell, Menu, X,
-  LayoutDashboard, ShoppingCart, Package, ArrowLeftRight,
-  BarChart3, Tag, Truck, DollarSign, Store, ChevronRight,
+  Store, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import type { RolTenant, PlanTipo } from "@/types";
+import { NAV_ITEMS, ROUTE_LABELS, filtrarNavItems } from "@/lib/nav";
 
 /* ── Types ─────────────────────────────────────────────────── */
 const ROL_LABEL: Record<RolTenant, string> = {
@@ -24,40 +24,11 @@ const ROL_COLOR: Record<RolTenant, string> = {
   ADMINISTRADOR: "text-red-400   bg-red-950/60   border-red-800/60",
   EMPLEADO:      "text-zinc-400  bg-zinc-800     border-zinc-700",
 };
-const ROUTE_LABELS: Record<string, string> = {
-  dashboard: "Dashboard", ventas: "Ventas (POS)", caja: "Caja",
-  productos: "Productos", movimientos: "Movimientos", estadisticas: "Estadísticas",
-  categorias: "Categorías", proveedores: "Proveedores",
-  configuracion: "Configuración", plan: "Plan", usuarios: "Usuarios",
-  nuevo: "Nuevo", editar: "Editar",
-};
 const PLAN_BADGE: Record<PlanTipo, { label: string; cls: string }> = {
   FREE:       { label: "Free",       cls: "text-zinc-400 bg-zinc-800/80 border-zinc-700" },
   PRO:        { label: "Pro",        cls: "text-red-400  bg-red-950/60  border-red-800/50" },
   ENTERPRISE: { label: "Enterprise", cls: "text-amber-400 bg-amber-950/50 border-amber-800/50" },
 };
-
-type SubItem = { label: string; href: string; soloPropietario?: boolean };
-type NavItem = { label: string; href: string; icon: React.ElementType; soloAdmin?: boolean; children?: SubItem[] };
-
-const navItems: NavItem[] = [
-  { label: "Dashboard",    href: "/dashboard",   icon: LayoutDashboard },
-  { label: "Ventas (POS)", href: "/ventas",      icon: ShoppingCart },
-  { label: "Caja",         href: "/caja",        icon: DollarSign },
-  { label: "Productos",    href: "/productos",   icon: Package },
-  { label: "Movimientos",  href: "/movimientos", icon: ArrowLeftRight },
-  { label: "Estadísticas", href: "/estadisticas", icon: BarChart3, soloAdmin: true },
-  { label: "Categorías",   href: "/categorias",  icon: Tag,   soloAdmin: true },
-  { label: "Proveedores",  href: "/proveedores", icon: Truck, soloAdmin: true },
-  {
-    label: "Configuración", href: "/configuracion", icon: Settings, soloAdmin: true,
-    children: [
-      { label: "Mi comercio",        href: "/configuracion" },
-      { label: "Plan y suscripción", href: "/configuracion/plan" },
-      { label: "Usuarios",           href: "/configuracion/usuarios", soloPropietario: true },
-    ],
-  },
-];
 
 /* ── Props ─────────────────────────────────────────────────── */
 type Props = {
@@ -67,6 +38,7 @@ type Props = {
   nombreTenant?: string;
   plan?:         PlanTipo;
   logoUrl?:      string | null;
+  tieneAFIP?:    boolean;
 };
 
 /* ══════════════════════════════════════════════════════════════
@@ -74,7 +46,7 @@ type Props = {
 ══════════════════════════════════════════════════════════════ */
 export default function Topbar({
   nombreUsuario, emailUsuario, rolUsuario,
-  nombreTenant = "Mi comercio", plan = "FREE", logoUrl,
+  nombreTenant = "Mi comercio", plan = "FREE", logoUrl, tieneAFIP = false,
 }: Props) {
   const [menuAbierto,    setMenuAbierto]    = useState(false);
   const [drawerAbierto,  setDrawerAbierto]  = useState(false);
@@ -82,8 +54,9 @@ export default function Topbar({
   const router   = useRouter();
   const pathname = usePathname();
 
-  const esAdmin       = rolUsuario === "ADMINISTRADOR" || rolUsuario === "PROPIETARIO";
   const esPropietario = rolUsuario === "PROPIETARIO";
+  const esAdmin       = rolUsuario === "ADMINISTRADOR" || rolUsuario === "PROPIETARIO";
+  const navItems      = filtrarNavItems(NAV_ITEMS, rolUsuario, tieneAFIP);
 
   useEffect(() => { setDrawerAbierto(false); }, [pathname]);
   useEffect(() => {
@@ -193,9 +166,9 @@ export default function Topbar({
                 <div
                   className="absolute right-0 top-full mt-2 z-20 w-60 rounded-xl py-1.5 overflow-hidden"
                   style={{
-                    background:  "var(--bg-card)",
-                    border:      "1px solid var(--border-md)",
-                    boxShadow:   "0 16px 40px rgba(0,0,0,0.3)",
+                    background: "var(--bg-card)",
+                    border:     "1px solid var(--border-md)",
+                    boxShadow:  "0 16px 40px rgba(0,0,0,0.3)",
                   }}
                 >
                   {/* User info */}
@@ -215,8 +188,8 @@ export default function Topbar({
 
                   {esAdmin && (
                     <div className="py-1.5" style={{ borderBottom: "1px solid var(--border-base)" }}>
-                      <DDItem href="/configuracion"        icon={Settings} label="Mi comercio"        onClick={() => setMenuAbierto(false)} />
-                      <DDItem href="/configuracion/plan"   icon={Crown}    label="Plan y suscripción" onClick={() => setMenuAbierto(false)} iconColor="text-amber-500" />
+                      <DDItem href="/configuracion"          icon={Settings} label="Mi comercio"        onClick={() => setMenuAbierto(false)} />
+                      <DDItem href="/configuracion/plan"     icon={Crown}    label="Plan y suscripción" onClick={() => setMenuAbierto(false)} iconColor="text-amber-500" />
                       {esPropietario && <DDItem href="/configuracion/usuarios" icon={Users} label="Usuarios" onClick={() => setMenuAbierto(false)} />}
                     </div>
                   )}
@@ -257,9 +230,9 @@ export default function Topbar({
           drawerAbierto ? "translate-x-0" : "-translate-x-full"
         )}
         style={{
-          background:   "var(--bg-surface)",
-          borderRight:  "1px solid var(--border-base)",
-          transition:   "transform 0.3s ease-out, background 0.2s ease",
+          background:  "var(--bg-surface)",
+          borderRight: "1px solid var(--border-base)",
+          transition:  "transform 0.3s ease-out, background 0.2s ease",
         }}
       >
         {/* Drawer header */}
@@ -299,96 +272,99 @@ export default function Topbar({
 
         {/* Drawer nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-          {navItems
-            .filter((item) => !item.soloAdmin || esAdmin)
-            .map((item) => {
-              const Icon         = item.icon;
-              const activoSimple = !item.children && (pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")));
-              const activoGroup  = !!item.children && pathname.startsWith(item.href);
-              const activo       = activoSimple || activoGroup;
+          {navItems.map((item) => {
+            const Icon         = item.icon;
+            const activoSimple = !item.children && (pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")));
+            const activoGroup  = !!item.children && pathname.startsWith(item.href);
+            const activo       = activoSimple || activoGroup;
 
-              return (
-                <div key={item.href}>
-                  <Link
-                    href={item.href}
-                    className="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 select-none"
-                    style={activo ? {
-                      color:      "var(--text-primary)",
-                      background: "rgba(220,38,38,0.14)",
-                      border:     "1px solid rgba(220,38,38,0.28)",
-                    } : {
-                      color:  "var(--text-secondary)",
-                      border: "1px solid transparent",
-                    }}
-                    onMouseEnter={e => {
-                      if (!activo) {
-                        (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)";
-                        (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (!activo) {
-                        (e.currentTarget as HTMLElement).style.background = "transparent";
-                        (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
-                      }
-                    }}
-                  >
-                    {activo && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full" style={{ background: "#DC2626" }} />
-                    )}
-                    <Icon
-                      className="h-4 w-4 flex-shrink-0"
-                      style={{ color: activo ? "#ef4444" : "var(--text-faint)" }}
-                    />
-                    <span className="flex-1 truncate">{item.label}</span>
-                    {item.children
-                      ? <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !activoGroup && "rotate-[-90deg]")}
-                          style={{ color: activoGroup ? "#ef4444" : "var(--text-faint)" }} />
-                      : activo ? <ChevronRight className="h-3.5 w-3.5" style={{ color: "rgba(220,38,38,0.6)" }} /> : null
+            return (
+              <div key={item.href}>
+                <Link
+                  href={item.href}
+                  className="group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 select-none"
+                  style={activo ? {
+                    color:      "var(--text-primary)",
+                    background: "rgba(220,38,38,0.14)",
+                    border:     "1px solid rgba(220,38,38,0.28)",
+                  } : {
+                    color:  "var(--text-secondary)",
+                    border: "1px solid transparent",
+                  }}
+                  onMouseEnter={e => {
+                    if (!activo) {
+                      (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)";
+                      (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
                     }
-                  </Link>
-
-                  {item.children && activoGroup && (
-                    <div className="ml-3 mt-0.5 mb-1 pl-3 space-y-0.5" style={{ borderLeft: "1px solid rgba(220,38,38,0.2)" }}>
-                      {item.children
-                        .filter((s) => !s.soloPropietario || esPropietario)
-                        .map((sub) => {
-                          const subActivo = sub.href === "/configuracion"
-                            ? pathname === "/configuracion"
-                            : pathname.startsWith(sub.href);
-                          return (
-                            <Link
-                              key={sub.href}
-                              href={sub.href}
-                              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-all"
-                              style={subActivo
-                                ? { color: "#f87171", background: "rgba(220,38,38,0.08)" }
-                                : { color: "var(--text-muted)" }
-                              }
-                              onMouseEnter={e => {
-                                if (!subActivo) {
-                                  (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)";
-                                  (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
-                                }
-                              }}
-                              onMouseLeave={e => {
-                                if (!subActivo) {
-                                  (e.currentTarget as HTMLElement).style.background = "transparent";
-                                  (e.currentTarget as HTMLElement).style.color = "var(--text-muted)";
-                                }
-                              }}
-                            >
-                              {sub.href === "/configuracion/plan" && <Crown className="h-3 w-3 text-amber-500 flex-shrink-0" />}
-                              {sub.href === "/configuracion/usuarios" && <Users className="h-3 w-3 flex-shrink-0" style={{ color: "var(--text-muted)" }} />}
-                              {sub.label}
-                            </Link>
-                          );
-                        })}
-                    </div>
+                  }}
+                  onMouseLeave={e => {
+                    if (!activo) {
+                      (e.currentTarget as HTMLElement).style.background = "transparent";
+                      (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
+                    }
+                  }}
+                >
+                  {activo && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full" style={{ background: "#DC2626" }} />
                   )}
-                </div>
-              );
-            })}
+                  <Icon
+                    className="h-4 w-4 flex-shrink-0"
+                    style={{ color: activo ? "#ef4444" : "var(--text-faint)" }}
+                  />
+                  <span className="flex-1 truncate">{item.label}</span>
+                  {item.children
+                    ? <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", !activoGroup && "rotate-[-90deg]")}
+                        style={{ color: activoGroup ? "#ef4444" : "var(--text-faint)" }} />
+                    : activo
+                    ? <ChevronRight className="h-3.5 w-3.5" style={{ color: "rgba(220,38,38,0.6)" }} />
+                    : null
+                  }
+                </Link>
+
+                {item.children && activoGroup && (
+                  <div className="ml-3 mt-0.5 mb-1 pl-3 space-y-0.5" style={{ borderLeft: "1px solid rgba(220,38,38,0.2)" }}>
+                    {item.children
+                      .filter((s) => !s.soloPropietario || esPropietario)
+                      .map((sub) => {
+                        const SubIcon   = sub.icon;
+                        const subActivo = sub.href === "/configuracion"
+                          ? pathname === "/configuracion"
+                          : pathname.startsWith(sub.href);
+                        return (
+                          <Link
+                            key={sub.href}
+                            href={sub.href}
+                            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-all"
+                            style={subActivo
+                              ? { color: "#f87171", background: "rgba(220,38,38,0.08)" }
+                              : { color: "var(--text-muted)" }
+                            }
+                            onMouseEnter={e => {
+                              if (!subActivo) {
+                                (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)";
+                                (e.currentTarget as HTMLElement).style.color = "var(--text-primary)";
+                              }
+                            }}
+                            onMouseLeave={e => {
+                              if (!subActivo) {
+                                (e.currentTarget as HTMLElement).style.background = "transparent";
+                                (e.currentTarget as HTMLElement).style.color = "var(--text-muted)";
+                              }
+                            }}
+                          >
+                            {SubIcon && (
+                              <SubIcon className="h-3 w-3 flex-shrink-0"
+                                style={{ color: subActivo ? "#f87171" : "var(--color-red)" }} />
+                            )}
+                            {sub.label}
+                          </Link>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         {/* Drawer footer — ThemeToggle + Logout */}
