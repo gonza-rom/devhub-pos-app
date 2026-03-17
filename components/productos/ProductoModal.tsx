@@ -2,9 +2,10 @@
 // components/productos/ProductoModal.tsx
 
 import { useState, useEffect } from "react";
-import { X, Package, AlertCircle, CheckCircle2 } from "lucide-react";
+import { X, Package } from "lucide-react";
 import MultipleImageUpload from "@/components/ui/MultipleImageUpload";
 import { useFetch }        from "@/hooks/useFetch";
+import { useToast }        from "@/components/toast";
 import type { Categoria, Proveedor, Producto } from "@/types";
 
 type FormData = {
@@ -47,12 +48,11 @@ export type Props = {
 
 export default function ProductoModal({ producto, categorias, proveedores, onClose, onGuardado }: Props) {
   const { apiFetch } = useFetch();
+  const toast        = useToast();
   const esEdicion    = !!producto;
 
   const [form,     setForm]     = useState<FormData>(producto ? productoToForm(producto) : FORM_VACIO);
   const [cargando, setCargando] = useState(false);
-  const [error,    setError]    = useState("");
-  const [exito,    setExito]    = useState(false);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape" && !cargando) onClose(); };
@@ -71,7 +71,6 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
     setCargando(true);
 
     const payload = {
@@ -90,20 +89,28 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
       proveedorId:    form.proveedorId || undefined,
     };
 
+    const toastId = toast.loading(esEdicion ? "Guardando cambios..." : "Creando producto...");
     try {
       const res  = await apiFetch(
         esEdicion ? `/api/productos/${producto!.id}` : "/api/productos",
         { method: esEdicion ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
       );
       const data = await res.json();
-      if (!data.ok) { setError(data.error ?? "Error al guardar"); return; }
 
-      setExito(true);
-      setTimeout(() => { onGuardado(data.data); onClose(); }, 800);
+      if (!data.ok) {
+        toast.update(toastId, { type: "error", title: "Error al guardar", description: data.error ?? "Intentá de nuevo" });
+        return;
+      }
+
+      toast.update(toastId, {
+        type:        "success",
+        title:       esEdicion ? "Producto actualizado" : "Producto creado",
+        description: form.nombre.trim(),
+      });
+      setTimeout(() => { onGuardado(data.data); onClose(); }, 600);
     } catch (err: any) {
-      // SESSION_EXPIRED y PLAN_VENCIDO ya fueron manejados por useFetch (redirect automático)
       if (err?.message !== "SESSION_EXPIRED" && err?.message !== "PLAN_VENCIDO") {
-        setError("Error de conexión. Intentá de nuevo.");
+        toast.update(toastId, { type: "error", title: "Error de conexión", description: "Intentá de nuevo" });
       }
     } finally {
       setCargando(false);
@@ -139,147 +146,128 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto">
-          {exito ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <CheckCircle2 className="h-14 w-14 mb-4" style={{ color: "#22c55e" }} />
-              <p className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                {esEdicion ? "¡Producto actualizado!" : "¡Producto creado!"}
-              </p>
+          <form id="producto-form" onSubmit={handleSubmit} className="p-6 space-y-5">
+            <MultipleImageUpload
+              value={form.imagenes}
+              onChange={(imagenes) => setForm((prev) => ({ ...prev, imagenes, imagen: imagenes[0] ?? "" }))}
+            />
+            <div className="h-px" style={{ background: "var(--border-subtle)" }} />
+
+            <div className="space-y-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>Información</h3>
+              <div>
+                <label className="label-base">Nombre *</label>
+                <input type="text" name="nombre" value={form.nombre} onChange={handleChange}
+                  required placeholder="Ej: Coca Cola 500ml" className="input-base" autoFocus />
+              </div>
+              <div>
+                <label className="label-base">Descripción</label>
+                <textarea name="descripcion" value={form.descripcion} onChange={handleChange}
+                  rows={2} placeholder="Descripción opcional..." className="input-base resize-none" />
+              </div>
             </div>
-          ) : (
-            <form id="producto-form" onSubmit={handleSubmit} className="p-6 space-y-5">
-              <MultipleImageUpload
-                value={form.imagenes}
-                onChange={(imagenes) => setForm((prev) => ({ ...prev, imagenes, imagen: imagenes[0] ?? "" }))}
-              />
-              <div className="h-px" style={{ background: "var(--border-subtle)" }} />
 
-              <div className="space-y-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>Información</h3>
-                <div>
-                  <label className="label-base">Nombre *</label>
-                  <input type="text" name="nombre" value={form.nombre} onChange={handleChange}
-                    required placeholder="Ej: Coca Cola 500ml" className="input-base" autoFocus />
-                </div>
-                <div>
-                  <label className="label-base">Descripción</label>
-                  <textarea name="descripcion" value={form.descripcion} onChange={handleChange}
-                    rows={2} placeholder="Descripción opcional..." className="input-base resize-none" />
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label-base">Código interno</label>
+                <input type="text" name="codigoProducto" value={form.codigoProducto} onChange={handleChange}
+                  placeholder="Ej: PROD-001" className="input-base" />
               </div>
+              <div>
+                <label className="label-base">Código de barras</label>
+                <input type="text" name="codigoBarras" value={form.codigoBarras} onChange={handleChange}
+                  placeholder="Ej: 7790001234567" className="input-base" />
+              </div>
+            </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label-base">Categoría</label>
+                <select name="categoriaId" value={form.categoriaId} onChange={handleChange} className="input-base">
+                  <option value="">Sin categoría</option>
+                  {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label-base">Proveedor</label>
+                <select name="proveedorId" value={form.proveedorId} onChange={handleChange} className="input-base">
+                  <option value="">Sin proveedor</option>
+                  {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="h-px" style={{ background: "var(--border-subtle)" }} />
+
+            <div className="space-y-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>Precios y stock</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label-base">Código interno</label>
-                  <input type="text" name="codigoProducto" value={form.codigoProducto} onChange={handleChange}
-                    placeholder="Ej: PROD-001" className="input-base" />
+                  <label className="label-base">Precio de venta *</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-faint)" }}>$</span>
+                    <input type="number" name="precio" value={form.precio} onChange={handleChange}
+                      required min="0" step="0.01" placeholder="0" className="input-base pl-7" />
+                  </div>
                 </div>
                 <div>
-                  <label className="label-base">Código de barras</label>
-                  <input type="text" name="codigoBarras" value={form.codigoBarras} onChange={handleChange}
-                    placeholder="Ej: 7790001234567" className="input-base" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="label-base">Categoría</label>
-                  <select name="categoriaId" value={form.categoriaId} onChange={handleChange} className="input-base">
-                    <option value="">Sin categoría</option>
-                    {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="label-base">Proveedor</label>
-                  <select name="proveedorId" value={form.proveedorId} onChange={handleChange} className="input-base">
-                    <option value="">Sin proveedor</option>
-                    {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="h-px" style={{ background: "var(--border-subtle)" }} />
-
-              <div className="space-y-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>Precios y stock</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="label-base">Precio de venta *</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-faint)" }}>$</span>
-                      <input type="number" name="precio" value={form.precio} onChange={handleChange}
-                        required min="0" step="0.01" placeholder="0" className="input-base pl-7" />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="label-base">Precio de costo</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-faint)" }}>$</span>
-                      <input type="number" name="costo" value={form.costo} onChange={handleChange}
-                        min="0" step="0.01" placeholder="0" className="input-base pl-7" />
-                    </div>
-                  </div>
-                </div>
-
-                {margen !== null && (
-                  <div className="rounded-lg px-4 py-2 text-sm"
-                    style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)", color: "#60a5fa" }}>
-                    Margen: <strong>{margen}%</strong>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="label-base">{esEdicion ? "Stock actual" : "Stock inicial"}</label>
-                    <input type="number" name="stock" value={form.stock} onChange={handleChange} min="0" className="input-base" />
-                    {esEdicion && <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>Ajustá desde Movimientos</p>}
-                  </div>
-                  <div>
-                    <label className="label-base">Stock mínimo</label>
-                    <input type="number" name="stockMinimo" value={form.stockMinimo} onChange={handleChange} min="0" className="input-base" />
-                    <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>Alerta</p>
-                  </div>
-                  <div>
-                    <label className="label-base">Unidad</label>
-                    <input type="text" name="unidad" value={form.unidad} onChange={handleChange}
-                      placeholder="kg, litro, u." className="input-base" />
+                  <label className="label-base">Precio de costo</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-faint)" }}>$</span>
+                    <input type="number" name="costo" value={form.costo} onChange={handleChange}
+                      min="0" step="0.01" placeholder="0" className="input-base pl-7" />
                   </div>
                 </div>
               </div>
 
-              {error && (
-                <div className="flex items-start gap-3 rounded-xl px-4 py-3"
-                  style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.25)" }}>
-                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: "#f87171" }} />
-                  <p className="text-sm" style={{ color: "#f87171" }}>{error}</p>
+              {margen !== null && (
+                <div className="rounded-lg px-4 py-2 text-sm"
+                  style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)", color: "#60a5fa" }}>
+                  Margen: <strong>{margen}%</strong>
                 </div>
               )}
-            </form>
-          )}
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="label-base">{esEdicion ? "Stock actual" : "Stock inicial"}</label>
+                  <input type="number" name="stock" value={form.stock} onChange={handleChange} min="0" className="input-base" />
+                  {esEdicion && <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>Ajustá desde Movimientos</p>}
+                </div>
+                <div>
+                  <label className="label-base">Stock mínimo</label>
+                  <input type="number" name="stockMinimo" value={form.stockMinimo} onChange={handleChange} min="0" className="input-base" />
+                  <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>Alerta</p>
+                </div>
+                <div>
+                  <label className="label-base">Unidad</label>
+                  <input type="text" name="unidad" value={form.unidad} onChange={handleChange}
+                    placeholder="kg, litro, u." className="input-base" />
+                </div>
+              </div>
+            </div>
+          </form>
         </div>
 
         {/* Footer */}
-        {!exito && (
-          <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{ borderTop: "1px solid var(--border-base)" }}>
-            <button type="button" onClick={() => !cargando && onClose()} disabled={cargando}
-              className="flex-1 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
-              style={{ color: "var(--text-muted)", background: "var(--bg-hover)", border: "1px solid var(--border-base)" }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"}>
-              Cancelar
-            </button>
-            <button type="submit" form="producto-form" disabled={cargando}
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ background: "#DC2626", color: "#ffffff" }}
-              onMouseEnter={e => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.background = "#b91c1c"; }}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#DC2626"}>
-              {cargando
-                ? <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{esEdicion ? "Guardando..." : "Creando..."}</>
-                : esEdicion ? "Guardar cambios" : "Crear producto"
-              }
-            </button>
-          </div>
-        )}
+        <div className="flex gap-3 px-6 py-4 flex-shrink-0" style={{ borderTop: "1px solid var(--border-base)" }}>
+          <button type="button" onClick={() => !cargando && onClose()} disabled={cargando}
+            className="flex-1 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+            style={{ color: "var(--text-muted)", background: "var(--bg-hover)", border: "1px solid var(--border-base)" }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"}>
+            Cancelar
+          </button>
+          <button type="submit" form="producto-form" disabled={cargando}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: "#DC2626", color: "#ffffff" }}
+            onMouseEnter={e => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.background = "#b91c1c"; }}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#DC2626"}>
+            {cargando
+              ? <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />{esEdicion ? "Guardando..." : "Creando..."}</>
+              : esEdicion ? "Guardar cambios" : "Crear producto"
+            }
+          </button>
+        </div>
       </div>
     </div>
   );

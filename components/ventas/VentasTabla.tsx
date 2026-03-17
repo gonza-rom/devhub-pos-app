@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, Package, Receipt, Ban, AlertTriangle, X } from 
 import { formatPrecio } from "@/lib/utils";
 import { fmtFecha24HoraAR } from "@/lib/dateAR";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/toast";
 
 type ItemVenta = {
   id:         string;
@@ -63,11 +64,12 @@ const METODO_TEXT: Record<string, string> = {
 
 export default function VentasTabla({ ventas }: Props) {
   const router = useRouter();
+  const toast  = useToast();
+
   const [expandido,         setExpandido]         = useState<string | null>(null);
   const [modalCancelar,     setModalCancelar]     = useState<Venta | null>(null);
   const [motivoCancelacion, setMotivoCancelacion] = useState("");
   const [cancelando,        setCancelando]        = useState(false);
-  const [error,             setError]             = useState("");
 
   function toggle(id: string) {
     setExpandido((prev) => (prev === id ? null : id));
@@ -76,7 +78,8 @@ export default function VentasTabla({ ventas }: Props) {
   async function confirmarCancelacion() {
     if (!modalCancelar) return;
     setCancelando(true);
-    setError("");
+
+    const toastId = toast.loading("Cancelando venta...");
     try {
       const res = await fetch(`/api/ventas/${modalCancelar.id}/cancelar`, {
         method: "POST",
@@ -86,12 +89,22 @@ export default function VentasTabla({ ventas }: Props) {
         }),
       });
       const data = await res.json();
-      if (!data.ok) { setError(data.error ?? "Error al cancelar venta"); return; }
+
+      if (!data.ok) {
+        toast.update(toastId, { type: "error", title: "Error al cancelar", description: data.error ?? "Intentá de nuevo" });
+        return;
+      }
+
+      toast.update(toastId, {
+        type: "success",
+        title: "Venta cancelada",
+        description: `Stock restaurado · ${formatPrecio(modalCancelar.total)}`,
+      });
       setModalCancelar(null);
       setMotivoCancelacion("");
       router.refresh();
     } catch {
-      setError("Error de conexión");
+      toast.update(toastId, { type: "error", title: "Error de conexión" });
     } finally {
       setCancelando(false);
     }
@@ -125,7 +138,7 @@ export default function VentasTabla({ ventas }: Props) {
                     className={`table-row cursor-pointer ${venta.cancelado ? "opacity-60" : ""}`}
                     onClick={() => toggle(venta.id)}
                   >
-                    {/* Fecha — formato 24hs en AR */}
+                    {/* Fecha */}
                     <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
                       <div className="flex items-center gap-2">
                         <Receipt className="h-3.5 w-3.5 flex-shrink-0" style={{ color: "var(--text-faint)" }} />
@@ -214,7 +227,6 @@ export default function VentasTabla({ ventas }: Props) {
                               e.stopPropagation();
                               setModalCancelar(venta);
                               setMotivoCancelacion("");
-                              setError("");
                             }}
                             className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                             style={{ border: "1px solid rgba(220,38,38,0.3)" }}
@@ -237,7 +249,6 @@ export default function VentasTabla({ ventas }: Props) {
                   </tr>,
                 ];
 
-                // Fila de detalle expandido
                 if (abierto) {
                   filas.push(
                     <tr key={`${venta.id}-detalle`}>
@@ -342,47 +353,53 @@ export default function VentasTabla({ ventas }: Props) {
         </div>
       </div>
 
-      {/* Modal cancelar venta */}
+      {/* Modal cancelar venta — sin estado de error inline */}
       {modalCancelar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !cancelando && setModalCancelar(null)} />
-          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-xl p-6">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-full flex-shrink-0">
-                <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => !cancelando && setModalCancelar(null)}
+          />
+          <div
+            className="relative z-10 w-full max-w-md rounded-2xl shadow-xl p-6 space-y-4"
+            style={{ background: "var(--bg-card)", border: "1px solid var(--border-base)" }}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full flex-shrink-0" style={{ background: "rgba(220,38,38,0.12)" }}>
+                <AlertTriangle className="h-6 w-6" style={{ color: "#f87171" }} />
               </div>
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Cancelar Venta</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <div className="flex-1">
+                <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Cancelar venta</h2>
+                <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
                   Esto restaurará el stock de todos los productos vendidos.
                 </p>
               </div>
-              <button onClick={() => setModalCancelar(null)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setModalCancelar(null)} style={{ color: "var(--text-muted)" }}>
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 mb-4 text-sm space-y-1">
-              <p className="font-medium text-gray-900 dark:text-gray-100">
-                Venta #{modalCancelar.id.slice(0, 8)}
+            <div className="rounded-xl p-4 text-sm space-y-1" style={{ background: "var(--bg-surface)", border: "1px solid var(--border-base)" }}>
+              <p className="font-medium" style={{ color: "var(--text-primary)" }}>
+                Venta #{modalCancelar.id.slice(0, 8).toUpperCase()}
               </p>
-              <p className="text-gray-600 dark:text-gray-400">
+              <p style={{ color: "var(--text-muted)" }}>
                 {fmtFecha24HoraAR(
                   typeof modalCancelar.createdAt === "string"
                     ? modalCancelar.createdAt
                     : modalCancelar.createdAt.toISOString()
                 )}
               </p>
-              <p className="text-lg font-bold text-red-600 dark:text-red-400">
+              <p className="text-lg font-bold text-red-400">
                 {formatPrecio(modalCancelar.total)}
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs" style={{ color: "var(--text-faint)" }}>
                 {modalCancelar.items.length} {modalCancelar.items.length === 1 ? "producto" : "productos"}
               </p>
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-muted)" }}>
                 Motivo de cancelación (opcional)
               </label>
               <input
@@ -390,27 +407,25 @@ export default function VentasTabla({ ventas }: Props) {
                 value={motivoCancelacion}
                 onChange={(e) => setMotivoCancelacion(e.target.value)}
                 placeholder="Ej: Error en el registro, devolución del cliente..."
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                className="input-base w-full"
+                disabled={cancelando}
               />
             </div>
 
-            {error && (
-              <p className="mb-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
-                {error}
-              </p>
-            )}
-
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-1">
               <button
                 onClick={confirmarCancelacion}
                 disabled={cancelando}
-                className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white py-2.5 text-sm font-bold transition-colors"
+                className="flex-1 rounded-xl py-2.5 text-sm font-bold transition-colors disabled:opacity-50"
+                style={{ background: "#DC2626", color: "#fff" }}
               >
                 {cancelando ? "Cancelando..." : "Sí, cancelar venta"}
               </button>
               <button
                 onClick={() => setModalCancelar(null)}
-                className="flex-1 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 py-2.5 text-sm transition-colors"
+                disabled={cancelando}
+                className="flex-1 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)", border: "1px solid var(--border-base)" }}
               >
                 No, volver
               </button>

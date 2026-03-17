@@ -1,16 +1,16 @@
 "use client";
 // components/productos/ProductosTabla.tsx
-// ✨ CON SELECCIÓN MASIVA + FILTROS + SELECCIONAR TODOS LOS RESULTADOS
 
 import { useState, useTransition } from "react";
 import { useRouter }               from "next/navigation";
-import { 
-  Package, AlertTriangle, Trash2, CheckSquare, Square, 
-  Tag, DollarSign, PackagePlus, Building2, X, Edit
+import {
+  Package, AlertTriangle, Trash2, CheckSquare, Square,
+  Tag, DollarSign, PackagePlus, Building2, X,
 } from "lucide-react";
 import { formatPrecio }           from "@/lib/utils";
 import { useFetch }               from "@/hooks/useFetch";
 import { invalidatePlanUsoCache } from "@/lib/planUsoCache";
+import { useToast }               from "@/components/toast";
 import ProductoModal              from "@/components/productos/ProductoModal";
 import type { Categoria, Proveedor, Producto } from "@/types";
 
@@ -25,7 +25,6 @@ type Props = {
   productos:   ProductoFila[];
   categorias:  Pick<Categoria, "id" | "nombre">[];
   proveedores: Pick<Proveedor, "id" | "nombre">[];
-  // ✨ NUEVO para selección masiva de todos los resultados:
   totalProductos: number;
   filtrosActivos: {
     busqueda: string;
@@ -34,75 +33,55 @@ type Props = {
   };
 };
 
-export default function ProductosTabla({ 
-  productos, 
-  categorias, 
+export default function ProductosTabla({
+  productos,
+  categorias,
   proveedores,
   totalProductos,
   filtrosActivos,
 }: Props) {
   const router       = useRouter();
+  const toast        = useToast();
   const { apiFetch } = useFetch();
   const [, startTransition] = useTransition();
 
-  // ═══════════════════════════════════════════════════════════════
-  // SELECCIÓN MASIVA
-  // ═══════════════════════════════════════════════════════════════
+  // ── Selección masiva ──────────────────────────────────────────
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [modoSeleccion, setModoSeleccion] = useState<"pagina" | "todos">("pagina");
-  const [accionMasiva, setAccionMasiva] = useState<
-    "categoria" | "proveedor" | "stock" | "precio" | null
-  >(null);
-
-  // Estados para modals de edición masiva
+  const [accionMasiva, setAccionMasiva]   = useState<"categoria" | "proveedor" | "stock" | "precio" | null>(null);
   const [cargandoMasivo, setCargandoMasivo] = useState(false);
-  const [errorMasivo, setErrorMasivo] = useState("");
-  
+
   const [nuevaCategoria, setNuevaCategoria] = useState("");
   const [nuevoProveedor, setNuevoProveedor] = useState("");
-  
-  const [ajusteStock, setAjusteStock] = useState<"sumar" | "restar" | "establecer">("establecer");
-  const [valorStock, setValorStock] = useState("");
-  
-  const [ajustePrecio, setAjustePrecio] = useState<"porcentaje" | "fijo">("porcentaje");
-  const [valorPrecio, setValorPrecio] = useState("");
+  const [ajusteStock,    setAjusteStock]    = useState<"sumar" | "restar" | "establecer">("establecer");
+  const [valorStock,     setValorStock]     = useState("");
+  const [ajustePrecio,   setAjustePrecio]   = useState<"porcentaje" | "fijo">("porcentaje");
+  const [valorPrecio,    setValorPrecio]    = useState("");
 
-  // ═══════════════════════════════════════════════════════════════
-  // MODAL INDIVIDUAL
-  // ═══════════════════════════════════════════════════════════════
+  // ── Modal individual ──────────────────────────────────────────
   const [modal, setModal] = useState<{ abierto: boolean; producto: ProductoFila | undefined }>({
     abierto: false, producto: undefined,
   });
-
   const [confirmEliminar, setConfirmEliminar] = useState<{
-    abierto: boolean; producto: ProductoFila | null; cargando: boolean; error: string;
-  }>({ abierto: false, producto: null, cargando: false, error: "" });
+    abierto: boolean; producto: ProductoFila | null; cargando: boolean;
+  }>({ abierto: false, producto: null, cargando: false });
 
-  // ═══════════════════════════════════════════════════════════════
-  // FUNCIONES DE SELECCIÓN
-  // ═══════════════════════════════════════════════════════════════
+  // ── Helpers selección ─────────────────────────────────────────
   const toggleSeleccion = (id: string) => {
     setSeleccionados(prev => {
       const nuevo = new Set(prev);
-      if (nuevo.has(id)) {
-        nuevo.delete(id);
-      } else {
-        nuevo.add(id);
-      }
+      nuevo.has(id) ? nuevo.delete(id) : nuevo.add(id);
       return nuevo;
     });
   };
 
   const toggleTodos = () => {
     if (modoSeleccion === "todos") {
-      // Deseleccionar todos
       setSeleccionados(new Set());
       setModoSeleccion("pagina");
     } else if (seleccionados.size === productos.length) {
-      // Ya seleccionó todos de la página, ofrecer seleccionar TODOS
       setModoSeleccion("todos");
     } else {
-      // Seleccionar todos de la página
       setSeleccionados(new Set(productos.map(p => p.id)));
       setModoSeleccion("pagina");
     }
@@ -116,167 +95,69 @@ export default function ProductosTabla({
     setNuevoProveedor("");
     setValorStock("");
     setValorPrecio("");
-    setErrorMasivo("");
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // FUNCIONES DE ACCIONES MASIVAS
-  // ═══════════════════════════════════════════════════════════════
-  const aplicarCambioCategoria = async () => {
+  const cantidadSeleccionada = modoSeleccion === "todos" ? totalProductos : seleccionados.size;
+
+  // ── Acciones masivas ──────────────────────────────────────────
+  const ejecutarAccionMasiva = async (
+    accion: string,
+    payload: Record<string, unknown>,
+    descripcion: string
+  ) => {
+    setCargandoMasivo(true);
+    const toastId = toast.loading(`Aplicando ${descripcion}...`);
+    try {
+      const body = modoSeleccion === "todos"
+        ? { accion, ...payload, filtros: filtrosActivos }
+        : { accion, ...payload, ids: Array.from(seleccionados) };
+
+      const res  = await apiFetch("/api/productos/masivo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+
+      toast.update(toastId, {
+        type: "success",
+        title: `${descripcion} actualizado`,
+        description: `${cantidadSeleccionada} producto${cantidadSeleccionada !== 1 ? "s" : ""} modificado${cantidadSeleccionada !== 1 ? "s" : ""}`,
+      });
+      limpiarSeleccion();
+      invalidatePlanUsoCache();
+      startTransition(() => router.refresh());
+    } catch (err: any) {
+      toast.update(toastId, { type: "error", title: "Error al aplicar cambio", description: err.message });
+    } finally {
+      setCargandoMasivo(false);
+    }
+  };
+
+  const aplicarCambioCategoria = () => {
     if (!nuevaCategoria) return;
-    
-    setCargandoMasivo(true);
-    setErrorMasivo("");
-    try {
-      const payload = modoSeleccion === "todos"
-        ? {
-            accion: "categoria",
-            valor: nuevaCategoria,
-            filtros: filtrosActivos,
-          }
-        : {
-            accion: "categoria",
-            valor: nuevaCategoria,
-            ids: Array.from(seleccionados),
-          };
-
-      const res = await apiFetch("/api/productos/masivo", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
-      
-      limpiarSeleccion();
-      invalidatePlanUsoCache();
-      startTransition(() => router.refresh());
-    } catch (err: any) {
-      setErrorMasivo(err.message || "Error al actualizar");
-    } finally {
-      setCargandoMasivo(false);
-    }
+    const nombre = categorias.find(c => c.id === nuevaCategoria)?.nombre ?? "categoría";
+    ejecutarAccionMasiva("categoria", { valor: nuevaCategoria }, nombre);
   };
 
-  const aplicarCambioProveedor = async () => {
+  const aplicarCambioProveedor = () => {
     if (!nuevoProveedor) return;
-    
-    setCargandoMasivo(true);
-    setErrorMasivo("");
-    try {
-      const payload = modoSeleccion === "todos"
-        ? {
-            accion: "proveedor",
-            valor: nuevoProveedor,
-            filtros: filtrosActivos,
-          }
-        : {
-            accion: "proveedor",
-            valor: nuevoProveedor,
-            ids: Array.from(seleccionados),
-          };
-
-      const res = await apiFetch("/api/productos/masivo", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
-      
-      limpiarSeleccion();
-      invalidatePlanUsoCache();
-      startTransition(() => router.refresh());
-    } catch (err: any) {
-      setErrorMasivo(err.message || "Error al actualizar");
-    } finally {
-      setCargandoMasivo(false);
-    }
+    const nombre = proveedores.find(p => p.id === nuevoProveedor)?.nombre ?? "proveedor";
+    ejecutarAccionMasiva("proveedor", { valor: nuevoProveedor }, nombre);
   };
 
-  const aplicarCambioStock = async () => {
+  const aplicarCambioStock = () => {
     if (!valorStock) return;
-    
-    setCargandoMasivo(true);
-    setErrorMasivo("");
-    try {
-      const payload = modoSeleccion === "todos"
-        ? {
-            accion: "stock",
-            tipo: ajusteStock,
-            valor: parseFloat(valorStock),
-            filtros: filtrosActivos,
-          }
-        : {
-            accion: "stock",
-            tipo: ajusteStock,
-            valor: parseFloat(valorStock),
-            ids: Array.from(seleccionados),
-          };
-
-      const res = await apiFetch("/api/productos/masivo", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
-      
-      limpiarSeleccion();
-      invalidatePlanUsoCache();
-      startTransition(() => router.refresh());
-    } catch (err: any) {
-      setErrorMasivo(err.message || "Error al actualizar");
-    } finally {
-      setCargandoMasivo(false);
-    }
+    ejecutarAccionMasiva("stock", { tipo: ajusteStock, valor: parseFloat(valorStock) }, "stock");
   };
 
-  const aplicarCambioPrecio = async () => {
+  const aplicarCambioPrecio = () => {
     if (!valorPrecio) return;
-    
-    setCargandoMasivo(true);
-    setErrorMasivo("");
-    try {
-      const payload = modoSeleccion === "todos"
-        ? {
-            accion: "precio",
-            tipo: ajustePrecio,
-            valor: parseFloat(valorPrecio),
-            filtros: filtrosActivos,
-          }
-        : {
-            accion: "precio",
-            tipo: ajustePrecio,
-            valor: parseFloat(valorPrecio),
-            ids: Array.from(seleccionados),
-          };
-
-      const res = await apiFetch("/api/productos/masivo", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
-      
-      limpiarSeleccion();
-      invalidatePlanUsoCache();
-      startTransition(() => router.refresh());
-    } catch (err: any) {
-      setErrorMasivo(err.message || "Error al actualizar");
-    } finally {
-      setCargandoMasivo(false);
-    }
+    ejecutarAccionMasiva("precio", { tipo: ajustePrecio, valor: parseFloat(valorPrecio) }, "precio");
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // FUNCIONES INDIVIDUALES (existentes)
-  // ═══════════════════════════════════════════════════════════════
+  // ── Acciones individuales ─────────────────────────────────────
   function cerrarModal() { setModal({ abierto: false, producto: undefined }); }
 
   function handleGuardado() {
@@ -287,27 +168,31 @@ export default function ProductosTabla({
 
   async function handleEliminar() {
     if (!confirmEliminar.producto) return;
-    setConfirmEliminar(prev => ({ ...prev, cargando: true, error: "" }));
+    setConfirmEliminar(prev => ({ ...prev, cargando: true }));
+
+    const nombreProducto = confirmEliminar.producto.nombre;
+    const toastId = toast.loading("Eliminando producto...");
     try {
       const res  = await apiFetch(`/api/productos/${confirmEliminar.producto.id}`, { method: "DELETE" });
       const data = await res.json();
       if (!data.ok) {
-        setConfirmEliminar(prev => ({ ...prev, cargando: false, error: data.error ?? "Error al eliminar" }));
+        toast.update(toastId, { type: "error", title: "Error al eliminar", description: data.error ?? "Intentá de nuevo" });
+        setConfirmEliminar(prev => ({ ...prev, cargando: false }));
         return;
       }
+      toast.update(toastId, { type: "success", title: "Producto eliminado", description: nombreProducto });
       invalidatePlanUsoCache();
-      setConfirmEliminar({ abierto: false, producto: null, cargando: false, error: "" });
+      setConfirmEliminar({ abierto: false, producto: null, cargando: false });
       startTransition(() => router.refresh());
     } catch (err: any) {
       if (err?.message !== "SESSION_EXPIRED" && err?.message !== "PLAN_VENCIDO") {
-        setConfirmEliminar(prev => ({ ...prev, cargando: false, error: "Error de conexión" }));
+        toast.update(toastId, { type: "error", title: "Error de conexión" });
       }
+      setConfirmEliminar(prev => ({ ...prev, cargando: false }));
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // RENDER
-  // ═══════════════════════════════════════════════════════════════
+  // ── Render estado vacío ───────────────────────────────────────
   if (productos.length === 0) {
     return (
       <div className="card py-20 text-center">
@@ -328,12 +213,12 @@ export default function ProductosTabla({
     );
   }
 
-  const todosSeleccionados = seleccionados.size === productos.length;
+  const todosSeleccionados   = seleccionados.size === productos.length;
   const algunosSeleccionados = seleccionados.size > 0 && seleccionados.size < productos.length;
 
   return (
     <>
-      {/* BARRA DE ACCIONES MASIVAS */}
+      {/* Barra de acciones masivas */}
       {seleccionados.size > 0 && (
         <div className="card p-4 mb-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -341,74 +226,48 @@ export default function ProductosTabla({
               <div className="flex items-center gap-2">
                 <CheckSquare className="h-5 w-5" style={{ color: "#DC2626" }} />
                 <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                  {modoSeleccion === "todos" 
-                    ? `${totalProductos} seleccionados (todos)` 
-                    : `${seleccionados.size} seleccionado${seleccionados.size !== 1 ? "s" : ""}`
-                  }
+                  {modoSeleccion === "todos"
+                    ? `${totalProductos} seleccionados (todos)`
+                    : `${seleccionados.size} seleccionado${seleccionados.size !== 1 ? "s" : ""}`}
                 </span>
               </div>
-              <button
-                onClick={limpiarSeleccion}
-                className="text-xs font-medium transition-colors"
-                style={{ color: "var(--text-muted)" }}
-              >
+              <button onClick={limpiarSeleccion} className="text-xs font-medium transition-colors" style={{ color: "var(--text-muted)" }}>
                 Limpiar selección
               </button>
             </div>
-
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => setAccionMasiva("categoria")}
-                className="btn-ghost px-3 py-2 text-xs"
-              >
-                <Tag className="h-4 w-4" />
-                Categoría
+              <button onClick={() => setAccionMasiva("categoria")} className="btn-ghost px-3 py-2 text-xs">
+                <Tag className="h-4 w-4" /> Categoría
               </button>
-              <button
-                onClick={() => setAccionMasiva("proveedor")}
-                className="btn-ghost px-3 py-2 text-xs"
-              >
-                <Building2 className="h-4 w-4" />
-                Proveedor
+              <button onClick={() => setAccionMasiva("proveedor")} className="btn-ghost px-3 py-2 text-xs">
+                <Building2 className="h-4 w-4" /> Proveedor
               </button>
-              <button
-                onClick={() => setAccionMasiva("stock")}
-                className="btn-ghost px-3 py-2 text-xs"
-              >
-                <PackagePlus className="h-4 w-4" />
-                Stock
+              <button onClick={() => setAccionMasiva("stock")} className="btn-ghost px-3 py-2 text-xs">
+                <PackagePlus className="h-4 w-4" /> Stock
               </button>
-              <button
-                onClick={() => setAccionMasiva("precio")}
-                className="btn-ghost px-3 py-2 text-xs"
-              >
-                <DollarSign className="h-4 w-4" />
-                Precio
+              <button onClick={() => setAccionMasiva("precio")} className="btn-ghost px-3 py-2 text-xs">
+                <DollarSign className="h-4 w-4" /> Precio
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ✨ BANNER: Seleccionar todos los resultados */}
+      {/* Banner: seleccionar todos los resultados */}
       {seleccionados.size === productos.length && modoSeleccion === "pagina" && totalProductos > productos.length && (
         <div className="card p-4 mb-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
               Los <strong>{productos.length}</strong> productos de esta página están seleccionados.
             </p>
-            <button
-              onClick={() => setModoSeleccion("todos")}
-              className="text-sm font-medium underline"
-              style={{ color: "#DC2626" }}
-            >
+            <button onClick={() => setModoSeleccion("todos")} className="text-sm font-medium underline" style={{ color: "#DC2626" }}>
               Seleccionar todos los <strong>{totalProductos}</strong> resultados
             </button>
           </div>
         </div>
       )}
 
-      {/* ✨ BANNER: Todos los resultados seleccionados */}
+      {/* Banner: todos los resultados seleccionados */}
       {modoSeleccion === "todos" && (
         <div className="card p-4 mb-4" style={{ background: "rgba(220,38,38,0.08)", borderColor: "#DC2626" }}>
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -416,12 +275,8 @@ export default function ProductosTabla({
               Todos los <strong>{totalProductos}</strong> resultados están seleccionados
             </p>
             <button
-              onClick={() => {
-                setModoSeleccion("pagina");
-                setSeleccionados(new Set(productos.map(p => p.id)));
-              }}
-              className="text-sm font-medium underline"
-              style={{ color: "#DC2626" }}
+              onClick={() => { setModoSeleccion("pagina"); setSeleccionados(new Set(productos.map(p => p.id))); }}
+              className="text-sm font-medium underline" style={{ color: "#DC2626" }}
             >
               Volver a seleccionar solo esta página
             </button>
@@ -429,18 +284,14 @@ export default function ProductosTabla({
         </div>
       )}
 
-      {/* TABLA */}
+      {/* Tabla */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead style={{ borderBottom: "1px solid var(--border-base)" }}>
               <tr>
-                {/* ✨ CHECKBOX SELECCIONAR TODOS */}
                 <th className="px-4 py-3 w-12">
-                  <button
-                    onClick={toggleTodos}
-                    className="flex items-center justify-center w-full transition-colors"
-                  >
+                  <button onClick={toggleTodos} className="flex items-center justify-center w-full transition-colors">
                     {todosSeleccionados || modoSeleccion === "todos" ? (
                       <CheckSquare className="h-5 w-5" style={{ color: "#DC2626" }} />
                     ) : algunosSeleccionados ? (
@@ -453,7 +304,6 @@ export default function ProductosTabla({
                     )}
                   </button>
                 </th>
-
                 {["Producto", "Categoría", "Precio", "Stock", "Acciones"].map((h) => (
                   <th key={h}
                     className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider
@@ -466,17 +316,13 @@ export default function ProductosTabla({
             </thead>
             <tbody>
               {productos.map((producto) => {
-                const stockBajo = producto.stock <= producto.stockMinimo;
+                const stockBajo       = producto.stock <= producto.stockMinimo;
                 const estaSeleccionado = seleccionados.has(producto.id);
 
                 return (
                   <tr key={producto.id} className="table-row">
-                    {/* ✨ CHECKBOX POR FILA */}
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => toggleSeleccion(producto.id)}
-                        className="flex items-center justify-center w-full transition-colors"
-                      >
+                      <button onClick={() => toggleSeleccion(producto.id)} className="flex items-center justify-center w-full">
                         {estaSeleccionado || modoSeleccion === "todos" ? (
                           <CheckSquare className="h-5 w-5" style={{ color: "#DC2626" }} />
                         ) : (
@@ -488,9 +334,8 @@ export default function ProductosTabla({
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         {producto.imagen ? (
-                          <img src={producto.imagen?.replace('/upload/', '/upload/f_auto,q_auto,w_200/')} 
-                            alt={producto.nombre}
-                            loading="lazy"
+                          <img src={producto.imagen?.replace('/upload/', '/upload/f_auto,q_auto,w_200/')}
+                            alt={producto.nombre} loading="lazy"
                             className="h-9 w-9 rounded-lg object-cover flex-shrink-0"
                             style={{ border: "1px solid var(--border-base)" }} />
                         ) : (
@@ -507,18 +352,22 @@ export default function ProductosTabla({
                         </div>
                       </div>
                     </td>
+
                     <td className="px-4 py-3" style={{ color: "var(--text-secondary)" }}>
                       {producto.categoria?.nombre ?? <span style={{ color: "var(--text-faint)" }}>—</span>}
                     </td>
+
                     <td className="px-4 py-3 text-right font-semibold" style={{ color: "var(--text-primary)" }}>
                       {formatPrecio(producto.precio)}
                     </td>
+
                     <td className="px-4 py-3 text-right">
                       <span className={stockBajo ? "badge-danger" : "badge-success"}>
                         {stockBajo && <AlertTriangle className="h-3 w-3 mr-1" />}
                         {producto.stock} {producto.unidad ?? "u."}
                       </span>
                     </td>
+
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-3">
                         <button onClick={() => setModal({ abierto: true, producto })}
@@ -527,7 +376,7 @@ export default function ProductosTabla({
                           onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}>
                           Editar
                         </button>
-                        <button onClick={() => setConfirmEliminar({ abierto: true, producto, cargando: false, error: "" })}
+                        <button onClick={() => setConfirmEliminar({ abierto: true, producto, cargando: false })}
                           className="text-xs font-medium transition-colors" style={{ color: "#f87171" }}
                           onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#fca5a5"}
                           onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "#f87171"}>
@@ -543,15 +392,17 @@ export default function ProductosTabla({
         </div>
       </div>
 
-      {/* MODAL EDICIÓN MASIVA - CATEGORÍA */}
-      {accionMasiva === "categoria" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.7)" }}>
-          <div className="rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4"
-            style={{ background: "var(--bg-card)" }}>
+      {/* ── Modales acciones masivas — sin errorMasivo inline ── */}
+      {accionMasiva && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }}>
+          <div className="rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" style={{ background: "var(--bg-card)" }}>
+
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                Cambiar categoría
+                {accionMasiva === "categoria" && "Cambiar categoría"}
+                {accionMasiva === "proveedor" && "Cambiar proveedor"}
+                {accionMasiva === "stock"     && "Ajustar stock"}
+                {accionMasiva === "precio"    && "Ajustar precios"}
               </h3>
               <button onClick={() => setAccionMasiva(null)}>
                 <X className="h-5 w-5" style={{ color: "var(--text-muted)" }} />
@@ -559,262 +410,102 @@ export default function ProductosTabla({
             </div>
 
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              Cambiar la categoría de <strong>
-                {modoSeleccion === "todos" ? totalProductos : seleccionados.size}
-              </strong> producto{(modoSeleccion === "todos" ? totalProductos : seleccionados.size) !== 1 ? "s" : ""}
+              Aplicar a <strong>{cantidadSeleccionada}</strong> producto{cantidadSeleccionada !== 1 ? "s" : ""}
             </p>
 
-            <div>
-              <label className="label-base">Nueva categoría</label>
-              <select
-                value={nuevaCategoria}
-                onChange={(e) => setNuevaCategoria(e.target.value)}
-                className="input-base"
-              >
-                <option value="">Seleccionar categoría</option>
-                {categorias.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            {errorMasivo && (
-              <p className="text-sm text-red-600">{errorMasivo}</p>
-            )}
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setAccionMasiva(null)}
-                className="flex-1 btn-ghost"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={aplicarCambioCategoria}
-                disabled={!nuevaCategoria || cargandoMasivo}
-                className="flex-1 btn-primary disabled:opacity-50"
-              >
-                {cargandoMasivo ? "Aplicando..." : "Aplicar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL EDICIÓN MASIVA - PROVEEDOR */}
-      {accionMasiva === "proveedor" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.7)" }}>
-          <div className="rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4"
-            style={{ background: "var(--bg-card)" }}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                Cambiar proveedor
-              </h3>
-              <button onClick={() => setAccionMasiva(null)}>
-                <X className="h-5 w-5" style={{ color: "var(--text-muted)" }} />
-              </button>
-            </div>
-
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              Cambiar el proveedor de <strong>
-                {modoSeleccion === "todos" ? totalProductos : seleccionados.size}
-              </strong> producto{(modoSeleccion === "todos" ? totalProductos : seleccionados.size) !== 1 ? "s" : ""}
-            </p>
-
-            <div>
-              <label className="label-base">Nuevo proveedor</label>
-              <select
-                value={nuevoProveedor}
-                onChange={(e) => setNuevoProveedor(e.target.value)}
-                className="input-base"
-              >
-                <option value="">Seleccionar proveedor</option>
-                {proveedores.map((prov) => (
-                  <option key={prov.id} value={prov.id}>{prov.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            {errorMasivo && (
-              <p className="text-sm text-red-600">{errorMasivo}</p>
-            )}
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setAccionMasiva(null)}
-                className="flex-1 btn-ghost"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={aplicarCambioProveedor}
-                disabled={!nuevoProveedor || cargandoMasivo}
-                className="flex-1 btn-primary disabled:opacity-50"
-              >
-                {cargandoMasivo ? "Aplicando..." : "Aplicar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL EDICIÓN MASIVA - STOCK */}
-      {accionMasiva === "stock" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.7)" }}>
-          <div className="rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4"
-            style={{ background: "var(--bg-card)" }}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                Ajustar stock
-              </h3>
-              <button onClick={() => setAccionMasiva(null)}>
-                <X className="h-5 w-5" style={{ color: "var(--text-muted)" }} />
-              </button>
-            </div>
-
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              Ajustar el stock de <strong>
-                {modoSeleccion === "todos" ? totalProductos : seleccionados.size}
-              </strong> producto{(modoSeleccion === "todos" ? totalProductos : seleccionados.size) !== 1 ? "s" : ""}
-            </p>
-
-            <div>
-              <label className="label-base">Tipo de ajuste</label>
-              <select
-                value={ajusteStock}
-                onChange={(e) => setAjusteStock(e.target.value as any)}
-                className="input-base"
-              >
-                <option value="establecer">Establecer stock en</option>
-                <option value="sumar">Sumar al stock actual</option>
-                <option value="restar">Restar del stock actual</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="label-base">Cantidad</label>
-              <input
-                type="number"
-                min="0"
-                value={valorStock}
-                onChange={(e) => setValorStock(e.target.value)}
-                className="input-base"
-                placeholder="0"
-              />
-            </div>
-
-            {errorMasivo && (
-              <p className="text-sm text-red-600">{errorMasivo}</p>
-            )}
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setAccionMasiva(null)}
-                className="flex-1 btn-ghost"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={aplicarCambioStock}
-                disabled={!valorStock || cargandoMasivo}
-                className="flex-1 btn-primary disabled:opacity-50"
-              >
-                {cargandoMasivo ? "Aplicando..." : "Aplicar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL EDICIÓN MASIVA - PRECIO */}
-      {accionMasiva === "precio" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.7)" }}>
-          <div className="rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4"
-            style={{ background: "var(--bg-card)" }}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                Ajustar precios
-              </h3>
-              <button onClick={() => setAccionMasiva(null)}>
-                <X className="h-5 w-5" style={{ color: "var(--text-muted)" }} />
-              </button>
-            </div>
-
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              Ajustar el precio de <strong>
-                {modoSeleccion === "todos" ? totalProductos : seleccionados.size}
-              </strong> producto{(modoSeleccion === "todos" ? totalProductos : seleccionados.size) !== 1 ? "s" : ""}
-            </p>
-
-            <div>
-              <label className="label-base">Tipo de ajuste</label>
-              <select
-                value={ajustePrecio}
-                onChange={(e) => setAjustePrecio(e.target.value as any)}
-                className="input-base"
-              >
-                <option value="porcentaje">Aumentar/Reducir por porcentaje</option>
-                <option value="fijo">Establecer precio fijo</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="label-base">
-                {ajustePrecio === "porcentaje" ? "Porcentaje (+ o -)" : "Nuevo precio"}
-              </label>
-              <div className="relative">
-                {ajustePrecio === "porcentaje" ? (
-                  <>
-                    <input
-                      type="number"
-                      value={valorPrecio}
-                      onChange={(e) => setValorPrecio(e.target.value)}
-                      className="input-base pr-8"
-                      placeholder="Ej: 10 para +10%, -15 para -15%"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm"
-                      style={{ color: "var(--text-muted)" }}>%</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium"
-                      style={{ color: "var(--text-muted)" }}>$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={valorPrecio}
-                      onChange={(e) => setValorPrecio(e.target.value)}
-                      className="input-base pl-8"
-                      placeholder="0.00"
-                    />
-                  </>
-                )}
+            {/* Categoría */}
+            {accionMasiva === "categoria" && (
+              <div>
+                <label className="label-base">Nueva categoría</label>
+                <select value={nuevaCategoria} onChange={(e) => setNuevaCategoria(e.target.value)} className="input-base">
+                  <option value="">Seleccionar categoría</option>
+                  {categorias.map((cat) => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
+                </select>
               </div>
-              {ajustePrecio === "porcentaje" && (
-                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-                  Ejemplo: 10 = +10% | -20 = -20%
-                </p>
-              )}
-            </div>
+            )}
 
-            {errorMasivo && (
-              <p className="text-sm text-red-600">{errorMasivo}</p>
+            {/* Proveedor */}
+            {accionMasiva === "proveedor" && (
+              <div>
+                <label className="label-base">Nuevo proveedor</label>
+                <select value={nuevoProveedor} onChange={(e) => setNuevoProveedor(e.target.value)} className="input-base">
+                  <option value="">Seleccionar proveedor</option>
+                  {proveedores.map((prov) => <option key={prov.id} value={prov.id}>{prov.nombre}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Stock */}
+            {accionMasiva === "stock" && (
+              <>
+                <div>
+                  <label className="label-base">Tipo de ajuste</label>
+                  <select value={ajusteStock} onChange={(e) => setAjusteStock(e.target.value as any)} className="input-base">
+                    <option value="establecer">Establecer stock en</option>
+                    <option value="sumar">Sumar al stock actual</option>
+                    <option value="restar">Restar del stock actual</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label-base">Cantidad</label>
+                  <input type="number" min="0" value={valorStock}
+                    onChange={(e) => setValorStock(e.target.value)} className="input-base" placeholder="0" />
+                </div>
+              </>
+            )}
+
+            {/* Precio */}
+            {accionMasiva === "precio" && (
+              <>
+                <div>
+                  <label className="label-base">Tipo de ajuste</label>
+                  <select value={ajustePrecio} onChange={(e) => setAjustePrecio(e.target.value as any)} className="input-base">
+                    <option value="porcentaje">Aumentar/Reducir por porcentaje</option>
+                    <option value="fijo">Establecer precio fijo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label-base">{ajustePrecio === "porcentaje" ? "Porcentaje (+ o -)" : "Nuevo precio"}</label>
+                  <div className="relative">
+                    {ajustePrecio === "porcentaje" ? (
+                      <>
+                        <input type="number" value={valorPrecio} onChange={(e) => setValorPrecio(e.target.value)}
+                          className="input-base pr-8" placeholder="Ej: 10 para +10%, -15 para -15%" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-muted)" }}>%</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: "var(--text-muted)" }}>$</span>
+                        <input type="number" min="0" step="0.01" value={valorPrecio}
+                          onChange={(e) => setValorPrecio(e.target.value)} className="input-base pl-8" placeholder="0.00" />
+                      </>
+                    )}
+                  </div>
+                  {ajustePrecio === "porcentaje" && (
+                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>Ejemplo: 10 = +10% | -20 = -20%</p>
+                  )}
+                </div>
+              </>
             )}
 
             <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setAccionMasiva(null)}
-                className="flex-1 btn-ghost"
-              >
+              <button onClick={() => setAccionMasiva(null)} className="flex-1 btn-ghost" disabled={cargandoMasivo}>
                 Cancelar
               </button>
               <button
-                onClick={aplicarCambioPrecio}
-                disabled={!valorPrecio || cargandoMasivo}
+                onClick={
+                  accionMasiva === "categoria" ? aplicarCambioCategoria :
+                  accionMasiva === "proveedor" ? aplicarCambioProveedor :
+                  accionMasiva === "stock"     ? aplicarCambioStock     :
+                  aplicarCambioPrecio
+                }
+                disabled={
+                  cargandoMasivo ||
+                  (accionMasiva === "categoria" && !nuevaCategoria) ||
+                  (accionMasiva === "proveedor" && !nuevoProveedor) ||
+                  (accionMasiva === "stock"     && !valorStock)     ||
+                  (accionMasiva === "precio"    && !valorPrecio)
+                }
                 className="flex-1 btn-primary disabled:opacity-50"
               >
                 {cargandoMasivo ? "Aplicando..." : "Aplicar"}
@@ -824,13 +515,14 @@ export default function ProductosTabla({
         </div>
       )}
 
-      {/* MODALS INDIVIDUALES (existentes) */}
+      {/* Modal edición individual */}
       {modal.abierto && (
         <ProductoModal producto={modal.producto as Producto | undefined}
           categorias={categorias} proveedores={proveedores}
           onClose={cerrarModal} onGuardado={handleGuardado} />
       )}
 
+      {/* Modal confirmar eliminar — sin error inline */}
       {confirmEliminar.abierto && confirmEliminar.producto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 backdrop-blur-sm" style={{ background: "rgba(0,0,0,0.65)" }}
@@ -851,30 +543,19 @@ export default function ProductosTabla({
                 . No aparecerá más en el inventario ni en el POS.
               </p>
             </div>
-            {confirmEliminar.error && (
-              <p className="text-center text-xs rounded-lg px-3 py-2"
-                style={{ color: "#f87171", background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)" }}>
-                {confirmEliminar.error}
-              </p>
-            )}
             <div className="flex gap-3 pt-1">
               <button onClick={() => setConfirmEliminar(prev => ({ ...prev, abierto: false }))}
                 disabled={confirmEliminar.cargando}
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold transition-colors disabled:opacity-50"
-                style={{ color: "var(--text-muted)", background: "var(--bg-hover)", border: "1px solid var(--border-base)" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-hover)"}>
+                style={{ color: "var(--text-muted)", background: "var(--bg-hover)", border: "1px solid var(--border-base)" }}>
                 Cancelar
               </button>
               <button onClick={handleEliminar} disabled={confirmEliminar.cargando}
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: "#DC2626", color: "#ffffff" }}
-                onMouseEnter={e => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.background = "#b91c1c"; }}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#DC2626"}>
+                style={{ background: "#DC2626", color: "#ffffff" }}>
                 {confirmEliminar.cargando
                   ? <><div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Eliminando...</>
-                  : <><Trash2 className="h-3.5 w-3.5" />Sí, eliminar</>
-                }
+                  : <><Trash2 className="h-3.5 w-3.5" />Sí, eliminar</>}
               </button>
             </div>
           </div>
@@ -884,9 +565,7 @@ export default function ProductosTabla({
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// COMPONENTE BOTÓN NUEVO PRODUCTO (sin cambios)
-// ═══════════════════════════════════════════════════════════════
+// ── Botón Nuevo Producto ───────────────────────────────────────
 export function NuevoProductoBtn({
   categorias, proveedores,
 }: {

@@ -2,7 +2,8 @@
 "use client";
 
 import { useState } from "react";
-import { X, Package, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { X, Package, Loader2 } from "lucide-react";
+import { useToast } from "@/components/toast";
 
 type CategoriaSimple = { id: string; nombre: string };
 
@@ -14,6 +15,8 @@ type Props = {
 };
 
 export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, categorias = [] }: Props) {
+  const toast = useToast();
+
   const [form, setForm] = useState({
     nombre: "",
     codigoProducto: "",
@@ -22,27 +25,24 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
     categoriaId: "",
   });
   const [cargando, setCargando] = useState(false);
-  const [error, setError] = useState("");
-  const [exito, setExito] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!form.nombre.trim()) {
-      setError("El nombre es obligatorio");
+      toast.error("El nombre es obligatorio");
       return;
     }
 
     if (!form.precio || parseFloat(form.precio) <= 0) {
-      setError("El precio debe ser mayor a 0");
+      toast.error("El precio debe ser mayor a 0");
       return;
     }
 
     setCargando(true);
-    setError("");
 
-    try {
-      const res = await fetch("/api/productos", {
+    await toast.promise(
+      fetch("/api/productos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -53,28 +53,24 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
           categoriaId: form.categoriaId || null,
           activo: true,
         }),
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        setError(data.error || "Error al crear el producto");
-        return;
+      }).then(async (res) => {
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Error al crear el producto");
+        onProductoCreado(data.data);
+        setTimeout(() => {
+          onClose();
+          setForm({ nombre: "", codigoProducto: "", precio: "", stock: "0", categoriaId: "" });
+        }, 800);
+        return data;
+      }),
+      {
+        loading: "Creando producto...",
+        success: `"${form.nombre.trim()}" creado correctamente`,
+        error: (e: unknown) => (e instanceof Error ? e.message : "Error al crear el producto"),
       }
-
-      setExito(true);
-      onProductoCreado(data.data);
-
-      setTimeout(() => {
-        onClose();
-        setForm({ nombre: "", codigoProducto: "", precio: "", stock: "0", categoriaId: "" });
-        setExito(false);
-      }, 1000);
-    } catch (err) {
-      setError("Error de conexión");
-    } finally {
+    ).finally(() => {
       setCargando(false);
-    }
+    });
   };
 
   if (!open) return null;
@@ -126,7 +122,7 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
               placeholder="Ej: Remera negra talle M"
               className="input-base w-full"
               autoFocus
-              disabled={cargando || exito}
+              disabled={cargando}
             />
           </div>
 
@@ -141,7 +137,7 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
               onChange={(e) => setForm({ ...form, codigoProducto: e.target.value })}
               placeholder="Ej: REM-001"
               className="input-base w-full"
-              disabled={cargando || exito}
+              disabled={cargando}
             />
           </div>
 
@@ -155,7 +151,7 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
                 value={form.categoriaId}
                 onChange={(e) => setForm({ ...form, categoriaId: e.target.value })}
                 className="input-base w-full"
-                disabled={cargando || exito}
+                disabled={cargando}
               >
                 <option value="">— Sin categoría —</option>
                 {categorias.map((cat) => (
@@ -181,7 +177,7 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
                 min="0"
                 step="0.01"
                 className="input-base w-full"
-                disabled={cargando || exito}
+                disabled={cargando}
               />
             </div>
             <div>
@@ -194,32 +190,10 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
                 onChange={(e) => setForm({ ...form, stock: e.target.value })}
                 min="0"
                 className="input-base w-full"
-                disabled={cargando || exito}
+                disabled={cargando}
               />
             </div>
           </div>
-
-          {/* Error */}
-          {error && (
-            <div
-              className="flex items-start gap-2 rounded-lg px-3 py-2.5"
-              style={{ background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.2)" }}
-            >
-              <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-red-300">{error}</p>
-            </div>
-          )}
-
-          {/* Éxito */}
-          {exito && (
-            <div
-              className="flex items-center gap-2 rounded-lg px-3 py-2.5"
-              style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}
-            >
-              <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
-              <p className="text-xs font-medium text-green-300">¡Producto creado!</p>
-            </div>
-          )}
 
           {/* Botones */}
           <div className="flex gap-2 pt-2">
@@ -228,7 +202,7 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
               onClick={onClose}
               className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors"
               style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
-              disabled={cargando || exito}
+              disabled={cargando}
             >
               Cancelar
             </button>
@@ -236,17 +210,12 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
               type="submit"
               className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               style={{ background: "#DC2626", color: "#fff" }}
-              disabled={cargando || exito}
+              disabled={cargando}
             >
               {cargando ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Creando...
-                </>
-              ) : exito ? (
-                <>
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Creado
                 </>
               ) : (
                 "Crear producto"
