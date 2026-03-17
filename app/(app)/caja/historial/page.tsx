@@ -4,12 +4,14 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   History, ChevronLeft, ChevronRight, Clock,
-  Banknote, Smartphone, X, AlertTriangle, User, Search,
+  Banknote, Smartphone, X, User, Search,
   RefreshCw, ArrowUpRight, ArrowDownRight, Edit, Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { fmtFechaAR, fmtHora24AR, fechaHoyAR } from "@/lib/dateAR";
+import { fmtFechaAR, fmtHora24AR } from "@/lib/dateAR";
+import { useToast }   from "@/components/toast";
+import { useConfirm } from "@/components/toast";
 
 // ── Types ─────────────────────────────────────────────────────
 type TipoMov = "APERTURA" | "VENTA_EFECTIVO" | "VENTA_VIRTUAL" | "INGRESO" | "EGRESO" | "CIERRE";
@@ -201,7 +203,6 @@ function DetalleCaja({ caja, onClose }: { caja: CajaCerrada; onClose: () => void
                     <p className={cn("text-sm font-semibold", esPositivo(mov.tipo) ? "text-green-400" : "text-red-400")}>
                       {esPositivo(mov.tipo) ? "+" : "−"}{fmt(mov.monto)}
                     </p>
-                    {/* ✅ Hora en AR */}
                     <p className="text-xs text-zinc-600">{fmtHora24AR(mov.createdAt)}</p>
                   </div>
                 </div>
@@ -225,8 +226,10 @@ export default function HistorialCajaPage() {
   const [turnoFiltro,    setTurnoFiltro]    = useState("");
   const [detalle,        setDetalle]        = useState<CajaCerrada | null>(null);
   const [modalEditar,    setModalEditar]    = useState<ModalEdicion | null>(null);
-  const [modalEliminar,  setModalEliminar]  = useState<string | null>(null);
   const [cargandoAccion, setCargandoAccion] = useState(false);
+
+  const toast   = useToast();
+  const confirm = useConfirm();
 
   const limit = 15;
 
@@ -257,7 +260,10 @@ export default function HistorialCajaPage() {
   const handleEditar = async () => {
     if (!modalEditar) return;
     const saldo = parseFloat(modalEditar.saldoContado);
-    if (isNaN(saldo) || saldo < 0) { alert("Saldo contado inválido"); return; }
+    if (isNaN(saldo) || saldo < 0) {
+      toast.error("Saldo contado inválido");
+      return;
+    }
     setCargandoAccion(true);
     try {
       const res = await fetch(`/api/caja/historial/${modalEditar.caja.id}`, {
@@ -265,18 +271,45 @@ export default function HistorialCajaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ saldoContado: saldo, observaciones: modalEditar.observaciones.trim() || null }),
       });
-      if (res.ok) { setModalEditar(null); fetchHistorial(page); }
-      else { const err = await res.json(); alert(err.error || "Error al editar"); }
-    } finally { setCargandoAccion(false); }
+      if (res.ok) {
+        toast.success("Cierre actualizado correctamente");
+        setModalEditar(null);
+        fetchHistorial(page);
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Error al editar");
+      }
+    } finally {
+      setCargandoAccion(false);
+    }
   };
 
   const handleEliminar = async (id: string) => {
-    setCargandoAccion(true);
-    try {
-      const res = await fetch(`/api/caja/historial/${id}`, { method: "DELETE" });
-      if (res.ok) { setModalEliminar(null); fetchHistorial(page); }
-      else { const err = await res.json(); alert(err.error || "Error al eliminar"); }
-    } finally { setCargandoAccion(false); }
+    const caja = cajas.find(c => c.id === id);
+
+    const ok = await confirm({
+      title:        "¿Eliminar esta caja?",
+      description:  `Esta acción no se puede deshacer. Se eliminarán todos los movimientos asociados${caja?.cerradaAt ? ` del ${fmtFechaAR(caja.cerradaAt)}` : ""}.`,
+      confirmLabel: "Eliminar",
+      cancelLabel:  "Cancelar",
+      variant:      "danger",
+      icon:         "trash",
+    });
+    if (!ok) return;
+
+    await toast.promise(
+      fetch(`/api/caja/historial/${id}`, { method: "DELETE" })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.ok) throw new Error(data.error ?? "Error al eliminar");
+        }),
+      {
+        loading: "Eliminando sesión de caja...",
+        success: "Sesión eliminada correctamente",
+        error:   (e: unknown) => (e as Error).message,
+      }
+    );
+    fetchHistorial(page);
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -387,7 +420,6 @@ export default function HistorialCajaPage() {
                   const diff = caja.diferencia ?? 0;
                   return (
                     <tr key={caja.id} className="table-row">
-                      {/* ✅ Fecha y hora en AR */}
                       <td className="px-4 py-3">
                         <p className="text-zinc-200 font-medium">{fmtFechaAR(caja.abiertaAt)}</p>
                         <p className="text-xs text-zinc-600 flex items-center gap-1 mt-0.5">
@@ -431,7 +463,7 @@ export default function HistorialCajaPage() {
                             <Edit className="h-3 w-3" /> Editar
                           </button>
                           <button
-                            onClick={() => setModalEliminar(caja.id)}
+                            onClick={() => handleEliminar(caja.id)}
                             className="text-xs text-zinc-400 hover:text-red-400 transition-colors flex items-center gap-1">
                             <Trash2 className="h-3 w-3" /> Eliminar
                           </button>
@@ -498,39 +530,6 @@ export default function HistorialCajaPage() {
               <button onClick={handleEditar} disabled={cargandoAccion}
                 className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors">
                 {cargandoAccion ? "Guardando..." : "Guardar"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Eliminar */}
-      {modalEliminar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.7)" }}
-          onClick={() => setModalEliminar(null)}>
-          <div className="w-full max-w-sm rounded-2xl p-6 space-y-4"
-            style={{ background: "#161616", border: "1px solid rgba(255,255,255,0.1)" }}
-            onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-900/20 flex items-center justify-center">
-                <AlertTriangle className="h-5 w-5 text-red-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">Eliminar caja</h3>
-                <p className="text-sm text-zinc-400 mt-1">
-                  Esta acción no se puede deshacer. Se eliminarán todos los movimientos asociados.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setModalEliminar(null)}
-                className="flex-1 py-2 border border-zinc-700 rounded-lg text-zinc-300 hover:bg-zinc-800 transition-colors">
-                Cancelar
-              </button>
-              <button onClick={() => handleEliminar(modalEliminar)} disabled={cargandoAccion}
-                className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 transition-colors">
-                {cargandoAccion ? "Eliminando..." : "Eliminar"}
               </button>
             </div>
           </div>

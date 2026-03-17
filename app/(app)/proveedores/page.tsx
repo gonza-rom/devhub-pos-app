@@ -2,7 +2,9 @@
 // app/(app)/proveedores/page.tsx
 
 import { useEffect, useState } from "react";
-import { Truck, Plus, Edit, Trash2, Mail, Phone, MapPin, FileText, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Truck, Plus, Edit, Trash2, Mail, Phone, MapPin, FileText } from "lucide-react";
+import { useToast }   from "@/components/toast";
+import { useConfirm } from "@/components/toast";
 
 type Proveedor = {
   id: string;
@@ -24,12 +26,9 @@ export default function ProveedoresPage() {
   const [formData, setFormData]       = useState(FORM_VACIO);
   const [guardando, setGuardando]     = useState(false);
   const [errorForm, setErrorForm]     = useState("");
-  const [exitoForm, setExitoForm]     = useState("");
 
-  // Modal de confirmación para eliminar
-  const [modalEliminar, setModalEliminar] = useState<Proveedor | null>(null);
-  const [eliminando, setEliminando]       = useState(false);
-  const [errorEliminar, setErrorEliminar] = useState("");
+  const toast   = useToast();
+  const confirm = useConfirm();
 
   useEffect(() => { fetchProveedores(); }, []);
 
@@ -39,7 +38,7 @@ export default function ProveedoresPage() {
       const data = await res.json();
       setProveedores(data.data ?? []);
     } catch {
-      console.error("Error al cargar proveedores");
+      toast.error("Error al cargar proveedores");
     } finally {
       setLoading(false);
     }
@@ -49,7 +48,6 @@ export default function ProveedoresPage() {
     e.preventDefault();
     setGuardando(true);
     setErrorForm("");
-    setExitoForm("");
 
     const url    = editingId ? `/api/proveedores/${editingId}` : "/api/proveedores";
     const method = editingId ? "PUT" : "POST";
@@ -67,7 +65,7 @@ export default function ProveedoresPage() {
         return;
       }
 
-      setExitoForm(editingId ? "Proveedor actualizado" : "Proveedor creado");
+      toast.success(editingId ? "Proveedor actualizado" : "Proveedor creado");
       handleCancelar();
       fetchProveedores();
     } catch {
@@ -87,7 +85,6 @@ export default function ProveedoresPage() {
     });
     setEditingId(proveedor.id);
     setErrorForm("");
-    setExitoForm("");
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -99,27 +96,32 @@ export default function ProveedoresPage() {
     setErrorForm("");
   }
 
-  async function handleEliminar() {
-    if (!modalEliminar) return;
-    setEliminando(true);
-    setErrorEliminar("");
+  async function handleEliminar(proveedor: Proveedor) {
+    const ok = await confirm({
+      title:        `¿Eliminar "${proveedor.nombre}"?`,
+      description:  proveedor._count.productos > 0
+        ? `Los ${proveedor._count.productos} producto(s) asociados quedarán sin proveedor. Esta acción no se puede deshacer.`
+        : "Esta acción no se puede deshacer.",
+      confirmLabel: "Eliminar",
+      cancelLabel:  "Cancelar",
+      variant:      "danger",
+      icon:         "trash",
+    });
+    if (!ok) return;
 
-    try {
-      const res  = await fetch(`/api/proveedores/${modalEliminar.id}`, { method: "DELETE" });
-      const data = await res.json();
-
-      if (!data.ok) {
-        setErrorEliminar(data.error ?? "Error al eliminar");
-        return;
+    await toast.promise(
+      fetch(`/api/proveedores/${proveedor.id}`, { method: "DELETE" })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.ok) throw new Error(data.error ?? "Error al eliminar");
+        }),
+      {
+        loading: "Eliminando proveedor...",
+        success: "Proveedor eliminado",
+        error:   (e: unknown) => (e as Error).message,
       }
-
-      setModalEliminar(null);
-      fetchProveedores();
-    } catch {
-      setErrorEliminar("Error de conexión");
-    } finally {
-      setEliminando(false);
-    }
+    );
+    fetchProveedores();
   }
 
   if (loading) {
@@ -155,14 +157,6 @@ export default function ProveedoresPage() {
           Nuevo proveedor
         </button>
       </div>
-
-      {/* Mensaje de éxito global */}
-      {exitoForm && (
-        <div className="flex items-center gap-2 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3">
-          <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-          <p className="text-sm font-medium text-green-600 dark:text-green-400">{exitoForm}</p>
-        </div>
-      )}
 
       {/* Formulario */}
       {showForm && (
@@ -232,7 +226,6 @@ export default function ProveedoresPage() {
 
             {errorForm && (
               <div className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2.5">
-                <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
                 <p className="text-sm text-red-600 dark:text-red-400">{errorForm}</p>
               </div>
             )}
@@ -295,7 +288,7 @@ export default function ProveedoresPage() {
                     <Edit className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => { setModalEliminar(proveedor); setErrorEliminar(""); }}
+                    onClick={() => handleEliminar(proveedor)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     title="Eliminar"
                   >
@@ -332,56 +325,6 @@ export default function ProveedoresPage() {
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Modal de confirmación para eliminar */}
-      {modalEliminar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => !eliminando && setModalEliminar(null)}
-          />
-          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-white dark:bg-gray-800 shadow-xl p-6 space-y-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 mx-auto">
-              <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
-            </div>
-            <div className="text-center space-y-1">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">¿Eliminar proveedor?</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Vas a eliminar{" "}
-                <span className="font-semibold text-gray-700 dark:text-gray-300">{modalEliminar.nombre}</span>.
-                {modalEliminar._count.productos > 0 && (
-                  <> Los {modalEliminar._count.productos} producto(s) asociados quedarán sin proveedor.</>
-                )}
-              </p>
-            </div>
-            {errorEliminar && (
-              <p className="text-center text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">
-                {errorEliminar}
-              </p>
-            )}
-            <div className="flex gap-3 pt-1">
-              <button
-                onClick={() => setModalEliminar(null)}
-                disabled={eliminando}
-                className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleEliminar}
-                disabled={eliminando}
-                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {eliminando ? (
-                  <><div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Eliminando...</>
-                ) : (
-                  <><Trash2 className="h-3.5 w-3.5" /> Sí, eliminar</>
-                )}
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

@@ -11,7 +11,7 @@ import {
   ShoppingCart, Search, X, Plus, Minus, Trash2,
   CreditCard, Banknote, Smartphone, QrCode, ChevronRight,
   Package, CheckCircle2, AlertCircle, Tag, Loader2,
-  ScanLine,ChevronDown
+  ScanLine, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPrecio } from "@/lib/utils";
@@ -22,6 +22,7 @@ import { ModalSeleccionFactura, DatosFactura } from "@/components/ventas/ModalSe
 import { useConfigAFIP } from "@/hooks/UseConfigAFIP";
 import { ModalCrearProductoRapido } from "@/components/ventas/ModalCrearProductoRapido";
 import { fechaHoyAR, horaAhoraAR } from "@/lib/dateAR";
+import { useToast } from "@/components/toast";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,8 @@ export default function POSClient({
   direccionTenant,
 }: Props) {
 
+  const toast = useToast();
+
   // Estados principales
   const [productos,       setProductos]       = useState<ProductoConCategoria[]>(productosIniciales);
   const [busqueda,        setBusqueda]        = useState("");
@@ -141,9 +144,9 @@ export default function POSClient({
   const [gridWidth,  setGridWidth]  = useState(1200);
   const [gridHeight, setGridHeight] = useState(750);
 
-  const [generarFactura,            setGenerarFactura]            = useState(false);
-  const [comprobanteGenerado,       setComprobanteGenerado]       = useState<string | null>(null);
-  const [modalFacturaAbierto,       setModalFacturaAbierto]       = useState(false);
+  const [generarFactura,      setGenerarFactura]      = useState(false);
+  const [comprobanteGenerado, setComprobanteGenerado] = useState<string | null>(null);
+  const [modalFacturaAbierto, setModalFacturaAbierto] = useState(false);
 
   const [productoEditando, setProductoEditando] = useState<ProductoConCategoria | null>(null);
   const [editando,         setEditando]         = useState(false);
@@ -161,8 +164,8 @@ export default function POSClient({
   const [itemManualNombre, setItemManualNombre] = useState("");
   const [itemManualPrecio, setItemManualPrecio] = useState("");
 
-  const [modalCrearProducto,  setModalCrearProducto]  = useState(false);
-  const [opcionesAbiertas,    setOpcionesAbiertas]    = useState(false);
+  const [modalCrearProducto, setModalCrearProducto] = useState(false);
+  const [opcionesAbiertas,   setOpcionesAbiertas]   = useState(false);
 
   // ── Columnas dinámicas ──────────────────────────────────────────────────────
 
@@ -206,34 +209,23 @@ export default function POSClient({
     const updateSize = () => {
       const el = gridContainerRef.current;
       if (!el) return;
-
       const rect    = el.getBoundingClientRect();
       const offsetW = el.offsetWidth;
       const offsetH = el.offsetHeight;
       const clientW = el.clientWidth;
       const clientH = el.clientHeight;
-
-      const w = Math.floor(Math.min(
-        rect.width  || 9999,
-        offsetW     || 9999,
-        clientW     || 9999,
-        1200
-      ));
+      const w = Math.floor(Math.min(rect.width || 9999, offsetW || 9999, clientW || 9999, 1200));
       const h = Math.floor(rect.height || offsetH || clientH || 0);
-
       if (w > 100) setGridWidth(w);
       if (h > 100) setGridHeight(h);
     };
 
     requestAnimationFrame(updateSize);
-
     const timers = [0, 50, 100, 200, 400, 800].map(delay =>
       setTimeout(() => requestAnimationFrame(updateSize), delay)
     );
-
     const el = gridContainerRef.current;
     let ro: ResizeObserver | null = null;
-
     if (el) {
       ro = new ResizeObserver((entries) => {
         requestAnimationFrame(() => {
@@ -247,10 +239,8 @@ export default function POSClient({
       });
       ro.observe(el);
     }
-
     const handleResize = () => requestAnimationFrame(updateSize);
     window.addEventListener("resize", handleResize);
-
     return () => {
       timers.forEach(clearTimeout);
       ro?.disconnect();
@@ -286,7 +276,6 @@ export default function POSClient({
         setPagina(1);
         return;
       }
-
       const cacheKey = `${categoria ?? ""}|${termino}`;
       const cached   = _productosCache[cacheKey];
       if (cached && Date.now() - cached.ts < CACHE_TTL) {
@@ -295,19 +284,15 @@ export default function POSClient({
         setPagina(1);
         return;
       }
-
       abortRef.current?.abort();
       abortRef.current = new AbortController();
-
       setBuscandoRemoto(true);
       try {
         const params = new URLSearchParams({ modo: "pos", activos: "true", page: "1", pageSize: "100" });
         if (termino)   params.set("busqueda",    termino);
         if (categoria) params.set("categoriaId", categoria);
-
         const res  = await fetch(`/api/productos?${params}`, { signal: abortRef.current.signal });
         const data = await res.json();
-
         if (data.ok) {
           const prods = data.productos || [];
           _productosCache[cacheKey] = { productos: prods, ts: Date.now() };
@@ -329,7 +314,6 @@ export default function POSClient({
 
   const cargarMasProductos = useCallback(async () => {
     if (cargandoMas || !hayMas || busqueda || categoriaActiva) return;
-
     setCargandoMas(true);
     try {
       const params = new URLSearchParams({
@@ -338,7 +322,6 @@ export default function POSClient({
       });
       const res  = await fetch(`/api/productos?${params}`);
       const data = await res.json();
-
       if (data.ok && data.productos?.length > 0) {
         setProductos((prev) => [...prev, ...data.productos]);
         setHayMas(data.meta?.hasNext || false);
@@ -432,12 +415,14 @@ export default function POSClient({
     );
     if (producto) {
       agregarAlCarrito(producto);
+      toast.success(`${producto.nombre} agregado`, `Stock restante: ${producto.stock - 1}`);
     } else {
       setBusqueda(codigo);
       buscarProductosRemoto(codigo, null);
       setScannerAbierto(false);
+      toast.info("Buscando producto...", `Código: ${codigo}`);
     }
-  }, [productos, agregarAlCarrito, buscarProductosRemoto]);
+  }, [productos, agregarAlCarrito, buscarProductosRemoto, toast]);
 
   // ── Totales ─────────────────────────────────────────────────────────────────
 
@@ -465,6 +450,9 @@ export default function POSClient({
     setResultado(null);
     setMensajeError("");
 
+    // Toast de loading
+    const toastId = toast.loading("Registrando venta...");
+
     try {
       const res = await fetch("/api/ventas", {
         method: "POST",
@@ -486,6 +474,7 @@ export default function POSClient({
       });
 
       if (res.status === 401) {
+        toast.update(toastId, { type: "error", title: "Sesión expirada", description: "Iniciá sesión nuevamente" });
         window.location.href = `/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`;
         return;
       }
@@ -493,11 +482,27 @@ export default function POSClient({
       const data = await res.json();
 
       if (!data.ok) {
-        setMensajeError(data.error ?? "Error al registrar la venta");
+        const msg = data.error ?? "Error al registrar la venta";
+        setMensajeError(msg);
         setResultado("error");
+        toast.update(toastId, { type: "error", title: "Error en la venta", description: msg });
       } else {
         setResultado("exito");
         const ventaId = data.data?.id;
+
+        // Construir descripción del toast de éxito
+        const metodosLabel: Record<string, string> = {
+          efectivo: "Efectivo", debito: "Débito", credito: "Crédito",
+          transferencia: "Transferencia", qr: "QR / MP",
+        };
+        const descToast = [
+          formatPrecio(total),
+          metodosLabel[metodoPago] ?? metodoPago,
+          clienteNombre.trim() ? `· ${clienteNombre.trim()}` : "",
+          descuento > 0 ? `· Desc. ${formatPrecio(descuento)}` : "",
+        ].filter(Boolean).join(" ");
+
+        toast.update(toastId, { type: "success", title: "¡Venta registrada!", description: descToast });
 
         if (imprimirTicket) {
           setTicketVenta({
@@ -519,6 +524,7 @@ export default function POSClient({
         }
 
         if (generarFactura && datosFacturaParam) {
+          const facturaToastId = toast.loading("Generando factura AFIP...");
           try {
             const resFactura = await fetch("/api/afip/facturar", {
               method: "POST",
@@ -527,11 +533,11 @@ export default function POSClient({
                 ventaId,
                 tipoComprobante: datosFacturaParam.tipoComprobante,
                 cliente: {
-                  docTipo:       datosFacturaParam.clienteDocTipo,
-                  docNro:        datosFacturaParam.clienteDocNro,
-                  nombre:        datosFacturaParam.clienteNombre,
-                  direccion:     datosFacturaParam.clienteDireccion,
-                  condicionIVA:  datosFacturaParam.clienteCondicionIVA,
+                  docTipo:      datosFacturaParam.clienteDocTipo,
+                  docNro:       datosFacturaParam.clienteDocNro,
+                  nombre:       datosFacturaParam.clienteNombre,
+                  direccion:    datosFacturaParam.clienteDireccion,
+                  condicionIVA: datosFacturaParam.clienteCondicionIVA,
                 },
                 items: carrito.map((item) => ({
                   descripcion:    item.nombre,
@@ -544,13 +550,17 @@ export default function POSClient({
                 metodoPago,
               }),
             });
-
             if (resFactura.ok) {
               const dataFactura = await resFactura.json();
               setComprobanteGenerado(dataFactura.comprobante.id);
+              toast.update(facturaToastId, { type: "success", title: "Factura generada", description: `CAE: ${dataFactura.comprobante.cae}` });
+            } else {
+              const errFactura = await resFactura.json();
+              toast.update(facturaToastId, { type: "error", title: "Error al facturar", description: errFactura.error ?? "Revisá la configuración AFIP" });
             }
           } catch (error) {
             console.error("Error factura AFIP:", error);
+            toast.update(facturaToastId, { type: "error", title: "Error al conectar con AFIP" });
           }
         }
 
@@ -561,11 +571,11 @@ export default function POSClient({
         }, 1200);
       }
     } catch (err: unknown) {
-      setMensajeError(
-        (err as { message?: string })?.message?.includes("fetch")
-          ? "Sin conexión. Verificá tu internet."
-          : "Error al registrar la venta"
-      );
+      const msg = (err as { message?: string })?.message?.includes("fetch")
+        ? "Sin conexión. Verificá tu internet."
+        : "Error al registrar la venta";
+      setMensajeError(msg);
+      toast.update(toastId, { type: "error", title: "Error al registrar la venta", description: msg });
     } finally {
       setCargando(false);
     }
@@ -575,6 +585,8 @@ export default function POSClient({
     setModalFacturaAbierto(false);
     handleVenta(datos);
   };
+
+  // ── Edición rápida de producto desde el POS ─────────────────────────────────
 
   const handleGuardarEdicion = async () => {
     if (!productoEditando) return;
@@ -606,7 +618,12 @@ export default function POSClient({
         setProductos(actualizar);
         productosInicialesRef.current = actualizar(productosInicialesRef.current);
         setProductoEditando(null);
+        toast.success("Producto actualizado", formEdicion.nombre.trim());
+      } else {
+        toast.error("No se pudo actualizar", data.error ?? "Intentá de nuevo");
       }
+    } catch {
+      toast.error("Error de conexión");
     } finally {
       setEditando(false);
     }
@@ -628,7 +645,8 @@ export default function POSClient({
     setProductos((prev) => [productoConCategoria, ...prev]);
     productosInicialesRef.current = [productoConCategoria, ...productosInicialesRef.current];
     agregarAlCarrito(productoConCategoria);
-  }, [agregarAlCarrito]);
+    toast.success("Producto creado", nuevoProducto.nombre);
+  }, [agregarAlCarrito, toast]);
 
   // ── Cell del grid ───────────────────────────────────────────────────────────
 
@@ -750,8 +768,6 @@ export default function POSClient({
 
   const panelCatalogo = (
     <div className="flex flex-col h-full min-w-0 overflow-hidden" style={{ background: "var(--bg-base)" }}>
-
-      {/* Buscador */}
       <div
         className="p-2 md:p-3 border-b flex-shrink-0"
         style={{ background: "var(--bg-surface)", borderColor: "var(--border-base)" }}
@@ -768,11 +784,7 @@ export default function POSClient({
               autoFocus
             />
             {busqueda && (
-              <button
-                onClick={() => handleBusqueda("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-                style={{ color: "var(--text-primary)" }}
-              >
+              <button onClick={() => handleBusqueda("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-primary)" }}>
                 <X className="h-4 w-4" />
               </button>
             )}
@@ -798,21 +810,14 @@ export default function POSClient({
             className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
             style={{ background: "var(--bg-hover-md)", border: "1px solid var(--border-md)", color: "var(--text-secondary)" }}
             title="Escanear código de barras"
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = "rgba(220,38,38,0.4)";
-              (e.currentTarget as HTMLElement).style.color = "#DC2626";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.borderColor = "var(--border-md)";
-              (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)";
-            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(220,38,38,0.4)"; (e.currentTarget as HTMLElement).style.color = "#DC2626"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border-md)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
           >
             <ScanLine className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Categorías */}
       {categorias.length > 0 && (
         <div
           className="flex gap-2 px-2 md:px-3 py-2 overflow-x-auto border-b flex-shrink-0 scrollbar-hide"
@@ -839,7 +844,6 @@ export default function POSClient({
         </div>
       )}
 
-      {/* Grid Virtualizado */}
       <div className="flex-1 relative" style={{ minHeight: 0 }} ref={gridContainerRef}>
         {buscandoRemoto && productos.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-20">
@@ -870,10 +874,7 @@ export default function POSClient({
                 rowCount={rowCount}
                 rowHeight={CARD_HEIGHT}
                 width={gridWidth}
-                onItemsRendered={(gridProps: {
-                  visibleRowStartIndex: number;
-                  visibleRowStopIndex: number;
-                }) => {
+                onItemsRendered={(gridProps: { visibleRowStartIndex: number; visibleRowStopIndex: number }) => {
                   (onItemsRendered as (args: { visibleStartIndex: number; visibleStopIndex: number }) => void)({
                     visibleStartIndex: gridProps.visibleRowStartIndex * columnCount,
                     visibleStopIndex:  gridProps.visibleRowStopIndex  * columnCount + columnCount - 1,
@@ -904,12 +905,7 @@ export default function POSClient({
 
   const panelCarrito = (
     <div className="flex flex-col h-full" style={{ background: "var(--bg-surface)" }}>
-
-      {/* Header — fila 1: título + limpiar */}
-      <div
-        className="hidden md:flex flex-col border-b flex-shrink-0"
-        style={{ borderColor: "var(--border-base)" }}
-      >
+      <div className="hidden md:flex flex-col border-b flex-shrink-0" style={{ borderColor: "var(--border-base)" }}>
         <div className="flex items-center justify-between px-3 py-2">
           <div className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" style={{ color: "var(--text-muted)" }} />
@@ -934,7 +930,6 @@ export default function POSClient({
           )}
         </div>
 
-        {/* Fila 2: item manual — ancho completo */}
         <div className="flex items-center gap-1.5 px-3 pb-2">
           <input
             type="text"
@@ -975,7 +970,6 @@ export default function POSClient({
         </div>
       </div>
 
-      {/* Items */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {carrito.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-16 text-center px-6">
@@ -997,26 +991,20 @@ export default function POSClient({
                   <p className="text-xs" style={{ color: "var(--text-faint)" }}>{formatPrecio(item.precio)} c/u</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => cambiarCantidad(item.productoId, -1)}
+                  <button onClick={() => cambiarCantidad(item.productoId, -1)}
                     className="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
                     style={{ border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
                     onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-primary)")}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-secondary)")}
-                  >
+                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-secondary)")}>
                     <Minus className="h-3 w-3" />
                   </button>
-                  <span className="w-6 text-center text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                    {item.cantidad}
-                  </span>
-                  <button
-                    onClick={() => cambiarCantidad(item.productoId, 1)}
+                  <span className="w-6 text-center text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.cantidad}</span>
+                  <button onClick={() => cambiarCantidad(item.productoId, 1)}
                     disabled={item.cantidad >= item.stock}
                     className="flex h-6 w-6 items-center justify-center rounded-md transition-colors disabled:opacity-30"
                     style={{ border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
                     onMouseEnter={(e) => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; }}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-secondary)")}
-                  >
+                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-secondary)")}>
                     <Plus className="h-3 w-3" />
                   </button>
                 </div>
@@ -1024,12 +1012,10 @@ export default function POSClient({
                   <span className="text-sm font-bold w-16 md:w-20 text-right" style={{ color: "var(--text-primary)" }}>
                     {formatPrecio(item.subtotal)}
                   </span>
-                  <button
-                    onClick={() => eliminarDelCarrito(item.productoId)}
+                  <button onClick={() => eliminarDelCarrito(item.productoId)}
                     style={{ color: "var(--text-muted)" }}
                     onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f87171")}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-muted)")}
-                  >
+                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-muted)")}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -1039,41 +1025,29 @@ export default function POSClient({
         )}
       </div>
 
-      {/* Footer: totales + pago */}
       {carrito.length > 0 && (
         <div className="border-t p-3 space-y-3 flex-shrink-0" style={{ borderColor: "var(--border-base)" }}>
-
-          {/* Descuento + método de pago en la misma fila */}
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Desc. $</label>
             <input
-              type="number"
-              min="0"
-              max={subtotal}
-              value={descuento || ""}
+              type="number" min="0" max={subtotal} value={descuento || ""}
               onChange={(e) => setDescuento(Math.max(0, parseFloat(e.target.value) || 0))}
-              placeholder="0"
-              className="input-base text-sm"
-              style={{ width: "72px" }}
+              placeholder="0" className="input-base text-sm" style={{ width: "72px" }}
             />
           </div>
 
-          {/* Métodos de pago */}
           <div className="grid grid-cols-5 gap-1">
             {METODOS_PAGO.map((mp) => {
               const Icon   = mp.icono;
               const activo = metodoPago === mp.value;
               return (
-                <button
-                  key={mp.value}
-                  onClick={() => setMetodoPago(mp.value)}
+                <button key={mp.value} onClick={() => setMetodoPago(mp.value)}
                   className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-center transition-colors"
                   style={{
                     background: activo ? "rgba(220,38,38,0.15)" : "var(--bg-hover)",
                     border:     activo ? "1px solid rgba(220,38,38,0.4)" : "1px solid var(--border-base)",
                     color:      activo ? "#f87171" : "var(--text-muted)",
-                  }}
-                >
+                  }}>
                   <Icon className="h-4 w-4" />
                   <span className="text-[10px] font-medium leading-tight">{mp.label}</span>
                 </button>
@@ -1081,22 +1055,15 @@ export default function POSClient({
             })}
           </div>
 
-          {/* Recibido — solo efectivo */}
           {metodoPago === "efectivo" && (
             <div className="flex items-center gap-2">
               <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Recibido $</label>
-              <input
-                type="number"
-                min={total}
-                value={efectivoRecibido}
+              <input type="number" min={total} value={efectivoRecibido}
                 onChange={(e) => setEfectivoRecibido(e.target.value)}
-                placeholder={String(total)}
-                className="input-base flex-1"
-              />
+                placeholder={String(total)} className="input-base flex-1" />
             </div>
           )}
 
-          {/* Totales */}
           <div className="space-y-1 pt-1 border-t" style={{ borderColor: "var(--border-base)" }}>
             {descuento > 0 && (
               <>
@@ -1119,7 +1086,6 @@ export default function POSClient({
             )}
           </div>
 
-          {/* Panel de opciones colapsable */}
           <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border-base)" }}>
             <button
               onClick={() => setOpcionesAbiertas(v => !v)}
@@ -1130,8 +1096,7 @@ export default function POSClient({
             >
               <span className="flex items-center gap-1.5">
                 Opciones
-                {/* Badges de opciones activas */}
-                {(imprimirTicket || generarFactura || fechaManual || clienteNombre || usuarios.length > 1 && vendedorId) && (
+                {(imprimirTicket || generarFactura || fechaManual || clienteNombre || (usuarios.length > 1 && vendedorId)) && (
                   <span className="flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white"
                     style={{ background: "#DC2626" }}>
                     {[imprimirTicket, generarFactura, fechaManual, !!clienteNombre, !!(usuarios.length > 1 && vendedorId)].filter(Boolean).length}
@@ -1143,20 +1108,14 @@ export default function POSClient({
 
             {opcionesAbiertas && (
               <div className="px-3 py-2.5 space-y-2.5" style={{ borderTop: "1px solid var(--border-base)" }}>
-
-                {/* Cliente */}
-                <input
-                  type="text"
-                  value={clienteNombre}
-                  onChange={(e) => setClienteNombre(e.target.value)}
+                <input type="text" value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)}
                   placeholder="Nombre del cliente (opcional)"
-                  className="input-base w-full text-xs"
-                  style={{ padding: "5px 10px" }}
-                />
+                  className="input-base w-full text-xs" style={{ padding: "5px 10px" }} />
 
                 {/* Vendedor */}
                 {usuarios.length > 1 && (
-                  <select value={vendedorId} onChange={e => setVendedorId(e.target.value)} className="input-base w-full text-xs" style={{ padding: "5px 10px" }}>
+                  <select value={vendedorId} onChange={e => setVendedorId(e.target.value)}
+                    className="input-base w-full text-xs" style={{ padding: "5px 10px" }}>
                     <option value="">— Vendedor: mi cuenta —</option>
                     {usuarios.map(u => <option key={u.id} value={u.supabaseId}>{u.nombre}</option>)}
                   </select>
@@ -1169,10 +1128,8 @@ export default function POSClient({
                   { label: "Cargar con fecha pasada",            value: fechaManual,    setter: (v: boolean) => { setFechaManual(v); setFechaVenta(v ? `${fechaHoyAR()}T${horaAhoraAR()}` : ""); } },
                 ].map(({ label, value, setter }) => (
                   <label key={label} className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setter(!value)}>
-                    <div
-                      className="flex h-3.5 w-3.5 items-center justify-center rounded flex-shrink-0"
-                      style={{ background: value ? "#DC2626" : "transparent", border: value ? "1px solid #DC2626" : "1px solid var(--border-strong)" }}
-                    >
+                    <div className="flex h-3.5 w-3.5 items-center justify-center rounded flex-shrink-0"
+                      style={{ background: value ? "#DC2626" : "transparent", border: value ? "1px solid #DC2626" : "1px solid var(--border-strong)" }}>
                       {value && (
                         <svg className="h-2 w-2" fill="none" viewBox="0 0 12 12" stroke="#ffffff" strokeWidth={2.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2 6l3 3 5-5" />
@@ -1185,20 +1142,16 @@ export default function POSClient({
 
                 {/* Fecha si está activada */}
                 {fechaManual && (
-                  <input
-                    type="datetime-local"
-                    value={fechaVenta}
+                  <input type="datetime-local" value={fechaVenta}
                     max={`${fechaHoyAR()}T${horaAhoraAR()}`}
                     onChange={e => setFechaVenta(e.target.value)}
-                    className="input-base w-full text-xs"
-                    style={{ padding: "5px 10px" }}
-                  />
+                    className="input-base w-full text-xs" style={{ padding: "5px 10px" }} />
                 )}
               </div>
             )}
           </div>
 
-          {/* Feedback — justo antes del botón cobrar */}
+          {/* Feedback inline — se mantiene para referencia visual inmediata en el carrito */}
           {resultado === "error" && (
             <div className="flex items-start gap-2 rounded-lg px-2 py-2.5"
               style={{ background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.2)" }}>
@@ -1259,19 +1212,15 @@ export default function POSClient({
       {/* MOBILE */}
       <div className={cn("flex flex-col md:hidden overflow-hidden", alturaBase, !isModal && "-mx-4")}>
         <div className="flex flex-shrink-0" style={{ background: "var(--bg-surface)", borderBottom: "1px solid var(--border-base)" }}>
-          <button
-            onClick={() => setTabMobile("catalogo")}
+          <button onClick={() => setTabMobile("catalogo")}
             className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors"
-            style={{ color: tabMobile === "catalogo" ? "#f87171" : "#71717a", borderBottom: tabMobile === "catalogo" ? "2px solid #DC2626" : "2px solid transparent" }}
-          >
+            style={{ color: tabMobile === "catalogo" ? "#f87171" : "#71717a", borderBottom: tabMobile === "catalogo" ? "2px solid #DC2626" : "2px solid transparent" }}>
             <Package className="h-4 w-4" />
             Catálogo
           </button>
-          <button
-            onClick={() => setTabMobile("carrito")}
+          <button onClick={() => setTabMobile("carrito")}
             className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors relative"
-            style={{ color: tabMobile === "carrito" ? "#f87171" : "#71717a", borderBottom: tabMobile === "carrito" ? "2px solid #DC2626" : "2px solid transparent" }}
-          >
+            style={{ color: tabMobile === "carrito" ? "#f87171" : "#71717a", borderBottom: tabMobile === "carrito" ? "2px solid #DC2626" : "2px solid transparent" }}>
             <ShoppingCart className="h-4 w-4" />
             Carrito
             {cantidadTotal > 0 && (
@@ -1289,11 +1238,9 @@ export default function POSClient({
 
         {tabMobile === "catalogo" && cantidadTotal > 0 && (
           <div className="flex-shrink-0 p-3 border-t" style={{ background: "var(--bg-surface)", borderColor: "var(--border-base)" }}>
-            <button
-              onClick={() => setTabMobile("carrito")}
+            <button onClick={() => setTabMobile("carrito")}
               className="w-full flex items-center justify-between rounded-xl px-4 py-3 text-sm font-bold text-white"
-              style={{ background: "#DC2626" }}
-            >
+              style={{ background: "#DC2626" }}>
               <div className="flex items-center gap-2">
                 <ShoppingCart className="h-4 w-4" />
                 Ver carrito ({cantidadTotal})
@@ -1315,12 +1262,10 @@ export default function POSClient({
         </button>
       )}
 
-      {/* Scanner modal */}
       {scannerAbierto && (
         <BarcodeScanner onScanned={handleCodigoEscaneado} onClose={() => setScannerAbierto(false)} />
       )}
 
-      {/* Ticket */}
       {ticketVenta && (
         <TicketPrint
           venta={ticketVenta}
@@ -1331,7 +1276,6 @@ export default function POSClient({
         />
       )}
 
-      {/* Modal selección factura */}
       {modalFacturaAbierto && configAFIP && (
         <ModalSeleccionFactura
           open={modalFacturaAbierto}
@@ -1342,7 +1286,6 @@ export default function POSClient({
         />
       )}
 
-      {/* Modal PDF Factura */}
       {comprobanteGenerado && (
         <ModalFacturaPDF
           open={!!comprobanteGenerado}
@@ -1365,10 +1308,10 @@ export default function POSClient({
           >
             <h3 className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>Editar producto</h3>
             {[
-              { label: "Nombre", key: "nombre",         type: "text"   },
-              { label: "Código", key: "codigoProducto", type: "text"   },
-              { label: "Precio $", key: "precio",       type: "number" },
-              { label: "Stock",  key: "stock",          type: "number" },
+              { label: "Nombre",   key: "nombre",         type: "text"   },
+              { label: "Código",   key: "codigoProducto", type: "text"   },
+              { label: "Precio $", key: "precio",         type: "number" },
+              { label: "Stock",    key: "stock",          type: "number" },
             ].map(({ label, key, type }) => (
               <div key={key}>
                 <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-muted)" }}>{label}</label>
@@ -1381,31 +1324,25 @@ export default function POSClient({
               </div>
             ))}
             <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => setProductoEditando(null)}
+              <button onClick={() => setProductoEditando(null)}
                 className="flex-1 py-2 rounded-xl text-sm font-medium"
-                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}
-              >
+                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)" }}>
                 Cancelar
               </button>
-              <button
-                onClick={handleGuardarEdicion}
-                disabled={editando}
+              <button onClick={handleGuardarEdicion} disabled={editando}
                 className="flex-1 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-                style={{ background: "#DC2626", color: "#fff" }}
-              >
+                style={{ background: "#DC2626", color: "#fff" }}>
                 {editando ? "Guardando..." : "Guardar"}
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Modal crear producto rápido */}
       <ModalCrearProductoRapido
         open={modalCrearProducto}
         onClose={() => setModalCrearProducto(false)}
         onProductoCreado={handleProductoCreado}
+        categorias={categorias}
       />
     </>
   );

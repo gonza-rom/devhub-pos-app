@@ -7,13 +7,15 @@ import {
   ArrowLeftRight, ShoppingCart, TrendingUp, TrendingDown, DollarSign,
   Search, X, UserCircle, Ban, AlertTriangle, Calendar, Filter,
   Minus, Plus, Trash2, ChevronLeft, ChevronRight, Package, Tag,
-  Edit, Save, CreditCard, Download
+  Edit, Save, CreditCard, Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   fechaHoyAR, horaAhoraAR, fmtHora24AR, fmtFechaHoraAR,
   isoAFechaInputAR, isoAHoraInputAR,
 } from "@/lib/dateAR";
+import { useToast }   from "@/components/toast";
+import { useConfirm } from "@/components/toast";
 
 // ── Tipos ─────────────────────────────────────────────────────
 
@@ -80,6 +82,9 @@ const PAGE_SIZE_POS = 12;
 // ── Componente principal ──────────────────────────────────────
 
 export default function MovimientosPage() {
+  const toast   = useToast();
+  const confirm = useConfirm();
+
   // ── Historial ──
   const [movimientos, setMovimientos]   = useState<Movimiento[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -117,31 +122,26 @@ export default function MovimientosPage() {
   const [horaVenta, setHoraVenta]               = useState(horaAhoraAR());
   const [horaVentaAuto, setHoraVentaAuto]       = useState(true);
   const [procesandoVenta, setProcesandoVenta]   = useState(false);
-  const [ventaExito, setVentaExito]             = useState("");
-  const [ventaError, setVentaError]             = useState("");
 
   // ── Modal ítem manual POS ──
-  const [modalManual, setModalManual]           = useState(false);
-  const [itemManualDesc, setItemManualDesc]     = useState("");
+  const [modalManual, setModalManual]       = useState(false);
+  const [itemManualDesc, setItemManualDesc] = useState("");
   const [itemManualPrecio, setItemManualPrecio] = useState("");
-  const [itemManualCant, setItemManualCant]     = useState("1");
+  const [itemManualCant, setItemManualCant] = useState("1");
 
   // ── Modales editar / cancelar ──
-  const [modalCancelar, setModalCancelar]             = useState<Movimiento | null>(null);
-  const [motivoCancelacion, setMotivoCancelacion]     = useState("");
-  const [cancelando, setCancelando]                   = useState(false);
-  const [cancelError, setCancelError]                 = useState("");
-  const [modalEditar, setModalEditar]                 = useState<Movimiento | null>(null);
-  const [editForm, setEditForm]                       = useState({ cantidad: "", motivo: "", fecha: "", hora: "" });
-  const [guardandoEdicion, setGuardandoEdicion]       = useState(false);
-  const [editError, setEditError]                     = useState("");
+  const [modalEditar,      setModalEditar]      = useState<Movimiento | null>(null);
+  const [editForm,         setEditForm]         = useState({ cantidad: "", motivo: "", fecha: "", hora: "" });
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+  const [editError,        setEditError]        = useState("");
 
   // ── Filtros historial ──
-  const [busquedaInput, setBusquedaInput]             = useState("");
-  const [mostrarFiltros, setMostrarFiltros]           = useState(false);
-  const [filtroFechaInicio, setFiltroFechaInicio]     = useState("");
-  const [filtroFechaFin, setFiltroFechaFin]           = useState("");
-  const [filtroTipo, setFiltroTipo]                   = useState("");
+  const [busquedaInput,      setBusquedaInput]      = useState("");
+  const [mostrarFiltros,     setMostrarFiltros]     = useState(false);
+  const [filtroFechaInicio,  setFiltroFechaInicio]  = useState("");
+  const [filtroFechaFin,     setFiltroFechaFin]     = useState("");
+  const [filtroTipo,         setFiltroTipo]         = useState("");
+  const [submitError,        setSubmitError]        = useState("");
 
   // ── Fetch movimientos ──────────────────────────────────────
   const fetchMovimientos = useCallback(async (pagina = 1) => {
@@ -239,41 +239,45 @@ export default function MovimientosPage() {
   const finalizarVenta = async () => {
     if (!carrito.length) return;
     setProcesandoVenta(true);
-    setVentaExito(""); setVentaError("");
-    try {
-      const payload = {
-        items: carrito.map((i) =>
-          i.esManual
-            ? { esManual: true, descripcion: i.nombre, precioUnit: i.precioUnit, cantidad: i.cantidad }
-            : { productoId: i.productoId, precioUnit: i.precioUnit, cantidad: i.cantidad }
-        ),
-        metodoPago,
-        clienteNombre: clienteNombre || undefined,
-        clienteDni:    clienteDni    || undefined,
-        fecha: fechaVenta,
-        hora:  horaVentaAuto ? null : horaVenta,
-      };
-      const res = await fetch("/api/ventas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error);
 
-      setVentaExito(`✅ Venta registrada — Total: $${calcularTotal().toFixed(2)}`);
-      setCarrito([]);
-      setClienteNombre(""); setClienteDni("");
-      setMetodoPago("EFECTIVO");
-      setFechaVenta(fechaHoyAR());
-      setHoraVenta(horaAhoraAR());
-      setHoraVentaAuto(true);
-      setPosBusqueda("");
-      fetchMovimientos();
-      setTimeout(() => { setVentaExito(""); setModoFormulario(null); }, 2000);
-    } catch (err: unknown) {
-      setVentaError((err as { message?: string })?.message ?? "Error al procesar la venta");
-    } finally { setProcesandoVenta(false); }
+    await toast.promise(
+      (async () => {
+        const payload = {
+          items: carrito.map((i) =>
+            i.esManual
+              ? { esManual: true, descripcion: i.nombre, precioUnit: i.precioUnit, cantidad: i.cantidad }
+              : { productoId: i.productoId, precioUnit: i.precioUnit, cantidad: i.cantidad }
+          ),
+          metodoPago,
+          clienteNombre: clienteNombre || undefined,
+          clienteDni:    clienteDni    || undefined,
+          fecha: fechaVenta,
+          hora:  horaVentaAuto ? null : horaVenta,
+        };
+        const res = await fetch("/api/ventas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error);
+
+        setCarrito([]);
+        setClienteNombre(""); setClienteDni("");
+        setMetodoPago("EFECTIVO");
+        setFechaVenta(fechaHoyAR());
+        setHoraVenta(horaAhoraAR());
+        setHoraVentaAuto(true);
+        setPosBusqueda("");
+        fetchMovimientos();
+        setTimeout(() => setModoFormulario(null), 1500);
+      })(),
+      {
+        loading: "Registrando venta...",
+        success: `Venta registrada · $${calcularTotal().toFixed(2)}`,
+        error:   (e: unknown) => (e as Error).message,
+      }
+    ).finally(() => setProcesandoVenta(false));
   };
 
   // ── Formulario ENTRADA / SALIDA ────────────────────────────
@@ -302,14 +306,13 @@ export default function MovimientosPage() {
     setBusquedaProducto("");
   };
 
-  const [submitError, setSubmitError] = useState("");
-
   const handleSubmitMovimiento = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.productoId) { setSubmitError("Seleccioná un producto"); return; }
     setSubmitError("");
-    try {
-      const res = await fetch("/api/movimientos", {
+
+    await toast.promise(
+      fetch("/api/movimientos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -318,32 +321,59 @@ export default function MovimientosPage() {
           cantidad:   parseInt(formData.cantidad),
           motivo:     formData.motivo || undefined,
         }),
-      });
-      const data = await res.json();
-      if (!data.ok) { setSubmitError(data.error ?? "Error"); return; }
-      cerrarFormulario();
-      fetchMovimientos();
-    } catch { setSubmitError("Error de conexión"); }
+      }).then(async r => {
+        const data = await r.json();
+        if (!data.ok) throw new Error(data.error ?? "Error al registrar");
+        cerrarFormulario();
+        fetchMovimientos();
+      }),
+      {
+        loading: modoFormulario === "ENTRADA" ? "Registrando entrada..." : "Registrando salida...",
+        success: modoFormulario === "ENTRADA" ? "Entrada de stock registrada" : "Salida de stock registrada",
+        error:   (e: unknown) => (e as Error).message,
+      }
+    );
   };
 
-  // ── Cancelar / Editar movimientos ──────────────────────────
-  const confirmarCancelacion = async () => {
-    if (!modalCancelar) return;
-    setCancelando(true); setCancelError("");
-    try {
-      const res  = await fetch(`/api/movimientos/${modalCancelar.id}`, {
+  // ── Cancelar movimiento ────────────────────────────────────
+  const handleCancelarMovimiento = async (movimiento: Movimiento) => {
+    const tipoLabel = movimiento.tipo === "ENTRADA" ? "entrada"
+      : movimiento.tipo === "VENTA" ? "venta"
+      : "salida";
+
+    const ok = await confirm({
+      title:        "¿Cancelar este movimiento?",
+      description:  `Se revertirá la ${tipoLabel} de ${movimiento.cantidad} unidades de "${movimiento.productoNombre}". ${
+        movimiento.tipo === "ENTRADA"
+          ? `El stock bajará ${movimiento.cantidad} unidades.`
+          : `El stock subirá ${movimiento.cantidad} unidades.`
+      }`,
+      confirmLabel: "Sí, cancelar movimiento",
+      cancelLabel:  "No, volver",
+      variant:      "danger",
+      icon:         "warning",
+    });
+    if (!ok) return;
+
+    await toast.promise(
+      fetch(`/api/movimientos/${movimiento.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ motivoCancelacion: motivoCancelacion || "Cancelado por administrador" }),
-      });
-      const data = await res.json();
-      if (!data.ok) { setCancelError(data.error ?? "Error"); return; }
-      setModalCancelar(null); setMotivoCancelacion("");
-      fetchMovimientos(paginaActual);
-    } catch { setCancelError("Error de conexión"); }
-    finally { setCancelando(false); }
+        body: JSON.stringify({ motivoCancelacion: "Cancelado por administrador" }),
+      }).then(async r => {
+        const data = await r.json();
+        if (!data.ok) throw new Error(data.error ?? "Error al cancelar");
+        fetchMovimientos(paginaActual);
+      }),
+      {
+        loading: "Cancelando movimiento...",
+        success: "Movimiento cancelado y stock revertido",
+        error:   (e: unknown) => (e as Error).message,
+      }
+    );
   };
 
+  // ── Editar movimiento ──────────────────────────────────────
   const abrirEdicion = (m: Movimiento) => {
     if (m.cancelado) return;
     setModalEditar(m);
@@ -370,10 +400,41 @@ export default function MovimientosPage() {
       const data = await res.json();
       if (!data.ok) { setEditError(data.error ?? "Error"); return; }
       setModalEditar(null);
+      toast.success("Movimiento actualizado", `${modalEditar.productoNombre} · ${editForm.cantidad} u.`);
       fetchMovimientos(paginaActual);
     } catch { setEditError("Error de conexión"); }
     finally { setGuardandoEdicion(false); }
   };
+
+  // ── Exportar CSV ───────────────────────────────────────────
+  function exportarVentasCSV(movs: Movimiento[]) {
+    const ventas = movs.filter((m) => m.tipo === "VENTA" && !m.cancelado);
+    if (!ventas.length) {
+      toast.warning("Sin ventas para exportar", "No hay ventas en el rango de filtros actual");
+      return;
+    }
+
+    const SEP        = ";";
+    const encabezado = ["fecha", "producto", "codigo", "categoria", "cantidad", "stock_resultante", "usuario", "venta_id"];
+    const filas      = ventas.map((m) => [
+      fmtFechaHoraAR(m.createdAt),
+      m.productoNombre,
+      m.producto?.codigoProducto ?? "",
+      m.producto?.categoria?.nombre ?? "",
+      m.cantidad,
+      m.stockResultante ?? "",
+      m.usuarioNombre ?? "",
+      m.ventaId ?? "",
+    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(SEP));
+
+    const csv  = "\uFEFF" + [encabezado.join(SEP), ...filas].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = `ventas_${fechaHoyAR()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exportado", `${ventas.length} ventas exportadas`);
+  }
 
   // ── Filtros historial (client-side) ───────────────────────
   const movimientosFiltrados = movimientos.filter((m) => {
@@ -402,7 +463,6 @@ export default function MovimientosPage() {
     setPosBusqueda("");
     setBusquedaProducto("");
     setSubmitError("");
-    setVentaExito(""); setVentaError("");
     setFormData({
       productoId: "", productoNombre: "",
       cantidad: "", motivo: "",
@@ -411,32 +471,6 @@ export default function MovimientosPage() {
       horaAuto: true,
     });
   };
-
-  // ── Exportar CSV ───────────────────────────────────────────
-  function exportarVentasCSV(movs: Movimiento[]) {
-    const ventas = movs.filter((m) => m.tipo === "VENTA" && !m.cancelado);
-    if (!ventas.length) { alert("No hay ventas para exportar."); return; }
-
-    const SEP       = ";";
-    const encabezado = ["fecha", "producto", "codigo", "categoria", "cantidad", "stock_resultante", "usuario", "venta_id"];
-    const filas     = ventas.map((m) => [
-      fmtFechaHoraAR(m.createdAt),
-      m.productoNombre,
-      m.producto?.codigoProducto ?? "",
-      m.producto?.categoria?.nombre ?? "",
-      m.cantidad,
-      m.stockResultante ?? "",
-      m.usuarioNombre ?? "",
-      m.ventaId ?? "",
-    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(SEP));
-
-    const csv  = "\uFEFF" + [encabezado.join(SEP), ...filas].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = `ventas_${fechaHoyAR()}.csv`; a.click();
-    URL.revokeObjectURL(url);
-  }
 
   // ── Render ─────────────────────────────────────────────────
   if (loading && movimientos.length === 0) {
@@ -495,12 +529,6 @@ export default function MovimientosPage() {
               <X className="h-6 w-6" />
             </button>
           </div>
-
-          {ventaExito && (
-            <div className="px-6 py-3 bg-green-50 dark:bg-green-900/20 border-b border-green-200 dark:border-green-800">
-              <p className="text-sm font-semibold text-green-600 dark:text-green-400">{ventaExito}</p>
-            </div>
-          )}
 
           <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Panel izquierdo — catálogo */}
@@ -665,8 +693,7 @@ export default function MovimientosPage() {
 
               <div>
                 <label className="label-base flex items-center gap-1"><Calendar className="h-4 w-4" /> Fecha</label>
-                <input type="date" value={fechaVenta}
-                  onChange={(e) => setFechaVenta(e.target.value)}
+                <input type="date" value={fechaVenta} onChange={(e) => setFechaVenta(e.target.value)}
                   max={fechaHoyAR()} className="input-base" />
               </div>
 
@@ -679,9 +706,7 @@ export default function MovimientosPage() {
                   <button type="button"
                     onClick={() => { setHoraVenta(horaAhoraAR()); setHoraVentaAuto((p) => !p); }}
                     className={cn("px-3 py-2 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap",
-                      horaVentaAuto
-                        ? "bg-green-600 text-white border-green-600"
-                        : "bg-white dark:bg-gray-700 text-gray-400 border-gray-300 dark:border-gray-600")}>
+                      horaVentaAuto ? "bg-green-600 text-white border-green-600" : "bg-white dark:bg-gray-700 text-gray-400 border-gray-300 dark:border-gray-600")}>
                     {horaVentaAuto ? "⚡ Ahora" : "Manual"}
                   </button>
                 </div>
@@ -692,13 +717,6 @@ export default function MovimientosPage() {
                 <input type="text" placeholder="Nombre" value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)} className="input-base mb-2" />
                 <input type="text" placeholder="DNI" value={clienteDni} onChange={(e) => setClienteDni(e.target.value)} className="input-base" />
               </div>
-
-              {ventaError && (
-                <div className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2">
-                  <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
-                  <p className="text-xs text-red-600 dark:text-red-400">{ventaError}</p>
-                </div>
-              )}
 
               <button onClick={finalizarVenta} disabled={carrito.length === 0 || procesandoVenta}
                 className="w-full flex items-center justify-center gap-2 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white py-3 font-bold transition-colors">
@@ -788,9 +806,7 @@ export default function MovimientosPage() {
                   <button type="button"
                     onClick={() => setFormData({ ...formData, horaAuto: !formData.horaAuto, hora: horaAhoraAR() })}
                     className={cn("px-3 py-2 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap",
-                      formData.horaAuto
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white dark:bg-gray-700 text-gray-400 border-gray-300 dark:border-gray-600")}>
+                      formData.horaAuto ? "bg-blue-600 text-white border-blue-600" : "bg-white dark:bg-gray-700 text-gray-400 border-gray-300 dark:border-gray-600")}>
                     {formData.horaAuto ? "⚡ Ahora" : "Manual"}
                   </button>
                 </div>
@@ -923,7 +939,6 @@ export default function MovimientosPage() {
                 {movimientosFiltrados.map((m) => (
                   <tr key={m.id} className={cn("hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors", m.cancelado && "opacity-50")}>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {/* Fecha en AR con formato estilo movimientos */}
                       <p className="text-xs text-zinc-300">{isoAFechaInputAR(m.createdAt)}</p>
                       <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>{fmtHora24AR(m.createdAt)}</p>
                       {m.cancelado && (
@@ -996,7 +1011,7 @@ export default function MovimientosPage() {
                             className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
                             <Edit className="h-3 w-3" /> Editar
                           </button>
-                          <button onClick={() => { setModalCancelar(m); setMotivoCancelacion(""); setCancelError(""); }}
+                          <button onClick={() => handleCancelarMovimiento(m)}
                             className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 px-2 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                             <Ban className="h-3 w-3" /> Cancelar
                           </button>
@@ -1049,53 +1064,6 @@ export default function MovimientosPage() {
               <button onClick={() => setModalEditar(null)}
                 className="flex-1 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-800 dark:text-gray-100 py-2.5 text-sm transition-colors">
                 Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── MODAL CANCELAR MOVIMIENTO ── */}
-      {modalCancelar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !cancelando && setModalCancelar(null)} />
-          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-xl p-6">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-full flex-shrink-0">
-                <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Cancelar Movimiento</h2>
-                <p className="text-sm text-zinc-300 mt-1">Esto revertirá el efecto sobre el stock del producto.</p>
-              </div>
-            </div>
-            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 mb-4 text-sm space-y-1">
-              <p className="font-medium text-gray-900 dark:text-gray-100">{modalCancelar.productoNombre}</p>
-              <p className="text-zinc-300">
-                {modalCancelar.tipo === "ENTRADA" ? "📥 Entrada" : modalCancelar.tipo === "VENTA" ? "💰 Venta" : "📤 Salida"} de {modalCancelar.cantidad} unidades
-              </p>
-              <p className="text-xs text-gray-400">
-                {modalCancelar.tipo === "ENTRADA"
-                  ? `El stock bajará ${modalCancelar.cantidad} unidades`
-                  : `El stock subirá ${modalCancelar.cantidad} unidades`}
-              </p>
-            </div>
-            <div className="mb-4">
-              <label className="label-base">Motivo de cancelación (opcional)</label>
-              <input type="text" value={motivoCancelacion} onChange={(e) => setMotivoCancelacion(e.target.value)}
-                placeholder="Ej: Error de carga, devolución rechazada..." className="input-base" />
-            </div>
-            {cancelError && (
-              <p className="mb-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{cancelError}</p>
-            )}
-            <div className="flex gap-3">
-              <button onClick={confirmarCancelacion} disabled={cancelando}
-                className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white py-2.5 text-sm font-bold transition-colors">
-                {cancelando ? "Cancelando..." : "Sí, cancelar movimiento"}
-              </button>
-              <button onClick={() => { setModalCancelar(null); setMotivoCancelacion(""); }}
-                className="flex-1 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-800 dark:text-gray-100 py-2.5 text-sm transition-colors">
-                No, volver
               </button>
             </div>
           </div>

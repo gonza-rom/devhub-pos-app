@@ -4,18 +4,22 @@
 import { useState } from "react";
 import { X, Package, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
+type CategoriaSimple = { id: string; nombre: string };
+
 type Props = {
   open: boolean;
   onClose: () => void;
   onProductoCreado: (producto: any) => void;
+  categorias?: CategoriaSimple[];
 };
 
-export function ModalCrearProductoRapido({ open, onClose, onProductoCreado }: Props) {
+export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, categorias = [] }: Props) {
   const [form, setForm] = useState({
     nombre: "",
     codigoProducto: "",
     precio: "",
     stock: "0",
+    categoriaId: "",
   });
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -23,7 +27,7 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado }: Pr
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!form.nombre.trim()) {
       setError("El nombre es obligatorio");
       return;
@@ -46,6 +50,7 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado }: Pr
           codigoProducto: form.codigoProducto.trim() || null,
           precio: parseFloat(form.precio),
           stock: parseInt(form.stock) || 0,
+          categoriaId: form.categoriaId || null,
           activo: true,
         }),
       });
@@ -57,15 +62,12 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado }: Pr
         return;
       }
 
-      // Producto creado exitosamente
       setExito(true);
       onProductoCreado(data.data);
 
-      // Cerrar después de 1 segundo
       setTimeout(() => {
         onClose();
-        // Reset form
-        setForm({ nombre: "", codigoProducto: "", precio: "", stock: "0" });
+        setForm({ nombre: "", codigoProducto: "", precio: "", stock: "0", categoriaId: "" });
         setExito(false);
       }, 1000);
     } catch (err) {
@@ -142,6 +144,28 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado }: Pr
               disabled={cargando || exito}
             />
           </div>
+
+          {/* Categoría */}
+          {categorias.length > 0 && (
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-muted)" }}>
+                Categoría (opcional)
+              </label>
+              <select
+                value={form.categoriaId}
+                onChange={(e) => setForm({ ...form, categoriaId: e.target.value })}
+                className="input-base w-full"
+                disabled={cargando || exito}
+              >
+                <option value="">— Sin categoría —</option>
+                {categorias.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Precio y Stock */}
           <div className="grid grid-cols-2 gap-3">
