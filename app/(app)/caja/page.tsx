@@ -1,4 +1,6 @@
 "use client";
+// app/(app)/caja/page.tsx
+// CAMBIO: Modal de cierre ahora incluye "retiro de billetes" y "fondo de cambio"
 
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -13,7 +15,6 @@ import { useToast }   from "@/components/toast";
 import { useConfirm } from "@/components/toast";
 
 type TipoMov = "APERTURA" | "VENTA_EFECTIVO" | "VENTA_VIRTUAL" | "INGRESO" | "EGRESO" | "CIERRE";
-type MetodoPago = "EFECTIVO" | "TRANSFERENCIA" | "MERCADO_PAGO" | "TARJETA_CREDITO" | "TARJETA_DEBITO";
 
 interface MovimientoCaja {
   id: string; tipo: TipoMov; monto: number; metodoPago?: string | null;
@@ -31,10 +32,6 @@ interface CajaData {
 interface UltimaCaja {
   saldoInicial: number; saldoFinal: number; saldoContado: number;
   diferencia: number; abiertaAt: string; cerradaAt: string;
-}
-interface Producto {
-  id: string; nombre: string; precio: number; stock: number;
-  imagen?: string | null; codigoBarras?: string | null;
 }
 
 const fmt = (n: number) =>
@@ -67,21 +64,25 @@ export default function CajaPage() {
   const [modalMovimiento, setModalMovimiento] = useState<"INGRESO"|"EGRESO"|null>(null);
   const [modalVenta,      setModalVenta]      = useState(false);
 
-  const [saldoInicial, setSaldoInicial] = useState("");
-  const [obsApertura,  setObsApertura]  = useState("");
-  const [saldoContado, setSaldoContado] = useState("");
-  const [obsCierre,    setObsCierre]    = useState("");
+  const [saldoInicial,  setSaldoInicial]  = useState("");
+  const [obsApertura,   setObsApertura]   = useState("");
+
+  // ── Campos del cierre ─────────────────────────────────────────
+  const [saldoContado,  setSaldoContado]  = useState("");   // lo que hay en caja (contado físicamente)
+  const [retiro,        setRetiro]        = useState("");   // billetes grandes que se llevan
+  const [obsCierre,     setObsCierre]     = useState("");
+
   const [montoMov,     setMontoMov]     = useState("");
   const [descMov,      setDescMov]      = useState("");
 
-  const [categorias, setCategorias] = useState<any[]>([]);
+  const [categorias,  setCategorias]  = useState<any[]>([]);
   const [prodCaja,    setProdCaja]    = useState<any[]>([]);
   const [loadingProd, setLoadingProd] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading,     setLoading]     = useState(false);
 
-  const [saldoSugerido, setSaldoSugerido] = useState<number | null>(null);
+  const [saldoSugerido,     setSaldoSugerido]     = useState<number | null>(null);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState("");
-  const [turnoDetectado, setTurnoDetectado] = useState<{
+  const [turnoDetectado,    setTurnoDetectado]    = useState<{
     turno: string; label: string; horario: string;
     icon: "sunrise" | "sunset" | "moon" | "alert";
   } | null>(null);
@@ -157,7 +158,15 @@ export default function CajaPage() {
 
   useEffect(() => { cargarDatos(); }, []);
 
-  // ── Abrir caja ───────────────────────────────────────────────
+  // ── Derivados del cierre ────────────────────────────────────────
+  const saldoContadoNum  = parseFloat(saldoContado) || 0;
+  const retiroNum        = parseFloat(retiro)       || 0;
+  const fondoCambio      = Math.max(0, saldoContadoNum - retiroNum);
+  const diferenciaCierre = saldoContado !== ""
+    ? saldoContadoNum - (caja?.saldoActual ?? 0)
+    : null;
+
+  // ── Abrir caja ──────────────────────────────────────────────────
   const abrirCaja = async () => {
     const monto = parseFloat(saldoInicial);
     if (isNaN(monto) || monto < 0) {
@@ -186,7 +195,7 @@ export default function CajaPage() {
     }
   };
 
-  // ── Cerrar caja ──────────────────────────────────────────────
+  // ── Cerrar caja ─────────────────────────────────────────────────
   const cerrarCaja = async () => {
     const monto = parseFloat(saldoContado);
     if (isNaN(monto) || monto < 0) {
@@ -212,18 +221,31 @@ export default function CajaPage() {
       const res = await fetch("/api/caja", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ saldoContado: monto, observaciones: obsCierre || null }),
+        body: JSON.stringify({
+          saldoContado: monto,
+          retiro:       retiroNum,
+          fondoCambio,
+          observaciones: obsCierre || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
       const diffLabel = diferencia === 0
         ? "Sin diferencias"
         : diferencia > 0
         ? `Sobrante: +${fmt(diferencia)}`
         : `Faltante: ${fmt(diferencia)}`;
-      toast.success("Caja cerrada", diffLabel);
+
+      toast.success(
+        "Caja cerrada",
+        retiroNum > 0
+          ? `${diffLabel} · Retiro: ${fmt(retiroNum)} · Fondo cambio: ${fmt(fondoCambio)}`
+          : diffLabel,
+      );
       setModalCierre(false);
       setSaldoContado("");
+      setRetiro("");
       setObsCierre("");
       await fetchEstado();
     } catch (e: any) {
@@ -233,7 +255,7 @@ export default function CajaPage() {
     }
   };
 
-  // ── Movimiento manual ────────────────────────────────────────
+  // ── Movimiento manual ───────────────────────────────────────────
   const registrarMovimiento = async () => {
     const monto = parseFloat(montoMov);
     if (isNaN(monto) || monto <= 0) {
@@ -274,7 +296,7 @@ export default function CajaPage() {
     </div>
   );
 
-  // ── CERRADA ───────────────────────────────────────────────────
+  // ── CERRADA ─────────────────────────────────────────────────────
   if (estado === "cerrada") return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="text-center mb-8">
@@ -304,7 +326,7 @@ export default function CajaPage() {
       )}
 
       <button
-        onClick={() => { setModalApertura(true); }}
+        onClick={() => setModalApertura(true)}
         className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-4 rounded-xl transition-colors text-lg"
       >
         <LockOpen className="w-5 h-5" /> Abrir caja
@@ -324,8 +346,8 @@ export default function CajaPage() {
                     <Banknote className="h-4 w-4 text-blue-600" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-blue-900">Saldo del último cierre</p>
-                    <p className="text-xs text-blue-700 mt-0.5">Este fue el efectivo contado en el último cierre</p>
+                    <p className="text-sm font-medium text-blue-900">Fondo de cambio del último cierre</p>
+                    <p className="text-xs text-blue-700 mt-0.5">Este es el cambio que quedó en caja al cerrar el turno anterior</p>
                     <button
                       onClick={() => setSaldoInicial(String(saldoSugerido))}
                       className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-800 underline"
@@ -354,11 +376,6 @@ export default function CajaPage() {
                       <p className={`text-sm font-medium ${turnoDetectado.turno === "fuera_horario" ? "text-yellow-900" : "text-green-900"}`}>
                         {turnoDetectado.label}
                       </p>
-                      <p className={`text-xs ${turnoDetectado.turno === "fuera_horario" ? "text-yellow-700" : "text-green-700"}`}>
-                        {turnoDetectado.turno === "fuera_horario"
-                          ? "Los turnos habituales son: Mañana (8:30-13:00) y Tarde (17:30-22:00)"
-                          : "Turno detectado automáticamente según la hora actual"}
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -383,7 +400,6 @@ export default function CajaPage() {
                   }`}>
                   <AlertTriangle className="h-6 w-6 mb-1 text-gray-700" />
                   <span className="text-xs font-medium text-gray-700">Fuera de horario</span>
-                  <span className="text-[10px] text-gray-500">Horario excepcional</span>
                 </button>
               </div>
             </div>
@@ -393,13 +409,15 @@ export default function CajaPage() {
               <InputMoneda value={saldoInicial} onChange={setSaldoInicial} autoFocus
                 placeholder={saldoSugerido !== null ? String(saldoSugerido) : "0.00"} />
               <p className="text-xs text-gray-500 mt-1">
-                {saldoSugerido !== null ? `Sugerido: ${fmt(saldoSugerido)} - Ingresá el efectivo real` : "Ingresá el efectivo con el que abrís la caja"}
+                {saldoSugerido !== null
+                  ? `Fondo de cambio del turno anterior: ${fmt(saldoSugerido)}`
+                  : "Ingresá el efectivo con el que abrís la caja"}
               </p>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Observaciones <span className="text-gray-600">(opcional)</span>
+                Observaciones <span className="text-gray-400">(opcional)</span>
               </label>
               <input type="text" value={obsApertura} onChange={(e) => setObsApertura(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -414,10 +432,7 @@ export default function CajaPage() {
     </div>
   );
 
-  // ── ABIERTA ───────────────────────────────────────────────────
-  const diferenciaCierre = saldoContado !== "" && !isNaN(parseFloat(saldoContado))
-    ? parseFloat(saldoContado) - (caja?.saldoActual ?? 0) : null;
-
+  // ── ABIERTA ─────────────────────────────────────────────────────
   return (
     <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-6">
       {/* Header */}
@@ -447,7 +462,7 @@ export default function CajaPage() {
             className="flex items-center gap-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-semibold px-4 py-2 rounded-lg transition-colors border border-zinc-300">
             <History className="w-4 h-4" /> Historial
           </Link>
-          <button onClick={() => { setModalCierre(true); }}
+          <button onClick={() => setModalCierre(true)}
             className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 font-semibold px-4 py-2 rounded-lg transition-colors border border-red-200">
             <Lock className="w-4 h-4" /> Cerrar caja
           </button>
@@ -463,10 +478,10 @@ export default function CajaPage() {
             <h2 className="font-semibold">Efectivo en caja</h2>
           </div>
           <div className="p-3 md:p-4 space-y-2.5">
-            <FilaCaja num="1" label="Saldo inicial"     valor={fmt(caja?.saldoInicial  ?? 0)} sub="Apertura del turno"  color="text-gray-700" />
-            <FilaCaja num="2" label="(+) Ventas efec."  valor={`+ ${fmt(caja?.totalEfectivo  ?? 0)}`} sub="Ingresos del turno"  color="text-green-700" />
-            <FilaCaja num="+" label="(+) Ingresos"      valor={`+ ${fmt(caja?.totalIngresos ?? 0)}`} sub="Ingresos manuales"   color="text-green-700" />
-            <FilaCaja num="3" label="(-) Gastos/Retiros" valor={`- ${fmt(caja?.totalEgresos ?? 0)}`} sub="Salidas de capital"  color="text-red-700" />
+            <FilaCaja num="1" label="Saldo inicial"      valor={fmt(caja?.saldoInicial   ?? 0)} sub="Apertura del turno"  color="text-gray-700" />
+            <FilaCaja num="2" label="(+) Ventas efec."   valor={`+ ${fmt(caja?.totalEfectivo  ?? 0)}`} sub="Ingresos del turno"  color="text-green-700" />
+            <FilaCaja num="+" label="(+) Ingresos"       valor={`+ ${fmt(caja?.totalIngresos ?? 0)}`} sub="Ingresos manuales"   color="text-green-700" />
+            <FilaCaja num="3" label="(-) Gastos/Retiros" valor={`- ${fmt(caja?.totalEgresos  ?? 0)}`} sub="Salidas de capital"  color="text-red-700" />
             <div className="border-t border-gray-200 pt-3 mt-1">
               <div className="flex items-center justify-between">
                 <div>
@@ -512,7 +527,7 @@ export default function CajaPage() {
 
       {/* Botones acción */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3 py-2.5">
-        <button onClick={() => { setModalVenta(true); }}
+        <button onClick={() => setModalVenta(true)}
           className="flex flex-col items-center justify-center gap-1.5 font-semibold py-3 md:py-4 transition-colors rounded-xl"
           style={{ background: "#16a34a", color: "#ffffff" }}
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#15803d"}
@@ -577,7 +592,7 @@ export default function CajaPage() {
             <div className="flex items-center justify-between px-5 py-3.5 border-b flex-shrink-0"
               style={{ borderColor: "var(--border-base)" }}>
               <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>Cobrar venta</h3>
-              <button onClick={() => { setModalVenta(false); }}
+              <button onClick={() => setModalVenta(false)}
                 className="flex items-center justify-center h-8 w-8 rounded-lg transition-colors"
                 style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}>
                 <X className="w-5 h-5" />
@@ -621,10 +636,12 @@ export default function CajaPage() {
         </Modal>
       )}
 
-      {/* Modal cierre */}
+      {/* ── Modal cierre — con retiro y fondo de cambio ── */}
       {modalCierre && (
-        <Modal title="Cerrar caja" onClose={() => setModalCierre(false)}>
+        <Modal title="Cerrar caja" onClose={() => { setModalCierre(false); setSaldoContado(""); setRetiro(""); setObsCierre(""); }}>
           <div className="space-y-4">
+
+            {/* Resumen esperado */}
             <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-gray-600">Saldo inicial</span><span className="font-medium">{fmt(caja?.saldoInicial ?? 0)}</span></div>
               <div className="flex justify-between"><span className="text-gray-600">Ventas efectivo</span><span className="font-medium text-green-700">+{fmt(caja?.totalEfectivo ?? 0)}</span></div>
@@ -634,10 +651,16 @@ export default function CajaPage() {
                 <span>Saldo esperado</span><span>{fmt(caja?.saldoActual ?? 0)}</span>
               </div>
             </div>
+
+            {/* Paso 1: Contar */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">¿Cuánto contás en caja?</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                1. ¿Cuánto contás en caja? *
+              </label>
               <InputMoneda value={saldoContado} onChange={setSaldoContado} autoFocus />
             </div>
+
+            {/* Diferencia */}
             {diferenciaCierre !== null && (
               <div className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ${
                 diferenciaCierre === 0 ? "bg-green-50 text-green-700" : diferenciaCierre > 0 ? "bg-blue-50 text-blue-700" : "bg-red-50 text-red-700"}`}>
@@ -645,14 +668,49 @@ export default function CajaPage() {
                 {diferenciaCierre === 0 ? "Sin diferencias ✓" : diferenciaCierre > 0 ? `Sobrante: +${fmt(diferenciaCierre)}` : `Faltante: ${fmt(diferenciaCierre)}`}
               </div>
             )}
+
+            {/* Paso 2: Retiro */}
+            {saldoContado !== "" && (
+              <div className="rounded-xl p-4 space-y-3" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.25)" }}>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    2. ¿Cuánto retirás? (billetes grandes)
+                  </label>
+                  <InputMoneda value={retiro} onChange={setRetiro} placeholder="0.00" />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Dejá en 0 si no retirás nada
+                  </p>
+                </div>
+
+                {/* Resumen fondo de cambio */}
+                <div className="rounded-lg px-4 py-3 flex items-center justify-between"
+                  style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                  <div>
+                    <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Fondo de cambio</p>
+                    <p className="text-xs text-green-600 mt-0.5">Queda en caja para el próximo turno</p>
+                  </div>
+                  <p className="text-xl font-bold text-green-700">{fmt(fondoCambio)}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Observaciones */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-600">(opcional)</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Observaciones <span className="text-gray-400">(opcional)</span>
+              </label>
               <input type="text" value={obsCierre} onChange={(e) => setObsCierre(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="Notas del cierre..." />
             </div>
-            <BotonesModal onCancel={() => setModalCierre(false)} onConfirm={cerrarCaja}
-              loading={loading} labelConfirm="Cerrar caja" colorConfirm="red" />
+
+            <BotonesModal
+              onCancel={() => { setModalCierre(false); setSaldoContado(""); setRetiro(""); setObsCierre(""); }}
+              onConfirm={cerrarCaja}
+              loading={loading}
+              labelConfirm="Cerrar caja"
+              colorConfirm="red"
+            />
           </div>
         </Modal>
       )}

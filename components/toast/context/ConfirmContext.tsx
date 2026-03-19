@@ -8,8 +8,8 @@ import { AlertTriangle, Trash2, LogOut, ShieldAlert, X } from "lucide-react";
 type ConfirmVariant = "danger" | "warning" | "info";
 
 interface ConfirmOptions {
-  title:       string;
-  description?: string;
+  title:         string;
+  description?:  string;
   confirmLabel?: string;
   cancelLabel?:  string;
   variant?:      ConfirmVariant;
@@ -29,31 +29,33 @@ interface ConfirmContextValue {
 const ConfirmContext = createContext<ConfirmContextValue | null>(null);
 
 // ── Config de variantes ───────────────────────────────────────────────────
+// Solo guardamos los colores semánticos de acción (danger/warning/info).
+// Los colores neutros de superficie los tomamos de las CSS vars en el JSX.
 
 const VARIANT_CONFIG: Record<
   ConfirmVariant,
   { iconBg: string; iconColor: string; btnBg: string; btnHover: string; btnText: string }
 > = {
   danger: {
-    iconBg:   "rgba(239,68,68,0.12)",
+    iconBg:    "rgba(239,68,68,0.12)",
     iconColor: "#f87171",
-    btnBg:    "#DC2626",
-    btnHover: "#B91C1C",
-    btnText:  "#ffffff",
+    btnBg:     "#DC2626",
+    btnHover:  "#B91C1C",
+    btnText:   "#ffffff",
   },
   warning: {
-    iconBg:   "rgba(245,158,11,0.12)",
+    iconBg:    "rgba(245,158,11,0.12)",
     iconColor: "#fbbf24",
-    btnBg:    "#D97706",
-    btnHover: "#B45309",
-    btnText:  "#ffffff",
+    btnBg:     "#D97706",
+    btnHover:  "#B45309",
+    btnText:   "#ffffff",
   },
   info: {
-    iconBg:   "rgba(59,130,246,0.12)",
+    iconBg:    "rgba(59,130,246,0.12)",
     iconColor: "#60a5fa",
-    btnBg:    "#2563EB",
-    btnHover: "#1D4ED8",
-    btnText:  "#ffffff",
+    btnBg:     "#2563EB",
+    btnHover:  "#1D4ED8",
+    btnText:   "#ffffff",
   },
 };
 
@@ -67,7 +69,7 @@ const ICONS = {
 // ── Provider ──────────────────────────────────────────────────────────────
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<ConfirmState | null>(null);
+  const [state,   setState]   = useState<ConfirmState | null>(null);
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -80,7 +82,6 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
   const handleConfirm = () => {
     setLoading(true);
-    // Pequeño delay para dar feedback visual antes de resolver
     setTimeout(() => {
       state?.resolve(true);
       setLoading(false);
@@ -95,29 +96,28 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setState(null), 200);
   };
 
-  const variant = state?.variant ?? "danger";
-  const cfg     = VARIANT_CONFIG[variant];
+  const variant       = state?.variant ?? "danger";
+  const cfg           = VARIANT_CONFIG[variant];
   const IconComponent = ICONS[state?.icon ?? "warning"];
 
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
 
-      {/* Backdrop + Modal */}
       {state && (
         <div
           onClick={handleCancel}
           style={{
-            position:        "fixed",
-            inset:           0,
-            zIndex:          10000,
-            display:         "flex",
-            alignItems:      "center",
-            justifyContent:  "center",
-            padding:         "16px",
-            background:      visible ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0)",
-            backdropFilter:  visible ? "blur(4px)" : "blur(0px)",
-            transition:      "background 0.2s ease, backdrop-filter 0.2s ease",
+            position:       "fixed",
+            inset:          0,
+            zIndex:         10000,
+            display:        "flex",
+            alignItems:     "center",
+            justifyContent: "center",
+            padding:        "16px",
+            background:     visible ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0)",
+            backdropFilter: visible ? "blur(4px)" : "blur(0px)",
+            transition:     "background 0.2s ease, backdrop-filter 0.2s ease",
           }}
         >
           <div
@@ -126,11 +126,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               width:        "100%",
               maxWidth:     "400px",
               borderRadius: "18px",
-              background:   "#161616",
-              border:       "1px solid rgba(255,255,255,0.09)",
-              boxShadow:    "0 32px 64px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.04) inset",
+              background:   "var(--bg-surface)",
+              border:       "1px solid var(--border-md)",
+              boxShadow:    "0 32px 64px rgba(0,0,0,0.5), 0 1px 0 var(--border-subtle) inset",
               overflow:     "hidden",
-              // Animación
               opacity:      visible ? 1 : 0,
               transform:    visible ? "scale(1) translateY(0)" : "scale(0.93) translateY(12px)",
               transition:   "opacity 0.22s ease, transform 0.22s cubic-bezier(0.34,1.56,0.64,1)",
@@ -140,14 +139,14 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             <div style={{ padding: "24px 24px 0", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
               <div
                 style={{
-                  width:         "44px",
-                  height:        "44px",
-                  borderRadius:  "12px",
-                  background:    cfg.iconBg,
-                  display:       "flex",
-                  alignItems:    "center",
-                  justifyContent:"center",
-                  flexShrink:    0,
+                  width:          "44px",
+                  height:         "44px",
+                  borderRadius:   "12px",
+                  background:     cfg.iconBg,
+                  display:        "flex",
+                  alignItems:     "center",
+                  justifyContent: "center",
+                  flexShrink:     0,
                 }}
               >
                 <IconComponent size={20} color={cfg.iconColor} />
@@ -158,12 +157,13 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                   background:   "none",
                   border:       "none",
                   cursor:       "pointer",
-                  color:        "#52525b",
+                  color:        "var(--text-faint)",
                   padding:      "4px",
                   borderRadius: "6px",
+                  transition:   "color 0.15s",
                 }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#a1a1aa")}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#52525b")}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-muted)")}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-faint)")}
               >
                 <X size={16} />
               </button>
@@ -173,11 +173,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             <div style={{ padding: "16px 24px 24px" }}>
               <h3
                 style={{
-                  margin:     "0 0 8px",
-                  fontSize:   "16px",
-                  fontWeight: 700,
-                  color:      "#f4f4f5",
-                  fontFamily: "'Syne', sans-serif",
+                  margin:        "0 0 8px",
+                  fontSize:      "16px",
+                  fontWeight:    700,
+                  color:         "var(--text-primary)",
+                  fontFamily:    "'Syne', sans-serif",
                   letterSpacing: "-0.01em",
                 }}
               >
@@ -188,7 +188,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                   style={{
                     margin:     "0 0 20px",
                     fontSize:   "13.5px",
-                    color:      "#71717a",
+                    color:      "var(--text-muted)",
                     lineHeight: "1.6",
                     fontFamily: "'DM Sans', sans-serif",
                   }}
@@ -206,17 +206,17 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                     flex:         1,
                     padding:      "10px 16px",
                     borderRadius: "10px",
-                    border:       "1px solid rgba(255,255,255,0.1)",
-                    background:   "rgba(255,255,255,0.04)",
-                    color:        "#a1a1aa",
+                    border:       "1px solid var(--border-strong)",
+                    background:   "var(--bg-hover-md)",
+                    color:        "var(--text-secondary)",
                     fontSize:     "13.5px",
                     fontWeight:   600,
                     cursor:       "pointer",
                     fontFamily:   "'DM Sans', sans-serif",
                     transition:   "background 0.15s",
                   }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)")}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)")}
+                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)")}
+                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)")}
                 >
                   {state.cancelLabel ?? "Cancelar"}
                 </button>
@@ -224,21 +224,21 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                   onClick={handleConfirm}
                   disabled={loading}
                   style={{
-                    flex:         1,
-                    padding:      "10px 16px",
-                    borderRadius: "10px",
-                    border:       "none",
-                    background:   loading ? "#3f3f46" : cfg.btnBg,
-                    color:        cfg.btnText,
-                    fontSize:     "13.5px",
-                    fontWeight:   700,
-                    cursor:       loading ? "not-allowed" : "pointer",
-                    fontFamily:   "'DM Sans', sans-serif",
-                    transition:   "background 0.15s, transform 0.1s",
-                    display:      "flex",
-                    alignItems:   "center",
+                    flex:           1,
+                    padding:        "10px 16px",
+                    borderRadius:   "10px",
+                    border:         "none",
+                    background:     loading ? "var(--bg-input)" : cfg.btnBg,
+                    color:          loading ? "var(--text-muted)" : cfg.btnText,
+                    fontSize:       "13.5px",
+                    fontWeight:     700,
+                    cursor:         loading ? "not-allowed" : "pointer",
+                    fontFamily:     "'DM Sans', sans-serif",
+                    transition:     "background 0.15s, transform 0.1s",
+                    display:        "flex",
+                    alignItems:     "center",
                     justifyContent: "center",
-                    gap:          "6px",
+                    gap:            "6px",
                   }}
                   onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLElement).style.background = cfg.btnHover; }}
                   onMouseLeave={(e) => { if (!loading) (e.currentTarget as HTMLElement).style.background = cfg.btnBg; }}
@@ -247,13 +247,13 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 >
                   {loading ? (
                     <span style={{
-                      width:       "14px",
-                      height:      "14px",
-                      border:      "2px solid rgba(255,255,255,0.3)",
-                      borderTopColor: "#fff",
-                      borderRadius: "50%",
-                      animation:   "devhub-spin 0.7s linear infinite",
-                      display:     "inline-block",
+                      width:          "14px",
+                      height:         "14px",
+                      border:         "2px solid var(--border-strong)",
+                      borderTopColor: "var(--text-primary)",
+                      borderRadius:   "50%",
+                      animation:      "devhub-spin 0.7s linear infinite",
+                      display:        "inline-block",
                     }} />
                   ) : null}
                   {state.confirmLabel ?? "Confirmar"}

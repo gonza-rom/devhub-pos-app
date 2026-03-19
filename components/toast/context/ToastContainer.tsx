@@ -7,16 +7,18 @@ import {
 import { useToast, type Toast, type ToastType } from "./ToastContext";
 
 // ── Config por tipo ───────────────────────────────────────────────────────
+// Los colores de acción (verde, rojo, amber, azul) son semánticos y se mantienen.
+// Los colores neutros de superficie usan CSS vars.
 
 const CONFIG: Record<
   ToastType,
   {
-    icon: React.ElementType;
+    icon:      React.ElementType;
     iconColor: string;
-    barColor: string;
-    bg: string;
-    border: string;
-    spin?: boolean;
+    barColor:  string;
+    bg:        string;
+    border:    string;
+    spin?:     boolean;
   }
 > = {
   success: {
@@ -49,10 +51,10 @@ const CONFIG: Record<
   },
   loading: {
     icon:      Loader2,
-    iconColor: "#a1a1aa",
-    barColor:  "#71717a",
-    bg:        "rgba(255,255,255,0.04)",
-    border:    "rgba(255,255,255,0.1)",
+    iconColor: "var(--text-secondary)" as string,
+    barColor:  "var(--text-muted)"     as string,
+    bg:        "var(--bg-hover-md)"    as string,
+    border:    "var(--border-strong)"  as string,
     spin:      true,
   },
 };
@@ -81,20 +83,15 @@ function ToastItem({ toast }: { toast: Toast }) {
   // Barra de progreso
   useEffect(() => {
     if (duration === 0) return;
-
-    const tick = 50; // ms
+    const tick = 50;
     startRef.current = Date.now();
-
     intervalRef.current = setInterval(() => {
       if (pausedRef.current) return;
       elapsed.current = Date.now() - startRef.current;
       const remaining = Math.max(0, 1 - elapsed.current / duration);
       setProgress(remaining * 100);
     }, tick);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [duration]);
 
   const handleDismiss = () => {
@@ -102,14 +99,10 @@ function ToastItem({ toast }: { toast: Toast }) {
     setTimeout(() => dismiss(toast.id), 280);
   };
 
-  const pauseProgress = () => {
-    pausedRef.current = true;
-  };
-
+  const pauseProgress  = () => { pausedRef.current = true; };
   const resumeProgress = () => {
     pausedRef.current = false;
-    // Re-ajustar el startRef para que el tiempo pausado no cuente
-    startRef.current = Date.now() - elapsed.current;
+    startRef.current  = Date.now() - elapsed.current;
   };
 
   return (
@@ -117,24 +110,23 @@ function ToastItem({ toast }: { toast: Toast }) {
       onMouseEnter={pauseProgress}
       onMouseLeave={resumeProgress}
       style={{
-        position:        "relative",
-        width:           "420px",
-        maxWidth:        "calc(100vw - 32px)",
-        borderRadius:    "14px",
-        overflow:        "hidden",
-        background:      cfg.bg,
-        border:          `1px solid ${cfg.border}`,
-        backdropFilter:  "blur(16px)",
-        boxShadow:       "0 4px 6px -1px rgba(0,0,0,0.3), 0 20px 40px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.06) inset",
-        cursor:          "default",
-        // Animación: entra desde arriba, sale hacia arriba
-        opacity:         exiting ? 0 : visible ? 1 : 0,
-        transform:       exiting
+        position:       "relative",
+        width:          "420px",
+        maxWidth:       "calc(100vw - 32px)",
+        borderRadius:   "14px",
+        overflow:       "hidden",
+        background:     cfg.bg,
+        border:         `1px solid ${cfg.border}`,
+        backdropFilter: "blur(16px)",
+        boxShadow:      "0 4px 6px -1px rgba(0,0,0,0.3), 0 20px 40px rgba(0,0,0,0.5), 0 1px 0 var(--border-subtle) inset",
+        cursor:         "default",
+        opacity:        exiting ? 0 : visible ? 1 : 0,
+        transform:      exiting
           ? "translateY(-14px) scale(0.95)"
           : visible
           ? "translateY(0) scale(1)"
           : "translateY(-20px) scale(0.96)",
-        transition:      exiting
+        transition: exiting
           ? "opacity 0.22s ease, transform 0.22s cubic-bezier(0.4,0,1,1)"
           : "opacity 0.3s ease, transform 0.3s cubic-bezier(0.34,1.4,0.64,1)",
       }}
@@ -157,14 +149,7 @@ function ToastItem({ toast }: { toast: Toast }) {
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "14px 16px" }}>
         {/* Ícono */}
-        <div
-          style={{
-            flexShrink: 0,
-            width:      "20px",
-            height:     "20px",
-            marginTop:  "1px",
-          }}
-        >
+        <div style={{ flexShrink: 0, width: "20px", height: "20px", marginTop: "1px" }}>
           <Icon
             size={20}
             color={cfg.iconColor}
@@ -180,7 +165,7 @@ function ToastItem({ toast }: { toast: Toast }) {
               fontSize:   "13.5px",
               fontWeight: 600,
               lineHeight: "1.4",
-              color:      "#f4f4f5",
+              color:      "var(--text-primary)",
               fontFamily: "'DM Sans', sans-serif",
             }}
           >
@@ -191,7 +176,7 @@ function ToastItem({ toast }: { toast: Toast }) {
               style={{
                 margin:     "3px 0 0",
                 fontSize:   "12.5px",
-                color:      "#a1a1aa",
+                color:      "var(--text-muted)",
                 lineHeight: "1.5",
                 fontFamily: "'DM Sans', sans-serif",
               }}
@@ -210,7 +195,7 @@ function ToastItem({ toast }: { toast: Toast }) {
                 padding:      "3px 10px",
                 borderRadius: "6px",
                 border:       `1px solid ${cfg.border}`,
-                background:   "rgba(255,255,255,0.06)",
+                background:   "var(--bg-hover-md)",
                 color:        cfg.iconColor,
                 fontSize:     "12px",
                 fontWeight:   600,
@@ -232,15 +217,15 @@ function ToastItem({ toast }: { toast: Toast }) {
               background:   "none",
               border:       "none",
               cursor:       "pointer",
-              color:        "#52525b",
+              color:        "var(--text-faint)",
               padding:      "2px",
               borderRadius: "4px",
               display:      "flex",
               alignItems:   "center",
               transition:   "color 0.15s",
             }}
-            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#a1a1aa")}
-            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "#52525b")}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-muted)")}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-faint)")}
           >
             <X size={14} />
           </button>
@@ -268,18 +253,18 @@ export function ToastContainer() {
         aria-live="polite"
         aria-label="Notificaciones"
         style={{
-          position:        "fixed",
-          top:             "20px",
-          left:            "50%",
-          transform:       "translateX(-50%)",
-          zIndex:          9999,
-          display:         "flex",
-          flexDirection:   "column",
-          alignItems:      "center",
-          gap:             "8px",
-          width:           "420px",
-          maxWidth:        "calc(100vw - 32px)",
-          pointerEvents:   toasts.length ? "auto" : "none",
+          position:      "fixed",
+          top:           "20px",
+          left:          "50%",
+          transform:     "translateX(-50%)",
+          zIndex:        9999,
+          display:       "flex",
+          flexDirection: "column",
+          alignItems:    "center",
+          gap:           "8px",
+          width:         "420px",
+          maxWidth:      "calc(100vw - 32px)",
+          pointerEvents: toasts.length ? "auto" : "none",
         }}
       >
         {toasts.map((t) => (
