@@ -130,7 +130,11 @@ export default function POSClient({
   const [mensajeError,     setMensajeError]     = useState("");
   const [efectivoRecibido, setEfectivoRecibido] = useState("");
   const [ticketVenta,      setTicketVenta]      = useState<TicketVenta | null>(null);
-  const [imprimirTicket,   setImprimirTicket]   = useState(true);
+  const [imprimirTicket, setImprimirTicket] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const guardado = localStorage.getItem("pos_imprimir_ticket");
+    return guardado === null ? true : guardado === "true";
+  });
   const [tabMobile,        setTabMobile]        = useState<"catalogo" | "carrito">("catalogo");
   const [scannerAbierto,   setScannerAbierto]   = useState(false);
 
@@ -1123,7 +1127,10 @@ export default function POSClient({
 
                 {/* Checkboxes */}
                 {[
-                  { label: "Generar ticket de venta",            value: imprimirTicket, setter: setImprimirTicket },
+                  { label: "Generar ticket de venta", value: imprimirTicket, setter: (v: boolean) => {
+                    setImprimirTicket(v);
+                    localStorage.setItem("pos_imprimir_ticket", String(v));
+                  }},
                   { label: "Generar factura electrónica (AFIP)", value: generarFactura, setter: setGenerarFactura },
                   { label: "Cargar con fecha pasada",            value: fechaManual,    setter: (v: boolean) => { setFechaManual(v); setFechaVenta(v ? `${fechaHoyAR()}T${horaAhoraAR()}` : ""); } },
                 ].map(({ label, value, setter }) => (
