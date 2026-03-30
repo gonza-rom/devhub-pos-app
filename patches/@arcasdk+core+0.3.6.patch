@@ -1,0 +1,17 @@
+diff --git a/node_modules/@arcasdk/core/lib/infrastructure/outbound/adapters/soap/soap-client.js b/node_modules/@arcasdk/core/lib/infrastructure/outbound/adapters/soap/soap-client.js
+index 07765bf..f90d6aa 100644
+--- a/node_modules/@arcasdk/core/lib/infrastructure/outbound/adapters/soap/soap-client.js
++++ b/node_modules/@arcasdk/core/lib/infrastructure/outbound/adapters/soap/soap-client.js
+@@ -63,8 +63,10 @@ class SoapClient {
+                     // Dynamic import to avoid issues in non-Node environments
+                     const https = yield Promise.resolve().then(() => __importStar(require("https")));
+                     const legacyHttpsAgent = new https.Agent({
+-                        rejectUnauthorized: true,
+-                        minDHSize: constants_1.MIN_DH_SIZE_LEGACY,
++                        rejectUnauthorized: false,
++                        minDHSize: 512,
++                        ciphers: "DEFAULT:@SECLEVEL=0",
++                        secureOptions: require("constants").SSL_OP_LEGACY_SERVER_CONNECT | require("constants").SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION,
+                     });
+                     finalOptions.wsdl_options = Object.assign(Object.assign({}, finalOptions.wsdl_options), { httpsAgent: legacyHttpsAgent });
+                     finalOptions.request = Object.assign(Object.assign({}, finalOptions.request), { httpsAgent: legacyHttpsAgent });

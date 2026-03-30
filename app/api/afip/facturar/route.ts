@@ -2,6 +2,7 @@
 // POST /api/afip/facturar
 // VERSIÓN FINAL - FUNCIONANDO con @arcasdk/core v0.3.6
 
+import "@/lib/afip/tls-fix";
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant";
 import { prisma } from "@/lib/prisma";
@@ -131,6 +132,7 @@ ivaDetalle = [
       key: config.clavePrivada,
       // @ts-ignore
       production: config.ambiente === "produccion",
+      useHttpsAgent: true,
     });
     
     // ─── Obtener último número de comprobante ────────────────────────────────
