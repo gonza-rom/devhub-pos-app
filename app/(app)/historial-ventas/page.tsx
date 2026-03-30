@@ -216,7 +216,7 @@ export default async function HistorialVentasPage({
                 .map((p, i) =>
                   p === "..." ? (
                     <span key={`ellipsis-${i}`} className="px-2 py-1 text-sm"
-                      style={{ color: "var(--text-faint)" }}>…</span>
+                      style={{ color: "var(--text-primary)" }}>…</span>
                   ) : (
                     <Link key={p} href={buildQuery(p as number)}
                       className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"

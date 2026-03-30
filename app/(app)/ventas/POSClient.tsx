@@ -24,6 +24,7 @@ import { ModalCrearProductoRapido } from "@/components/ventas/ModalCrearProducto
 import { fechaHoyAR, horaAhoraAR } from "@/lib/dateAR";
 import { useToast } from "@/components/toast";
 
+
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type ProductoConCategoria = {
@@ -88,7 +89,7 @@ type Props = {
 // ─── Configuración del grid ───────────────────────────────────────────────────
 
 const MIN_CARD_WIDTH = 160;
-const CARD_HEIGHT    = 170;
+const CARD_HEIGHT    = 190;
 const GAP            = 6;
 
 // Cache de productos por clave (categoría + búsqueda) — persiste entre renders
@@ -137,6 +138,8 @@ export default function POSClient({
   });
   const [tabMobile,        setTabMobile]        = useState<"catalogo" | "carrito">("catalogo");
   const [scannerAbierto,   setScannerAbierto]   = useState(false);
+  const [descuentoPct,    setDescuentoPct]    = useState(0);
+  const [ajusteRedondeo,  setAjusteRedondeo]  = useState(0);
 
   // Refs
   const gridContainerRef      = useRef<HTMLDivElement>(null);
@@ -266,6 +269,35 @@ export default function POSClient({
     return () => timers.forEach(clearTimeout);
   }, [isModal]);
 
+  useEffect(() => {
+  const handler = (e: KeyboardEvent) => {
+    // Ignorar si el foco está en un input, textarea o select
+    const tag = (e.target as HTMLElement).tagName;
+    const enInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+
+    // Escape — cerrar modales en orden de prioridad
+    if (e.key === "Escape") {
+      if (scannerAbierto)       { setScannerAbierto(false);    return; }
+      if (modalFacturaAbierto)  { setModalFacturaAbierto(false); return; }
+      if (productoEditando)     { setProductoEditando(null);   return; }
+      if (modalCrearProducto)   { setModalCrearProducto(false); return; }
+    }
+
+    // Enter — confirmar venta (solo si no está en un input y hay items en el carrito)
+    if (e.key === "Enter" && !enInput) {
+      if (carrito.length > 0 && !cargando && resultado !== "exito") {
+        e.preventDefault();
+        handleVenta();
+      }
+    }
+  };
+
+  window.addEventListener("keydown", handler);
+  return () => window.removeEventListener("keydown", handler);
+}, [
+  scannerAbierto, modalFacturaAbierto, productoEditando,
+  modalCrearProducto, carrito, cargando, resultado,
+]);
   // ── Búsqueda remota con debounce ────────────────────────────────────────────
 
   const abortRef = useRef<AbortController | null>(null);
@@ -411,6 +443,8 @@ export default function POSClient({
     setFechaVenta("");
     setItemManualNombre("");
     setItemManualPrecio("");
+    setDescuentoPct(0);
+    setAjusteRedondeo(0);
   }, []);
 
   const handleCodigoEscaneado = useCallback((codigo: string) => {
@@ -696,18 +730,18 @@ export default function POSClient({
               )}
             </div>
 
-            <p className="text-xs font-semibold line-clamp-2 leading-tight mb-1" style={{ color: "var(--text-primary)" }}>
+            <p className="text-base font-semibold line-clamp-2 leading-tight mb-1" style={{ color: "var(--text-primary)" }}>
               {producto.nombre}
             </p>
-            <p className="text-sm font-bold text-red-400 mt-1">{formatPrecio(producto.precio)}</p>
+            <p className="text-base font-bold text-red-400 mt-1">{formatPrecio(producto.precio)}</p>
 
             <div className="flex items-center justify-between mt-0.5 gap-1">
-              <span className="text-[10px] font-mono truncate" style={{ color: "var(--text-primary)" }}>
+              <span className="text-xs font-mono truncate" style={{ color: "var(--text-primary)" }}>
                 {producto.codigoProducto || ""}
               </span>
               <div className="flex items-center gap-1 flex-shrink-0">
                 {producto.stock > 0 && (
-                  <span className="text-[10px]" style={{ color: "var(--text-primary)" }}>
+                  <span className="text-xs" style={{ color: "var(--text-primary)" }}>
                     Stock: {producto.stock}
                   </span>
                 )}
@@ -722,7 +756,7 @@ export default function POSClient({
                       codigoProducto: producto.codigoProducto || "",
                     });
                   }}
-                  className="flex h-4 w-4 items-center justify-center rounded flex-shrink-0 cursor-pointer"
+                  className="flex h-4 w-6 items-center justify-center rounded flex-shrink-0 cursor-pointer"
                   style={{ background: "var(--bg-hover-md)", color: "var(--text-muted)" }}
                 >
                   <svg className="h-5.5 w-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -735,7 +769,7 @@ export default function POSClient({
             {/* Badge stock */}
             {producto.stock <= 0 ? (
               <span
-                className="absolute top-2 right-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                className="absolute top-2 right-2 text-xs font-medium px-1.5 py-0.5 rounded-full"
                 style={{ background: "rgba(220,38,38,0.15)", color: "#f87171", border: "1px solid rgba(220,38,38,0.3)" }}
               >
                 Sin stock
@@ -950,6 +984,7 @@ export default function POSClient({
             placeholder="$"
             className="input-base text-xs"
             style={{ width: "64px", padding: "4px 8px" }}
+            onWheel={(e) => e.currentTarget.blur()}
           />
           <button
             onClick={() => {
@@ -1031,14 +1066,59 @@ export default function POSClient({
 
       {carrito.length > 0 && (
         <div className="border-t p-3 space-y-3 flex-shrink-0" style={{ borderColor: "var(--border-base)" }}>
+          {/* Descuento */}
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Desc. $</label>
+            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Desc. %</label>
             <input
-              type="number" min="0" max={subtotal} value={descuento || ""}
-              onChange={(e) => setDescuento(Math.max(0, parseFloat(e.target.value) || 0))}
+              type="number" min="0" max="100"
+              value={descuentoPct || ""}
+              onChange={(e) => {
+                const pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+                setDescuentoPct(pct);
+                setDescuento(Math.round((subtotal * pct) / 100));
+              }}
+              placeholder="0" className="input-base text-sm" style={{ width: "60px" }}
+              onWheel={(e) => e.currentTarget.blur()}
+            />
+            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>$ </label>
+            <input
+              type="number" min="0" max={subtotal}
+              value={descuento || ""}
+              onChange={(e) => {
+                const monto = Math.max(0, parseFloat(e.target.value) || 0);
+                setDescuento(monto);
+                setDescuentoPct(subtotal > 0 ? Math.round((monto / subtotal) * 100) : 0);
+              }}
               placeholder="0" className="input-base text-sm" style={{ width: "72px" }}
+              onWheel={(e) => e.currentTarget.blur()}
             />
           </div>
+
+          {/* Redondeo manual del total */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Redondear</label>
+            <input
+              type="number" min="0"
+              value={ajusteRedondeo || ""}
+              onChange={(e) => setAjusteRedondeo(Math.max(0, parseFloat(e.target.value) || 0))}
+              placeholder="0" className="input-base text-sm" style={{ width: "72px" }}
+              onWheel={(e) => e.currentTarget.blur()}
+            />
+            <button
+              onClick={() => setDescuento(Math.max(0, descuento - ajusteRedondeo))}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold"
+              style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.3)" }}
+              title="Subir total (bajar descuento)"
+            >+</button>
+            <button
+              onClick={() => setDescuento(Math.min(subtotal, descuento + ajusteRedondeo))}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold"
+              style={{ background: "rgba(220,38,38,0.15)", color: "#f87171", border: "1px solid rgba(220,38,38,0.3)" }}
+              title="Bajar total (subir descuento)"
+            >−</button>
+          </div>
+        </div>
 
           <div className="grid grid-cols-5 gap-1">
             {METODOS_PAGO.map((mp) => {
@@ -1064,7 +1144,8 @@ export default function POSClient({
               <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Recibido $</label>
               <input type="number" min={total} value={efectivoRecibido}
                 onChange={(e) => setEfectivoRecibido(e.target.value)}
-                placeholder={String(total)} className="input-base flex-1" />
+                placeholder={String(total)} className="input-base flex-1"
+                onWheel={(e) => e.currentTarget.blur()} />
             </div>
           )}
 
@@ -1173,7 +1254,9 @@ export default function POSClient({
               <p className="text-xs font-medium text-green-300">¡Venta registrada!</p>
             </div>
           )}
-
+          <p className="text-[10px] text-center" style={{ color: "var(--text-faint)" }}>
+            Enter para cobrar · Esc para cerrar
+          </p>
           {/* Botón cobrar */}
           <button
             onClick={() => handleVenta()}

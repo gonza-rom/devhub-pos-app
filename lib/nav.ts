@@ -5,7 +5,7 @@
 import {
   LayoutDashboard, ShoppingCart, Package, ArrowLeftRight,
   BarChart3, Tag, Truck, Settings, Crown, Users, DollarSign,
-  History, FileText,
+  History, FileText,HelpCircle,
 } from "lucide-react";
 import type { RolTenant } from "@/types";
 
@@ -40,6 +40,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Categorías",          href: "/categorias",       icon: Tag,        soloAdmin: true },
   { label: "Proveedores",         href: "/proveedores",      icon: Truck,      soloAdmin: true },
   { label: "Comprobantes",        href: "/comprobantes",     icon: FileText,   soloAdmin: true, soloAFIP: true },
+  { label: "Ayuda",               href: "/ayuda",            icon: HelpCircle },
   {
     label: "Configuración", href: "/configuracion", icon: Settings, soloAdmin: true,
     children: [

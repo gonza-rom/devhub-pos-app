@@ -177,6 +177,7 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
                 min="0"
                 step="0.01"
                 className="input-base w-full"
+                onWheel={(e) => e.currentTarget.blur()}
                 disabled={cargando}
               />
             </div>
@@ -190,6 +191,7 @@ export function ModalCrearProductoRapido({ open, onClose, onProductoCreado, cate
                 onChange={(e) => setForm({ ...form, stock: e.target.value })}
                 min="0"
                 className="input-base w-full"
+                onWheel={(e) => e.currentTarget.blur()}
                 disabled={cargando}
               />
             </div>

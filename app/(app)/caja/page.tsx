@@ -472,10 +472,10 @@ export default function CajaPage() {
       {/* Panel principal */}
       <div className="grid lg:grid-cols-2 gap-4 py-4">
         {/* EFECTIVO */}
-        <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "2px solid rgba(34,197,94,0.3)" }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "4px solid rgba(41, 134, 75, 0.3)" }}>
           <div className="px-3 md:px-4 py-2.5 flex items-center gap-2">
             <Banknote className="w-5 h-5 text-white" />
-            <h2 className="font-semibold">Efectivo en caja</h2>
+            <h2 className="font-semibold text-xl">Efectivo en caja</h2>
           </div>
           <div className="p-3 md:p-4 space-y-2.5">
             <FilaCaja num="1" label="Saldo inicial"      valor={fmt(caja?.saldoInicial   ?? 0)} sub="Apertura del turno"  color="text-gray-700" />
@@ -495,11 +495,11 @@ export default function CajaPage() {
         </div>
 
         {/* VIRTUAL */}
-        <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "2px solid rgba(34,197,94,0.3)" }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: "var(--bg-card)", border: "4px solid rgba(46, 133, 78, 0.3)" }}>
           <div className="px-5 py-3 flex items-center gap-2" style={{ background: "#6b7280", color: "#ffffff" }}>
-            <Smartphone className="w-5 h-5 text-white" />
-            <h2 className="font-semibold text-white">Ventas virtuales</h2>
-            <span className="ml-auto text-xs text-white/80">No afectan la caja física</span>
+            <Smartphone className="w-5 h-5" />
+            <h2 className="font-semibold text-xl">Ventas virtuales</h2>
+            <span className="ml-auto text-lg text-white/8 font-semibold">No afectan la caja física</span>
           </div>
           <div className="p-5 space-y-3">
             <FilaCaja label="Transferencia"     valor={fmt(caja?.totalTransferencia ?? 0)} color="text-purple-700" icon={<Landmark   className="w-3.5 h-3.5" />} />
@@ -508,8 +508,8 @@ export default function CajaPage() {
               <div className="bg-gray-50 rounded-lg p-3">
                 <div className="flex items-center gap-2 mb-2">
                   <CreditCard className="w-4 h-4 text-gray-600" />
-                  <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Tarjetas</p>
-                  <span className="text-xs text-gray-600 ml-auto">Acred. diferida</span>
+                  <p className="text-base font-semibold text-gray-600 uppercase tracking-wide">Tarjetas</p>
+                  <span className="text-base text-gray-600 ml-auto">Acred. diferida</span>
                 </div>
                 <FilaCaja label="Débito"  valor={fmt(caja?.totalTarjetaDebito  ?? 0)} color="text-blue-700" icon={<CreditCard className="w-3.5 h-3.5" />} />
                 <FilaCaja label="Crédito" valor={fmt(caja?.totalTarjetaCredito ?? 0)} color="text-blue-700" icon={<CreditCard className="w-3.5 h-3.5" />} />
@@ -725,14 +725,14 @@ function FilaCaja({ num, label, valor, sub, color, icon }: {
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
-        {num  && <span className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-gray-100 text-gray-600 text-[10px] md:text-xs flex items-center justify-center font-semibold flex-shrink-0">{num}</span>}
+        {num  && <span className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-gray-100 text-gray-600 text-[10px] md:text-base flex items-center justify-center font-semibold flex-shrink-0">{num}</span>}
         {icon && <span className="text-gray-600 flex-shrink-0">{icon}</span>}
         <div className="min-w-0">
-          <p className="text-xs font-medium text-gray-700 truncate">{label}</p>
+          <p className="text-base font-medium text-gray-700 truncate">{label}</p>
           {sub && <p className="text-[10px] md:text-xs text-gray-600 truncate">{sub}</p>}
         </div>
       </div>
-      <p className={`text-xs md:text-sm font-semibold ${color} flex-shrink-0`}>{valor}</p>
+      <p className={`text-base md:text-base font-semibold ${color} flex-shrink-0`}>{valor}</p>
     </div>
   );
 }
@@ -744,8 +744,9 @@ function InputMoneda({ value, onChange, autoFocus, placeholder = "0.00" }: {
     <div className="relative">
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600 font-medium">$</span>
       <input type="number" min="0" step="0.01" value={value} onChange={(e) => onChange(e.target.value)}
-        className="input-base w-full pl-8 pr-4 py-3 text-lg"
-        placeholder={placeholder} autoFocus={autoFocus} />
+      className="input-base w-full pl-8 pr-4 py-3 text-lg"
+      placeholder={placeholder} autoFocus={autoFocus}
+      onWheel={(e) => e.currentTarget.blur()} />
     </div>
   );
 }
@@ -777,7 +778,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="px-6 py-5 overflow-y-auto flex-1">{children}</div>
+        <div className="px-6 py-5 overflow-y-auto flex-1 modal-scroll">{children}</div>
       </div>
     </div>
   );

@@ -189,7 +189,7 @@ export default function VentasTabla({ ventas }: Props) {
                     </td>
 
                     {/* Cantidad items */}
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--text-muted)" }}>
+                    <td className="px-4 py-3 text-center" style={{ color: "var(--text-primary)" }}>
                       {venta.items.length} {venta.items.length === 1 ? "item" : "items"}
                     </td>
 
@@ -271,7 +271,7 @@ export default function VentasTabla({ ventas }: Props) {
                                   <th
                                     key={i}
                                     className={`px-4 py-2 font-semibold uppercase tracking-wider ${i > 0 ? "text-right" : "text-left"}`}
-                                    style={{ color: "var(--text-faint)" }}
+                                    style={{ color: "var(--text-primary)" }}
                                   >
                                     {h}
                                   </th>
@@ -282,7 +282,7 @@ export default function VentasTabla({ ventas }: Props) {
                               {venta.items.map((item) => (
                                 <tr key={item.id} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
                                   <td className="px-4 py-2.5">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 text-sm">
                                       {item.producto?.imagen ? (
                                         <img
                                           src={item.producto.imagen.replace("/upload/", "/upload/f_auto,q_auto,w_200/")}
@@ -302,13 +302,13 @@ export default function VentasTabla({ ventas }: Props) {
                                       <span style={{ color: "var(--text-primary)" }}>{item.nombre}</span>
                                     </div>
                                   </td>
-                                  <td className="px-4 py-2.5 text-right" style={{ color: "var(--text-secondary)" }}>
+                                  <td className="px-4 py-2.5 text-right text-base" style={{ color: "var(--text-secondary)" }}>
                                     {formatPrecio(item.precioUnit)}
                                   </td>
-                                  <td className="px-4 py-2.5 text-right" style={{ color: "var(--text-secondary)" }}>
+                                  <td className="px-4 py-2.5 text-right text-sm" style={{ color: "var(--text-secondary)" }}>
                                     x{item.cantidad}
                                   </td>
-                                  <td className="px-4 py-2.5 text-right font-semibold" style={{ color: "var(--text-primary)" }}>
+                                  <td className="px-4 py-2.5 text-right font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
                                     {formatPrecio(item.subtotal)}
                                   </td>
                                 </tr>

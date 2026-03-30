@@ -145,7 +145,7 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto modal-scroll">
           <form id="producto-form" onSubmit={handleSubmit} className="p-6 space-y-5">
             <MultipleImageUpload
               value={form.imagenes}
@@ -207,7 +207,8 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-faint)" }}>$</span>
                     <input type="number" name="precio" value={form.precio} onChange={handleChange}
-                      required min="0" step="0.01" placeholder="0" className="input-base pl-7" />
+                      required min="0" step="0.01" placeholder="0" className="input-base pl-7"
+                      onWheel={(e) => e.currentTarget.blur()} />
                   </div>
                 </div>
                 <div>
@@ -215,7 +216,8 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-faint)" }}>$</span>
                     <input type="number" name="costo" value={form.costo} onChange={handleChange}
-                      min="0" step="0.01" placeholder="0" className="input-base pl-7" />
+                      min="0" step="0.01" placeholder="0" className="input-base pl-7" 
+                      onWheel={(e) => e.currentTarget.blur()}/>
                   </div>
                 </div>
               </div>
@@ -230,12 +232,14 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="label-base">{esEdicion ? "Stock actual" : "Stock inicial"}</label>
-                  <input type="number" name="stock" value={form.stock} onChange={handleChange} min="0" className="input-base" />
+                  <input type="number" name="stock" value={form.stock} onChange={handleChange} min="0" className="input-base" 
+                  onWheel={(e) => e.currentTarget.blur()}/>
                   {esEdicion && <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>Ajustá desde Movimientos</p>}
                 </div>
                 <div>
                   <label className="label-base">Stock mínimo</label>
-                  <input type="number" name="stockMinimo" value={form.stockMinimo} onChange={handleChange} min="0" className="input-base" />
+                  <input type="number" name="stockMinimo" value={form.stockMinimo} onChange={handleChange} min="0" className="input-base"
+                  onWheel={(e) => e.currentTarget.blur()} />
                   <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>Alerta</p>
                 </div>
                 <div>

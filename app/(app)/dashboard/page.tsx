@@ -234,14 +234,14 @@ function CajaCard({ caja }: { caja: NonNullable<Awaited<ReturnType<typeof getDas
       style={{ borderColor: abierta ? "rgba(34,197,94,0.25)" : "var(--border-base)" }}
     >
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
+        <p className="text-sm font-medium uppercase tracking-wider" style={{ color: "var(--text-primary)" }}>
           Estado de caja
         </p>
         <span
           className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
           style={{
             background: abierta ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.05)",
-            color: abierta ? "#4ade80" : "var(--text-muted)",
+            color: abierta ? "#4ade80" : "var(--text-primary)",
           }}
         >
           {abierta
@@ -254,11 +254,11 @@ function CajaCard({ caja }: { caja: NonNullable<Awaited<ReturnType<typeof getDas
       {abierta ? (
         <div className="space-y-2">
           <div className="flex items-end justify-between">
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>Saldo efectivo</span>
+            <span className="text-xs" style={{ color: "var(--text-primary)" }}>Saldo efectivo</span>
             <span className="text-xl font-bold text-green-400">{formatPrecio(caja.saldoActual)}</span>
           </div>
           {caja.turno && (
-            <p className="text-xs" style={{ color: "var(--text-faint)" }}>
+            <p className="text-xs" style={{ color: "var(--text-primary)" }}>
               {caja.turno === "mañana" && "🌅 Turno mañana"}
               {caja.turno === "tarde" && "🌆 Turno tarde"}
               {caja.turno === "noche" && "🌙 Turno noche"}
@@ -307,7 +307,7 @@ function UltimasVentas({ ventas }: { ventas: Awaited<ReturnType<typeof getDashbo
         <h2 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
           Últimas ventas
         </h2>
-        <span className="text-xs" style={{ color: "var(--text-faint)" }}>
+        <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
           {ventas.length} registros
         </span>
       </div>
@@ -487,7 +487,7 @@ export default async function DashboardPage() {
 
               {/* Comparativa semana */}
               <div className="card p-5">
-                <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: "var(--text-faint)" }}>
+                <p className="text-xs font-medium uppercase tracking-wider mb-3" style={{ color: "var(--text-primary)" }}>
                   Semana anterior
                 </p>
                 <div className="space-y-2">
