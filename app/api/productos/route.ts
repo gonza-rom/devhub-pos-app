@@ -149,10 +149,10 @@ export async function POST(req: NextRequest) {
     // ✅ Verificar duplicados en paralelo
     const [dupCodigo, dupBarras] = await Promise.all([
       codigoProductoFinal
-        ? prisma.producto.findFirst({ where: { tenantId, codigoProducto: codigoProductoFinal }, select: { nombre: true } })
+        ? prisma.producto.findFirst({ where: { tenantId, codigoProducto: codigoProductoFinal, activo: true }, select: { nombre: true } })
         : null,
       codigoBarrasFinal
-        ? prisma.producto.findFirst({ where: { tenantId, codigoBarras: codigoBarrasFinal }, select: { nombre: true } })
+        ? prisma.producto.findFirst({ where: { tenantId, codigoBarras: codigoBarrasFinal, activo: true }, select: { nombre: true } })
         : null,
     ]);
 

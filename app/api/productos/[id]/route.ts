@@ -47,11 +47,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
       return NextResponse.json({ ok: false, error: "Nombre y precio son requeridos" }, { status: 400 });
 
     if (codigoProducto?.trim()) {
-      const dup = await prisma.producto.findFirst({ where: { tenantId, codigoProducto: codigoProducto.trim(), NOT: { id } } });
+      const dup = await prisma.producto.findFirst({ where: { tenantId, codigoProducto: codigoProducto.trim(), activo: true, NOT: { id } } });
       if (dup) return NextResponse.json({ ok: false, error: `Código "${codigoProducto}" ya está en uso por: ${dup.nombre}` }, { status: 409 });
     }
     if (codigoBarras?.trim()) {
-      const dup = await prisma.producto.findFirst({ where: { tenantId, codigoBarras: codigoBarras.trim(), NOT: { id } } });
+      const dup = await prisma.producto.findFirst({ where: { tenantId, codigoBarras: codigoBarras.trim(), activo: true, NOT: { id } } });
       if (dup) return NextResponse.json({ ok: false, error: `Código de barras ya está en uso por: ${dup.nombre}` }, { status: 409 });
     }
 
@@ -143,7 +143,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Chequear duplicado de código solo si cambió
     if (codigoProducto?.trim() && codigoProducto.trim() !== existente.codigoProducto) {
       const dup = await prisma.producto.findFirst({
-        where: { tenantId, codigoProducto: codigoProducto.trim(), NOT: { id } },
+        where: { tenantId, codigoProducto: codigoProducto.trim(), activo: true, NOT: { id } },
       });
       if (dup)
         return NextResponse.json({ ok: false, error: `Código "${codigoProducto}" ya está en uso por: ${dup.nombre}` }, { status: 409 });
