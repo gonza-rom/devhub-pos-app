@@ -10,6 +10,7 @@ export default function RegistroForm() {
   const [nombreUsuario,  setNombreUsuario]  = useState("");
   const [nombreComercio, setNombreComercio] = useState("");
   const [email,          setEmail]          = useState("");
+  const [telefono,       setTelefono]       = useState("");
   const [password,       setPassword]       = useState("");
   const [showPass,       setShowPass]       = useState(false);
   const [cargando,       setCargando]       = useState(false);
@@ -30,7 +31,7 @@ export default function RegistroForm() {
       const res  = await fetch("/api/auth/registro", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ nombreComercio, nombreUsuario, email, password }),
+        body:    JSON.stringify({ nombreComercio, nombreUsuario, email, telefono, password }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Error al crear la cuenta"); return; }
@@ -136,6 +137,19 @@ export default function RegistroForm() {
             <label htmlFor="email">Correo electrónico</label>
             <input id="email" type="email" autoComplete="email" placeholder="tu@correo.com"
               value={email} onChange={e => setEmail(e.target.value)} required disabled={cargando} />
+          </div>
+
+          {/* ✅ Campo teléfono */}
+          <div className="auth-field">
+            <label htmlFor="telefono">WhatsApp / Celular</label>
+            <div className="auth-phone-wrap">
+              <span className="auth-phone-prefix">🇦🇷 +54</span>
+              <input id="telefono" type="tel" autoComplete="tel"
+                placeholder="11 1234 5678"
+                value={telefono} onChange={e => setTelefono(e.target.value)}
+                disabled={cargando} />
+            </div>
+            <span className="auth-field-hint">Para soporte y seguimiento por WhatsApp</span>
           </div>
 
           <div className="auth-field">
@@ -248,6 +262,25 @@ const authStyles = `
   .auth-field input::placeholder { color: #3f3f46; }
   .auth-field input:focus { border-color: rgba(220,38,38,0.45); box-shadow: 0 0 0 3px rgba(220,38,38,0.08); }
   .auth-field input:disabled { opacity: 0.5; cursor: not-allowed; }
+  .auth-field-hint { font-size: 0.6875rem; color: #d3d3d8ff; }
+  .auth-phone-wrap {
+    display: flex; align-items: center;
+    background: #1a1a1a; border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .auth-phone-wrap:focus-within {
+    border-color: rgba(220,38,38,0.45); box-shadow: 0 0 0 3px rgba(220,38,38,0.08);
+  }
+  .auth-phone-prefix {
+    padding: 10px 12px; font-size: 0.875rem; color: #71717a;
+    border-right: 1px solid rgba(255,255,255,0.06); white-space: nowrap; flex-shrink: 0;
+  }
+  .auth-phone-wrap input {
+    flex: 1; padding: 10px 14px; background: transparent;
+    border: none !important; border-radius: 0 !important;
+    box-shadow: none !important; outline: none;
+  }
   .auth-pass-wrap { position: relative; }
   .auth-pass-wrap input { padding-right: 42px; }
   .auth-eye {
@@ -263,7 +296,7 @@ const authStyles = `
   .auth-hints { display: flex; gap: 8px; flex-wrap: wrap; }
   .hint-ok, .hint-no { font-size: 0.6875rem; font-weight: 500; padding: 2px 8px; border-radius: 99px; transition: all 0.2s; }
   .hint-ok { background: rgba(34,197,94,0.1); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
-  .hint-no { background: rgba(255,255,255,0.04); color: #52525b; border: 1px solid rgba(255,255,255,0.06); }
+  .hint-no { background: rgba(255,255,255,0.04); color: #d1d1d1ff; border: 1px solid rgba(255,255,255,0.06); }
   .auth-submit {
     margin-top: 0.25rem; width: 100%; display: flex; align-items: center;
     justify-content: center; gap: 8px; padding: 11px 20px;

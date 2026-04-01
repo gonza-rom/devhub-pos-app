@@ -5,7 +5,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { nombreComercio, nombreUsuario, email, password } = body;
+    const { nombreComercio, nombreUsuario, email, password, telefono, rubro } = body;
 
     if (!nombreComercio || !nombreUsuario || !email || !password)
       return NextResponse.json({ ok: false, error: "Todos los campos son requeridos" }, { status: 400 });
@@ -14,14 +14,18 @@ export async function POST(req: NextRequest) {
 
     const supabase = await createServerClient();
 
-    // ✅ Limpiar la URL base para evitar doble barra
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { nombre: nombreUsuario, nombreComercio },
+        data: {
+          nombre: nombreUsuario,
+          nombreComercio,
+          telefono: telefono?.trim() || null,
+          rubro:    rubro?.trim()    || null,
+        },
         emailRedirectTo: `${appUrl}/auth/callback`,
       },
     });

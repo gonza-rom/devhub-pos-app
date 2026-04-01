@@ -33,16 +33,19 @@ export async function GET(req: NextRequest) {
         slug = `${base}-${contador++}`;
       }
 
+      const telefono = user.user_metadata?.telefono?.trim() || null;
+
       await prisma.$transaction(async (tx) => {
-        const tenant = await tx.tenant.create({
-          data: {
-            nombre: nombreComercio,
-            email: user.email!,
-            slug,
-            plan: "FREE",
-            trialVenceAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // ← 7 días
-          },
-        });
+      const tenant = await tx.tenant.create({
+        data: {
+          nombre: nombreComercio,
+          email: user.email!,
+          slug,
+          plan: "FREE",
+          trialVenceAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          telefono,
+        },
+      });
         await tx.usuarioTenant.create({
           data: {
             tenantId:   tenant.id,

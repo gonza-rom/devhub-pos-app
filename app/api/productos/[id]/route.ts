@@ -109,7 +109,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     if (!existente)
       return NextResponse.json({ ok: false, error: "Producto no encontrado" }, { status: 404 });
 
-    await prisma.producto.update({ where: { id }, data: { activo: false } });
+    await prisma.producto.update({ where: { id }, data: { activo: false, codigoProducto: null, codigoBarras: null } });
+
 
     // ✅ Invalidar dashboard — "Productos activos" bajó
     revalidateTag("dashboard");

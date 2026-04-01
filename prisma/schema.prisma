@@ -41,6 +41,8 @@ model Tenant {
   ventas      Venta[]
   configuracionAfip ConfiguracionAFIP?
   comprobantes      Comprobante[]
+  variantes  ProductoVariante[]
+
 
   @@index([plan])
   @@index([activo])
@@ -139,6 +141,10 @@ model Producto {
   proveedor      Proveedor?        @relation(fields: [proveedorId], references: [id])
   tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   ventaItems     VentaItem[]
+  tieneVariantes Boolean          @default(false)
+  variantes      ProductoVariante[]
+
+
 
   @@unique([tenantId, codigoProducto])
   @@unique([tenantId, codigoBarras])
@@ -216,11 +222,17 @@ model VentaItem {
   subtotal   Float
   producto   Producto? @relation(fields: [productoId], references: [id])  // ← agregar ?
   venta      Venta     @relation(fields: [ventaId], references: [id], onDelete: Cascade)
+  varianteId  String?
+  talle       String?
+  color       String?
+  variante    ProductoVariante? @relation(fields: [varianteId], references: [id])
+
 
   @@index([ventaId])
   @@index([productoId])
   @@index([productoId, ventaId])
   @@index([ventaId, productoId])
+  @@index([varianteId])
 }
 
 model Movimiento {
@@ -508,4 +520,26 @@ model ConfiguracionTurnos {
   updatedAt DateTime @updatedAt
   
   @@unique([tenantId])
+}
+
+model ProductoVariante {
+  id         String      @id @default(cuid())
+  tenantId   String
+  productoId String
+  talle      String?
+  color      String?
+  stock      Int         @default(0)
+  precio     Float?
+  activo     Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  producto   Producto    @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ventaItems VentaItem[]
+
+  @@unique([productoId, talle, color])
+  @@index([tenantId])
+  @@index([productoId])
+  @@index([productoId, activo])
 }

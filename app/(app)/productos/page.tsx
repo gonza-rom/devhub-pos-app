@@ -16,7 +16,7 @@ const PAGE_SIZE = 20;
 // ── Cached queries ─────────────────────────────────────────────────────────
 
 const getProductosCached = unstable_cache(
-  async (tenantId: string, page: number, busqueda: string, categoriaId: string, soloStockBajo: boolean) => {
+  async (tenantId: string, page: number, busqueda: string, categoriaId: string, soloStockBajo: boolean, ordenar: string) => {
     const where: any = { tenantId, activo: true };
     if (soloStockBajo) where.stock = { lte: 5 };
     if (categoriaId)   where.categoriaId = categoriaId;
@@ -26,6 +26,13 @@ const getProductosCached = unstable_cache(
         { codigoProducto: { contains: busqueda, mode: "insensitive" } },
       ];
     }
+
+    let orderBy: any = { nombre: "asc" };
+    if (ordenar === "recientes")   orderBy = { createdAt: "desc" };
+    if (ordenar === "precio-asc")  orderBy = { precio: "asc" };
+    if (ordenar === "precio-desc") orderBy = { precio: "desc" };
+    if (ordenar === "stock-asc")   orderBy = { stock: "asc" };
+
     const [productos, total] = await Promise.all([
       prisma.producto.findMany({
         where,
@@ -36,7 +43,7 @@ const getProductosCached = unstable_cache(
           imagen: true, imagenes: true, categoriaId: true, proveedorId: true,
           categoria: { select: { id: true, nombre: true } },
         },
-        orderBy: { nombre: "asc" },
+        orderBy,
         skip:    (page - 1) * PAGE_SIZE,
         take:    PAGE_SIZE,
       }),
@@ -75,7 +82,7 @@ const getProveedoresCached = unstable_cache(
 export default async function ProductosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; categoriaId?: string; stockBajo?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; categoriaId?: string; stockBajo?: string; page?: string; ordenar?: string }>;
 }) {
   const headersList = await headers();
   const tenantId    = headersList.get("x-tenant-id")!;
@@ -85,18 +92,20 @@ export default async function ProductosPage({
   const categoriaId   = params.categoriaId ?? "";
   const soloStockBajo = params.stockBajo === "true";
   const page          = Math.max(1, parseInt(params.page ?? "1"));
+  const ordenar       = params.ordenar ?? "nombre";
 
   const [{ productos, total, totalPages }, categorias, proveedores] = await Promise.all([
-    getProductosCached(tenantId, page, busqueda, categoriaId, soloStockBajo),
+    getProductosCached(tenantId, page, busqueda, categoriaId, soloStockBajo, ordenar),
     getCategoriasCached(tenantId),
     getProveedoresCached(tenantId),
   ]);
 
   const buildQuery = (newPage: number) => {
     const q = new URLSearchParams();
-    if (busqueda)      q.set("q", busqueda);
-    if (categoriaId)   q.set("categoriaId", categoriaId);
-    if (soloStockBajo) q.set("stockBajo", "true");
+    if (busqueda)             q.set("q", busqueda);
+    if (categoriaId)          q.set("categoriaId", categoriaId);
+    if (soloStockBajo)        q.set("stockBajo", "true");
+    if (ordenar !== "nombre") q.set("ordenar", ordenar);
     q.set("page", String(newPage));
     return `?${q.toString()}`;
   };
@@ -134,6 +143,14 @@ export default async function ProductosPage({
               <option key={cat.id} value={cat.id}>{cat.nombre}</option>
             ))}
           </select>
+          {/* ✅ Selector de orden */}
+          <select name="ordenar" defaultValue={ordenar} className="input-base max-w-[180px]">
+            <option value="nombre">Nombre A→Z</option>
+            <option value="recientes">Más recientes</option>
+            <option value="precio-asc">Precio menor</option>
+            <option value="precio-desc">Precio mayor</option>
+            <option value="stock-asc">Menor stock</option>
+          </select>
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none"
             style={{ color: "var(--text-secondary)" }}>
             <input type="checkbox" name="stockBajo" value="true"
@@ -142,7 +159,7 @@ export default async function ProductosPage({
           </label>
           <input type="hidden" name="page" value="1" />
           <button type="submit" className="btn-ghost px-4 py-2">Filtrar</button>
-          {(busqueda || categoriaId || soloStockBajo) && (
+          {(busqueda || categoriaId || soloStockBajo || ordenar !== "nombre") && (
             <Link href="/productos" className="btn-ghost px-4 py-2 text-sm"
               style={{ color: "var(--text-secondary)" }}>
               Limpiar
@@ -156,8 +173,9 @@ export default async function ProductosPage({
         productos={productos}
         categorias={categorias}
         proveedores={proveedores}
-        totalProductos={total}           // ✨ NUEVO
-        filtrosActivos={{                 // ✨ NUEVO
+        totalProductos={total}
+        ordenar={ordenar}
+        filtrosActivos={{
           busqueda,
           categoriaId,
           soloStockBajo,

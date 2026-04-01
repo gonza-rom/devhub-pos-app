@@ -26,6 +26,7 @@ type Props = {
   categorias:  Pick<Categoria, "id" | "nombre">[];
   proveedores: Pick<Proveedor, "id" | "nombre">[];
   totalProductos: number;
+  ordenar?: string;
   filtrosActivos: {
     busqueda: string;
     categoriaId: string;
@@ -34,16 +35,21 @@ type Props = {
 };
 
 export default function ProductosTabla({
-  productos,
+  productos: productosProp,
   categorias,
   proveedores,
-  totalProductos,
+  totalProductos: totalProp,
+  ordenar = "nombre",
   filtrosActivos,
 }: Props) {
   const router       = useRouter();
   const toast        = useToast();
   const { apiFetch } = useFetch();
   const [, startTransition] = useTransition();
+
+  // ── Estado local de productos (actualización inmediata sin refresh) ──
+  const [productos, setProductos] = useState<ProductoFila[]>(productosProp);
+  const [totalProductos, setTotalProductos] = useState(totalProp);
 
   // ── Selección masiva ──────────────────────────────────────────
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
@@ -120,6 +126,23 @@ export default function ProductosTabla({
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
 
+      // Actualizar estado local para cambios masivos de categoría/proveedor
+      if (accion === "categoria") {
+        const cat = categorias.find(c => c.id === payload.valor);
+        setProductos(prev => prev.map(p =>
+          seleccionados.has(p.id) || modoSeleccion === "todos"
+            ? { ...p, categoriaId: payload.valor as string, categoria: cat ? { id: cat.id, nombre: cat.nombre } : null }
+            : p
+        ));
+      }
+      if (accion === "proveedor") {
+        setProductos(prev => prev.map(p =>
+          seleccionados.has(p.id) || modoSeleccion === "todos"
+            ? { ...p, proveedorId: payload.valor as string }
+            : p
+        ));
+      }
+
       toast.update(toastId, {
         type: "success",
         title: `${descripcion} actualizado`,
@@ -160,28 +183,53 @@ export default function ProductosTabla({
   // ── Acciones individuales ─────────────────────────────────────
   function cerrarModal() { setModal({ abierto: false, producto: undefined }); }
 
-  function handleGuardado() {
+  // ✅ Al guardar: actualiza el producto en el estado local inmediatamente
+  function handleGuardado(productoActualizado?: ProductoFila) {
     invalidatePlanUsoCache();
     cerrarModal();
+
+    if (productoActualizado) {
+      setProductos(prev => {
+        const existe = prev.find(p => p.id === productoActualizado.id);
+        if (existe) {
+          // Edición: reemplazar en la lista
+          return prev.map(p => p.id === productoActualizado.id ? productoActualizado : p);
+        } else {
+          // Nuevo producto: agregar al principio si orden es recientes, sino al final
+          setTotalProductos(t => t + 1);
+          return ordenar === "recientes"
+            ? [productoActualizado, ...prev]
+            : [...prev, productoActualizado];
+        }
+      });
+    }
+
+    // Refresh en background para sincronizar con el servidor
     startTransition(() => router.refresh());
   }
 
+  // ✅ Al eliminar: quita el producto del estado local inmediatamente
   async function handleEliminar() {
     if (!confirmEliminar.producto) return;
     setConfirmEliminar(prev => ({ ...prev, cargando: true }));
 
-    const nombreProducto = confirmEliminar.producto.nombre;
+    const productoEliminado = confirmEliminar.producto;
     const toastId = toast.loading("Eliminando producto...");
     try {
-      const res  = await apiFetch(`/api/productos/${confirmEliminar.producto.id}`, { method: "DELETE" });
+      const res  = await apiFetch(`/api/productos/${productoEliminado.id}`, { method: "DELETE" });
       const data = await res.json();
       if (!data.ok) {
         toast.update(toastId, { type: "error", title: "Error al eliminar", description: data.error ?? "Intentá de nuevo" });
         setConfirmEliminar(prev => ({ ...prev, cargando: false }));
         return;
       }
-      toast.update(toastId, { type: "success", title: "Producto eliminado", description: nombreProducto });
+      toast.update(toastId, { type: "success", title: "Producto eliminado", description: productoEliminado.nombre });
       invalidatePlanUsoCache();
+
+      // ✅ Quitar inmediatamente de la lista sin esperar refresh
+      setProductos(prev => prev.filter(p => p.id !== productoEliminado.id));
+      setTotalProductos(t => t - 1);
+
       setConfirmEliminar({ abierto: false, producto: null, cargando: false });
       startTransition(() => router.refresh());
     } catch (err: any) {
@@ -392,7 +440,7 @@ export default function ProductosTabla({
         </div>
       </div>
 
-      {/* ── Modales acciones masivas — sin errorMasivo inline ── */}
+      {/* ── Modales acciones masivas ── */}
       {accionMasiva && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }}>
           <div className="rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" style={{ background: "var(--bg-card)" }}>
@@ -413,7 +461,6 @@ export default function ProductosTabla({
               Aplicar a <strong>{cantidadSeleccionada}</strong> producto{cantidadSeleccionada !== 1 ? "s" : ""}
             </p>
 
-            {/* Categoría */}
             {accionMasiva === "categoria" && (
               <div>
                 <label className="label-base">Nueva categoría</label>
@@ -424,7 +471,6 @@ export default function ProductosTabla({
               </div>
             )}
 
-            {/* Proveedor */}
             {accionMasiva === "proveedor" && (
               <div>
                 <label className="label-base">Nuevo proveedor</label>
@@ -435,7 +481,6 @@ export default function ProductosTabla({
               </div>
             )}
 
-            {/* Stock */}
             {accionMasiva === "stock" && (
               <>
                 <div>
@@ -454,7 +499,6 @@ export default function ProductosTabla({
               </>
             )}
 
-            {/* Precio */}
             {accionMasiva === "precio" && (
               <>
                 <div>
@@ -522,7 +566,7 @@ export default function ProductosTabla({
           onClose={cerrarModal} onGuardado={handleGuardado} />
       )}
 
-      {/* Modal confirmar eliminar — sin error inline */}
+      {/* Modal confirmar eliminar */}
       {confirmEliminar.abierto && confirmEliminar.producto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 backdrop-blur-sm" style={{ background: "rgba(0,0,0,0.65)" }}
