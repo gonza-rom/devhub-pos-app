@@ -70,17 +70,20 @@ export type CreateProductoInput = {
 export type CreateVentaInput = {
   items: {
     productoId: string;
-    cantidad: number;
+    cantidad:   number;
     precioUnit: number;
-    nombre?:    string; // ← para items manuales
+    nombre?:    string;      // ← para items manuales
+    varianteId?: string;     // ← variante seleccionada
+    talle?:      string | null;
+    color?:      string | null;
   }[];
-  metodoPago: string;
-  descuento?: number;
-  clienteNombre?: string;
-  clienteDni?: string;
-  observaciones?: string;
+  metodoPago:      string;
+  descuento?:      number;
+  clienteNombre?:  string;
+  clienteDni?:     string;
+  observaciones?:  string;
   vendedorId?:     string;
-  vendedorNombre?: string;  
+  vendedorNombre?: string;
   fechaManual?:    string;
 };
 

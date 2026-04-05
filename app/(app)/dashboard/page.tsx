@@ -116,7 +116,7 @@ const getDashboardData = (tenantId: string) =>
         // Ventas agrupadas por día (últimos 7 días) — raw query
         prisma.$queryRaw<{ fecha: string; total: number; cantidad: bigint }[]>`
           SELECT
-            DATE("createdAt" AT TIME ZONE 'America/Argentina/Buenos_Aires')::text AS fecha,
+            DATE("createdAt" AT TIME ZONE 'UTC-3')::text AS fecha,
             SUM(total)::float AS total,
             COUNT(*)::bigint  AS cantidad
           FROM "Venta"
@@ -326,7 +326,7 @@ function UltimasVentas({ ventas }: { ventas: Awaited<ReturnType<typeof getDashbo
               </p>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                 {metodoPagoLabel[v.metodoPago] ?? v.metodoPago} ·{" "}
-                {new Date(v.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                {new Date(v.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Argentina/Buenos_Aires" })}
               </p>
             </div>
             <span className="text-sm font-bold flex-shrink-0" style={{ color: "var(--text-primary)" }}>

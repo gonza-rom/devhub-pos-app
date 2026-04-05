@@ -325,3 +325,12 @@
   border-color: var(--border-base) !important;
 }
 
+/* Toggle switch — blanco en dark, gris en light */
+.toggle-thumb {
+  background: #ffffff;
+}
+
+.light .toggle-thumb {
+  background: #ffffff;
+}
+

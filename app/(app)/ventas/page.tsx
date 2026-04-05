@@ -18,6 +18,7 @@ const SELECT_PRODUCTO_POS = {
   codigoBarras: true,
   codigoProducto: true,
   categoriaId: true,
+  tieneVariantes: true,
   categoria: {
     select: { id: true, nombre: true },
   },
@@ -40,10 +41,13 @@ const getVentasData = cache(async (tenantId: string) => {
         // ✅ Solo 30 productos iniciales (los más recientes o más vendidos)
         prisma.producto.findMany({
           where: {
-            tenantId,
-            activo: true,
-            stock: { gt: 0 },
-          },
+              tenantId,
+              activo: true,
+              OR: [
+                { stock: { gt: 0 } },
+                { tieneVariantes: true },  // ← incluir aunque stock sea 0
+              ],
+            },
           select: SELECT_PRODUCTO_POS,
           orderBy: { createdAt: "desc" }, // Los más recientes primero
           take: 30, // Solo 30 iniciales

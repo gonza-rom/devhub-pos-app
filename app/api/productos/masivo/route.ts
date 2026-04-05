@@ -17,11 +17,12 @@ export async function PATCH(req: NextRequest) {
     let whereClause: any = { tenantId, activo: true };
 
     if (filtros) {
-      // ✨ MODO: Todos los resultados de búsqueda
       if (filtros.soloStockBajo) {
         whereClause.stock = { lte: 5 };
       }
-      if (filtros.categoriaId) {
+      if (filtros.categoriaId === "sin-categoria") {
+        whereClause.categoriaId = null;
+      } else if (filtros.categoriaId) {
         whereClause.categoriaId = filtros.categoriaId;
       }
       if (filtros.busqueda?.trim()) {
@@ -31,10 +32,8 @@ export async function PATCH(req: NextRequest) {
         ];
       }
     } else if (ids && Array.isArray(ids) && ids.length > 0) {
-      // MODO: IDs específicos
       whereClause.id = { in: ids };
 
-      // Verificar que todos pertenecen al tenant
       const countProductos = await prisma.producto.count({ where: whereClause });
       if (countProductos !== ids.length) {
         return NextResponse.json(
@@ -56,38 +55,42 @@ export async function PATCH(req: NextRequest) {
 
     switch (accion) {
       // ───────────────────────────────────────────────────────
-      // CAMBIAR CATEGORÍA
+      // CAMBIAR CATEGORÍA — soporta null para quitar categoría
       // ───────────────────────────────────────────────────────
-      case "categoria":
-        if (!valor) {
+      case "categoria": {
+        // valor === null  → quitar categoría (Sin categoría)
+        // valor === string → asignar categoría existente
+        if (valor === undefined) {
           return NextResponse.json(
-            { ok: false, error: "Debe seleccionar una categoría" },
+            { ok: false, error: "Debe seleccionar una opción" },
             { status: 400 }
           );
         }
 
-        // Verificar que la categoría existe y pertenece al tenant
-        const categoria = await prisma.categoria.findFirst({
-          where: { id: valor, tenantId },
-        });
-
-        if (!categoria) {
-          return NextResponse.json(
-            { ok: false, error: "Categoría no encontrada" },
-            { status: 404 }
-          );
+        if (valor !== null) {
+          // Solo validar existencia si se asigna una categoría real
+          const categoria = await prisma.categoria.findFirst({
+            where: { id: valor, tenantId },
+          });
+          if (!categoria) {
+            return NextResponse.json(
+              { ok: false, error: "Categoría no encontrada" },
+              { status: 404 }
+            );
+          }
         }
 
         resultado = await prisma.producto.updateMany({
           where: whereClause,
-          data: { categoriaId: valor },
+          data: { categoriaId: valor ?? null },
         });
         break;
+      }
 
       // ───────────────────────────────────────────────────────
       // CAMBIAR PROVEEDOR
       // ───────────────────────────────────────────────────────
-      case "proveedor":
+      case "proveedor": {
         if (!valor) {
           return NextResponse.json(
             { ok: false, error: "Debe seleccionar un proveedor" },
@@ -95,11 +98,9 @@ export async function PATCH(req: NextRequest) {
           );
         }
 
-        // Verificar que el proveedor existe y pertenece al tenant
         const proveedor = await prisma.proveedor.findFirst({
           where: { id: valor, tenantId },
         });
-
         if (!proveedor) {
           return NextResponse.json(
             { ok: false, error: "Proveedor no encontrado" },
@@ -112,11 +113,12 @@ export async function PATCH(req: NextRequest) {
           data: { proveedorId: valor },
         });
         break;
+      }
 
       // ───────────────────────────────────────────────────────
       // AJUSTAR STOCK
       // ───────────────────────────────────────────────────────
-      case "stock":
+      case "stock": {
         if (valor === undefined || valor === null) {
           return NextResponse.json(
             { ok: false, error: "Debe ingresar un valor" },
@@ -133,20 +135,17 @@ export async function PATCH(req: NextRequest) {
         }
 
         if (tipo === "establecer") {
-          // Establecer stock en un valor específico
           if (valorStock < 0) {
             return NextResponse.json(
               { ok: false, error: "El stock no puede ser negativo" },
               { status: 400 }
             );
           }
-
           resultado = await prisma.producto.updateMany({
             where: whereClause,
             data: { stock: valorStock },
           });
         } else if (tipo === "sumar" || tipo === "restar") {
-          // Para sumar/restar necesitamos los productos individuales
           const productos = await prisma.producto.findMany({
             where: whereClause,
             select: { id: true, stock: true },
@@ -158,7 +157,7 @@ export async function PATCH(req: NextRequest) {
             productos.map((p) =>
               prisma.producto.update({
                 where: { id: p.id },
-                data: { stock: Math.max(0, p.stock + (valorStock * operacion)) },
+                data: { stock: Math.max(0, p.stock + valorStock * operacion) },
               })
             )
           );
@@ -171,11 +170,12 @@ export async function PATCH(req: NextRequest) {
           );
         }
         break;
+      }
 
       // ───────────────────────────────────────────────────────
       // AJUSTAR PRECIO
       // ───────────────────────────────────────────────────────
-      case "precio":
+      case "precio": {
         if (valor === undefined || valor === null) {
           return NextResponse.json(
             { ok: false, error: "Debe ingresar un valor" },
@@ -192,20 +192,17 @@ export async function PATCH(req: NextRequest) {
         }
 
         if (tipo === "fijo") {
-          // Establecer precio fijo
           if (valorPrecio < 0) {
             return NextResponse.json(
               { ok: false, error: "El precio no puede ser negativo" },
               { status: 400 }
             );
           }
-
           resultado = await prisma.producto.updateMany({
             where: whereClause,
             data: { precio: valorPrecio },
           });
         } else if (tipo === "porcentaje") {
-          // Ajustar por porcentaje
           const productos = await prisma.producto.findMany({
             where: whereClause,
             select: { id: true, precio: true },
@@ -213,7 +210,7 @@ export async function PATCH(req: NextRequest) {
 
           await Promise.all(
             productos.map((p) => {
-              const nuevoPrecio = p.precio + (p.precio * valorPrecio / 100);
+              const nuevoPrecio = p.precio + (p.precio * valorPrecio) / 100;
               return prisma.producto.update({
                 where: { id: p.id },
                 data: { precio: Math.max(0, nuevoPrecio) },
@@ -229,6 +226,7 @@ export async function PATCH(req: NextRequest) {
           );
         }
         break;
+      }
 
       default:
         return NextResponse.json(
@@ -237,7 +235,6 @@ export async function PATCH(req: NextRequest) {
         );
     }
 
-    // Revalidar caché
     revalidateTag("productos");
 
     return NextResponse.json({

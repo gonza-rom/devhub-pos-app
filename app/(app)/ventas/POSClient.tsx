@@ -38,9 +38,18 @@ type ProductoConCategoria = {
   codigoProducto: string | null;
   categoriaId: string | null;
   categoria: { id: string; nombre: string } | null;
+  tieneVariantes?: boolean;
 };
 
 type CategoriaSimple = { id: string; nombre: string };
+
+type Variante = {
+  id: string;
+  talle: string | null;
+  color: string;
+  stock: number;
+  precio: number | null;
+};
 
 type ItemCarrito = {
   productoId: string;
@@ -50,6 +59,9 @@ type ItemCarrito = {
   subtotal: number;
   stock: number;
   imagen?: string | null;
+  varianteId?: string;
+  talle?: string | null;
+  color?: string | null;
 };
 
 type TicketVenta = {
@@ -89,12 +101,129 @@ type Props = {
 // ─── Configuración del grid ───────────────────────────────────────────────────
 
 const MIN_CARD_WIDTH = 160;
-const CARD_HEIGHT    = 190;
+const CARD_HEIGHT    = 200;
 const GAP            = 6;
 
 // Cache de productos por clave (categoría + búsqueda) — persiste entre renders
 const _productosCache: Record<string, { productos: ProductoConCategoria[]; ts: number }> = {};
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
+
+
+function ModalVariante({ producto, variantes, cargando, onConfirmar, onCerrar }: {
+  producto: ProductoConCategoria;
+  variantes: Variante[];
+  cargando: boolean;
+  onConfirmar: (variante: Variante) => void;
+  onCerrar: () => void;
+}) {
+  const talles  = [...new Set(variantes.map(v => v.talle).filter(Boolean))] as string[];
+  const colores = [...new Set(variantes.map(v => v.color).filter(Boolean))];
+
+  const [talleSeleccionado, setTalleSeleccionado] = useState<string | null>(talles[0] ?? null);
+  const [colorSeleccionado, setColorSeleccionado] = useState<string | null>(colores[0] ?? null);
+
+  const varianteSeleccionada = variantes.find(v =>
+    (talles.length === 0 || v.talle === talleSeleccionado) && v.color === colorSeleccionado
+  );
+  const precioMostrar = varianteSeleccionada?.precio ?? producto.precio;
+  const stockMostrar  = varianteSeleccionada?.stock ?? 0;
+  const coloresDisponibles = talleSeleccionado
+    ? [...new Set(variantes.filter(v => v.talle === talleSeleccionado).map(v => v.color))]
+    : colores;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }} onClick={onCerrar}>
+      <div className="w-full max-w-sm rounded-2xl p-5 space-y-4"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border-base)" }}
+        onClick={e => e.stopPropagation()}>
+
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {producto.imagen && (
+              <img src={producto.imagen} alt={producto.nombre}
+                className="h-12 w-12 rounded-lg object-cover flex-shrink-0"
+                style={{ border: "1px solid var(--border-base)" }} />
+            )}
+            <div>
+              <h3 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>{producto.nombre}</h3>
+              <p className="text-sm font-semibold text-red-400">{formatPrecio(precioMostrar)}</p>
+            </div>
+          </div>
+          <button onClick={onCerrar} style={{ color: "var(--text-faint)" }}><X className="h-5 w-5" /></button>
+        </div>
+
+        {cargando ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin" style={{ color: "var(--text-muted)" }} />
+          </div>
+        ) : (
+          <>
+            {talles.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>Talle</p>
+                <div className="flex flex-wrap gap-2">
+                  {talles.map(talle => {
+                    const disponible = variantes.some(v => v.talle === talle && v.stock > 0);
+                    const activo     = talleSeleccionado === talle;
+                    return (
+                      <button key={talle}
+                        onClick={() => {
+                          setTalleSeleccionado(talle);
+                          const coloresParaTalle = variantes.filter(v => v.talle === talle).map(v => v.color);
+                          if (colorSeleccionado && !coloresParaTalle.includes(colorSeleccionado))
+                            setColorSeleccionado(coloresParaTalle[0] ?? null);
+                        }}
+                        disabled={!disponible}
+                        className="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ background: activo ? "#DC2626" : "var(--bg-hover-md)", color: activo ? "#ffffff" : "var(--text-secondary)", border: activo ? "1px solid #DC2626" : "1px solid var(--border-base)" }}>
+                        {talle}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {colores.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>Color</p>
+                <div className="flex flex-wrap gap-2">
+                  {coloresDisponibles.map(color => {
+                    const disponible = variantes.some(v => v.color === color && (talles.length === 0 || v.talle === talleSeleccionado) && v.stock > 0);
+                    const activo = colorSeleccionado === color;
+                    return (
+                      <button key={color} onClick={() => setColorSeleccionado(color)} disabled={!disponible}
+                        className="px-3 py-1.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ background: activo ? "#DC2626" : "var(--bg-hover-md)", color: activo ? "#ffffff" : "var(--text-secondary)", border: activo ? "1px solid #DC2626" : "1px solid var(--border-base)" }}>
+                        {color}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-lg px-3 py-2 text-sm" style={{ background: "var(--bg-hover)", border: "1px solid var(--border-base)" }}>
+              {varianteSeleccionada
+                ? <p style={{ color: stockMostrar > 0 ? "var(--text-secondary)" : "#f87171" }}>{stockMostrar > 0 ? `Stock disponible: ${stockMostrar}` : "Sin stock para esta combinación"}</p>
+                : <p style={{ color: "var(--text-faint)" }}>Seleccioná talle y color</p>
+              }
+            </div>
+
+            <button onClick={() => varianteSeleccionada && stockMostrar > 0 && onConfirmar(varianteSeleccionada)}
+              disabled={!varianteSeleccionada || stockMostrar === 0}
+              className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "#DC2626", color: "#ffffff" }}>
+              <ShoppingCart className="h-4 w-4" />
+              Agregar al carrito — {formatPrecio(precioMostrar)}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -174,6 +303,10 @@ export default function POSClient({
   const [modalCrearProducto, setModalCrearProducto] = useState(false);
   const [opcionesAbiertas,   setOpcionesAbiertas]   = useState(false);
 
+  //Variante
+  const [modalVariante,     setModalVariante]     = useState<ProductoConCategoria | null>(null);
+  const [variantesModal,    setVariantesModal]    = useState<Variante[]>([]);
+  const [cargandoVariantes, setCargandoVariantes] = useState(false);
   // ── Columnas dinámicas ──────────────────────────────────────────────────────
 
   const columnCount   = Math.max(2, Math.min(8, Math.floor(gridWidth / (MIN_CARD_WIDTH + GAP))));
@@ -389,7 +522,18 @@ export default function POSClient({
   // ── Carrito ─────────────────────────────────────────────────────────────────
 
   const agregarAlCarrito = useCallback((producto: ProductoConCategoria) => {
-    if (producto.stock <= 0) return;
+    if (producto.stock <= 0 && !producto.tieneVariantes) return;
+
+    if (producto.tieneVariantes) {
+    setModalVariante(producto);
+    setCargandoVariantes(true);
+    fetch(`/api/productos/${producto.id}/variantes`)
+      .then(r => r.json())
+      .then(data => { if (data.ok) setVariantesModal(data.data); })
+      .catch(() => toast.error("Error al cargar variantes"))
+      .finally(() => setCargandoVariantes(false));
+    return;
+  }
     setCarrito((prev) => {
       const existente = prev.find((i) => i.productoId === producto.id);
       if (existente) {
@@ -413,7 +557,32 @@ export default function POSClient({
         },
       ];
     });
-  }, []);
+  }, [toast]);
+
+  const agregarVarianteAlCarrito = useCallback((producto: ProductoConCategoria, variante: Variante) => {
+  const precio = variante.precio ?? producto.precio;
+  const clave  = `${producto.id}_${variante.id}`;
+  const nombre = [producto.nombre, variante.talle, variante.color].filter(Boolean).join(" — ");
+
+  setCarrito((prev) => {
+    const existente = prev.find(i => i.varianteId === variante.id);
+    if (existente) {
+      if (existente.cantidad >= variante.stock) return prev;
+      return prev.map(i => i.varianteId === variante.id
+        ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precio }
+        : i
+      );
+    }
+    return [...prev, {
+      productoId: clave, varianteId: variante.id, nombre, precio,
+      cantidad: 1, subtotal: precio, stock: variante.stock,
+      imagen: producto.imagen, talle: variante.talle, color: variante.color,
+    }];
+  });
+
+  setModalVariante(null);
+  setVariantesModal([]);
+}, []);
 
   const cambiarCantidad = useCallback((productoId: string, delta: number) => {
     setCarrito((prev) =>
@@ -497,11 +666,14 @@ export default function POSClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           items: carrito.map((i) => ({
-            productoId: i.productoId,
-            cantidad:   i.cantidad,
-            precioUnit: i.precio,
-            ...(i.productoId.startsWith("manual_") && { nombre: i.nombre }),
-          })),
+            productoId:  i.varianteId ? i.productoId.split("_")[0] : i.productoId,
+              varianteId:  i.varianteId,
+              cantidad:    i.cantidad,
+              precioUnit:  i.precio,
+              talle:       i.talle,
+              color:       i.color,
+              ...(i.productoId.startsWith("manual_") && { nombre: i.nombre }),
+            })),
           metodoPago,
           descuento,
           clienteNombre:  clienteNombre.trim() || undefined,
@@ -734,7 +906,12 @@ export default function POSClient({
               {producto.nombre}
             </p>
             <p className="text-base font-bold text-red-400 mt-1">{formatPrecio(producto.precio)}</p>
-
+            {producto.tieneVariantes && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full mt-1 inline-block"
+                style={{ background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.3)" }}>
+                Talles/Colores
+              </span>
+            )}
             <div className="flex items-center justify-between mt-0.5 gap-1">
               <span className="text-xs font-mono truncate" style={{ color: "var(--text-primary)" }}>
                 {producto.codigoProducto || ""}
@@ -1434,6 +1611,15 @@ export default function POSClient({
         onProductoCreado={handleProductoCreado}
         categorias={categorias}
       />
+      {modalVariante && (
+        <ModalVariante
+          producto={modalVariante}
+          variantes={variantesModal}
+          cargando={cargandoVariantes}
+          onConfirmar={(variante) => agregarVarianteAlCarrito(modalVariante, variante)}
+          onCerrar={() => { setModalVariante(null); setVariantesModal([]); }}
+        />
+      )}
     </>
   );
 }

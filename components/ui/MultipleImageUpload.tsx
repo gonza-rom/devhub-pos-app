@@ -134,9 +134,9 @@ export default function MultipleImageUpload({
 
       {/* Label */}
       <div className="flex items-center justify-between">
-        <span className="label-base mb-0">Imágenes del producto</span>
+        <span className="label-base mb-0" style={{ color: "var(--text-primary)" }}>Imágenes del producto</span>
         {imagenes.length > 0 && (
-          <span className="text-xs text-gray-400 dark:text-gray-500">
+          <span className="text-xs" style={{ color: "var(--text-primary)" }}>
             {imagenes.length} / {maxImagenes}
           </span>
         )}
@@ -186,7 +186,7 @@ export default function MultipleImageUpload({
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Hacé click para subir imágenes
               </p>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
                 PNG, JPG, WebP · Máx. 5MB por imagen · Hasta {maxImagenes} imágenes
               </p>
             </div>

@@ -77,6 +77,8 @@ export default async function HistorialVentasPage({
             cantidad: true,
             precioUnit: true,
             subtotal: true,
+            talle: true,   // ← agregar
+            color: true,
             producto: { select: { id: true, imagen: true } },
           },
         },

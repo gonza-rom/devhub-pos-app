@@ -19,7 +19,11 @@ const getProductosCached = unstable_cache(
   async (tenantId: string, page: number, busqueda: string, categoriaId: string, soloStockBajo: boolean, ordenar: string) => {
     const where: any = { tenantId, activo: true };
     if (soloStockBajo) where.stock = { lte: 5 };
-    if (categoriaId)   where.categoriaId = categoriaId;
+    if (categoriaId === "sin-categoria") {
+      where.categoriaId = { equals: null };  // ← correcto
+    } else if (categoriaId) {
+      where.categoriaId = categoriaId;
+    }
     if (busqueda.trim()) {
       where.OR = [
         { nombre:         { contains: busqueda, mode: "insensitive" } },
@@ -41,6 +45,7 @@ const getProductosCached = unstable_cache(
           descripcion: true, precio: true, costo: true,
           stock: true, stockMinimo: true, unidad: true,
           imagen: true, imagenes: true, categoriaId: true, proveedorId: true,
+          tieneVariantes: true,  // ← agregar
           categoria: { select: { id: true, nombre: true } },
         },
         orderBy,
@@ -139,6 +144,7 @@ export default async function ProductosPage({
           />
           <select name="categoriaId" defaultValue={categoriaId} className="input-base max-w-[200px]">
             <option value="">Todas las categorías</option>
+            <option value="sin-categoria">Sin categoría</option>
             {categorias.map((cat) => (
               <option key={cat.id} value={cat.id}>{cat.nombre}</option>
             ))}

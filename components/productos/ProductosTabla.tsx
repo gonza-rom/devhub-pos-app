@@ -47,11 +47,9 @@ export default function ProductosTabla({
   const { apiFetch } = useFetch();
   const [, startTransition] = useTransition();
 
-  // ── Estado local de productos (actualización inmediata sin refresh) ──
   const [productos, setProductos] = useState<ProductoFila[]>(productosProp);
   const [totalProductos, setTotalProductos] = useState(totalProp);
 
-  // ── Selección masiva ──────────────────────────────────────────
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [modoSeleccion, setModoSeleccion] = useState<"pagina" | "todos">("pagina");
   const [accionMasiva, setAccionMasiva]   = useState<"categoria" | "proveedor" | "stock" | "precio" | null>(null);
@@ -64,7 +62,6 @@ export default function ProductosTabla({
   const [ajustePrecio,   setAjustePrecio]   = useState<"porcentaje" | "fijo">("porcentaje");
   const [valorPrecio,    setValorPrecio]    = useState("");
 
-  // ── Modal individual ──────────────────────────────────────────
   const [modal, setModal] = useState<{ abierto: boolean; producto: ProductoFila | undefined }>({
     abierto: false, producto: undefined,
   });
@@ -72,7 +69,6 @@ export default function ProductosTabla({
     abierto: boolean; producto: ProductoFila | null; cargando: boolean;
   }>({ abierto: false, producto: null, cargando: false });
 
-  // ── Helpers selección ─────────────────────────────────────────
   const toggleSeleccion = (id: string) => {
     setSeleccionados(prev => {
       const nuevo = new Set(prev);
@@ -105,7 +101,6 @@ export default function ProductosTabla({
 
   const cantidadSeleccionada = modoSeleccion === "todos" ? totalProductos : seleccionados.size;
 
-  // ── Acciones masivas ──────────────────────────────────────────
   const ejecutarAccionMasiva = async (
     accion: string,
     payload: Record<string, unknown>,
@@ -126,15 +121,24 @@ export default function ProductosTabla({
       const data = await res.json();
       if (!data.ok) throw new Error(data.error);
 
-      // Actualizar estado local para cambios masivos de categoría/proveedor
+      // ── Actualizar estado local ──────────────────────────────
       if (accion === "categoria") {
-        const cat = categorias.find(c => c.id === payload.valor);
+        // payload.valor puede ser null (sin categoría) o un id de categoría
+        const cat = payload.valor
+          ? categorias.find(c => c.id === payload.valor) ?? null
+          : null;
+
         setProductos(prev => prev.map(p =>
           seleccionados.has(p.id) || modoSeleccion === "todos"
-            ? { ...p, categoriaId: payload.valor as string, categoria: cat ? { id: cat.id, nombre: cat.nombre } : null }
+            ? {
+                ...p,
+                categoriaId: (payload.valor as string | null),
+                categoria:   cat ? { id: cat.id, nombre: cat.nombre } : null,
+              }
             : p
         ));
       }
+
       if (accion === "proveedor") {
         setProductos(prev => prev.map(p =>
           seleccionados.has(p.id) || modoSeleccion === "todos"
@@ -158,10 +162,14 @@ export default function ProductosTabla({
     }
   };
 
+  // ── CAMBIO PRINCIPAL: soporta "sin-categoria" → envía null ──
   const aplicarCambioCategoria = () => {
     if (!nuevaCategoria) return;
-    const nombre = categorias.find(c => c.id === nuevaCategoria)?.nombre ?? "categoría";
-    ejecutarAccionMasiva("categoria", { valor: nuevaCategoria }, nombre);
+    const esSinCategoria = nuevaCategoria === "sin-categoria";
+    const nombre = esSinCategoria
+      ? "Sin categoría"
+      : (categorias.find(c => c.id === nuevaCategoria)?.nombre ?? "categoría");
+    ejecutarAccionMasiva("categoria", { valor: esSinCategoria ? null : nuevaCategoria }, nombre);
   };
 
   const aplicarCambioProveedor = () => {
@@ -180,22 +188,17 @@ export default function ProductosTabla({
     ejecutarAccionMasiva("precio", { tipo: ajustePrecio, valor: parseFloat(valorPrecio) }, "precio");
   };
 
-  // ── Acciones individuales ─────────────────────────────────────
   function cerrarModal() { setModal({ abierto: false, producto: undefined }); }
 
-  // ✅ Al guardar: actualiza el producto en el estado local inmediatamente
   function handleGuardado(productoActualizado?: ProductoFila) {
     invalidatePlanUsoCache();
     cerrarModal();
-
     if (productoActualizado) {
       setProductos(prev => {
         const existe = prev.find(p => p.id === productoActualizado.id);
         if (existe) {
-          // Edición: reemplazar en la lista
           return prev.map(p => p.id === productoActualizado.id ? productoActualizado : p);
         } else {
-          // Nuevo producto: agregar al principio si orden es recientes, sino al final
           setTotalProductos(t => t + 1);
           return ordenar === "recientes"
             ? [productoActualizado, ...prev]
@@ -203,16 +206,12 @@ export default function ProductosTabla({
         }
       });
     }
-
-    // Refresh en background para sincronizar con el servidor
     startTransition(() => router.refresh());
   }
 
-  // ✅ Al eliminar: quita el producto del estado local inmediatamente
   async function handleEliminar() {
     if (!confirmEliminar.producto) return;
     setConfirmEliminar(prev => ({ ...prev, cargando: true }));
-
     const productoEliminado = confirmEliminar.producto;
     const toastId = toast.loading("Eliminando producto...");
     try {
@@ -225,11 +224,8 @@ export default function ProductosTabla({
       }
       toast.update(toastId, { type: "success", title: "Producto eliminado", description: productoEliminado.nombre });
       invalidatePlanUsoCache();
-
-      // ✅ Quitar inmediatamente de la lista sin esperar refresh
       setProductos(prev => prev.filter(p => p.id !== productoEliminado.id));
       setTotalProductos(t => t - 1);
-
       setConfirmEliminar({ abierto: false, producto: null, cargando: false });
       startTransition(() => router.refresh());
     } catch (err: any) {
@@ -240,7 +236,6 @@ export default function ProductosTabla({
     }
   }
 
-  // ── Render estado vacío ───────────────────────────────────────
   if (productos.length === 0) {
     return (
       <div className="card py-20 text-center">
@@ -364,7 +359,7 @@ export default function ProductosTabla({
             </thead>
             <tbody>
               {productos.map((producto) => {
-                const stockBajo       = producto.stock <= producto.stockMinimo;
+                const stockBajo        = producto.stock <= producto.stockMinimo;
                 const estaSeleccionado = seleccionados.has(producto.id);
 
                 return (
@@ -440,7 +435,7 @@ export default function ProductosTabla({
         </div>
       </div>
 
-      {/* ── Modales acciones masivas ── */}
+      {/* ── Modal acciones masivas ── */}
       {accionMasiva && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }}>
           <div className="rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" style={{ background: "var(--bg-card)" }}>
@@ -461,11 +456,13 @@ export default function ProductosTabla({
               Aplicar a <strong>{cantidadSeleccionada}</strong> producto{cantidadSeleccionada !== 1 ? "s" : ""}
             </p>
 
+            {/* ── CAMBIO: opción "Sin categoría" agregada ── */}
             {accionMasiva === "categoria" && (
               <div>
                 <label className="label-base">Nueva categoría</label>
                 <select value={nuevaCategoria} onChange={(e) => setNuevaCategoria(e.target.value)} className="input-base">
                   <option value="">Seleccionar categoría</option>
+                  <option value="sin-categoria">— Sin categoría —</option>
                   {categorias.map((cat) => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
                 </select>
               </div>

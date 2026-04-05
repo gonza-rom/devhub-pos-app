@@ -948,7 +948,26 @@ export default function MovimientosPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <p className="font-medium text-gray-900 dark:text-gray-100">{m.productoNombre}</p>
+                      <div>
+  {(() => {
+    const partes = m.productoNombre.split(" — ");
+    return (
+      <>
+        <p className="font-medium text-gray-900 dark:text-gray-100">{partes[0]}</p>
+        {partes.length > 1 && (
+          <div className="flex gap-1 mt-0.5">
+            {partes.slice(1).map((p, i) => (
+              <span key={i} className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                style={{ background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.3)" }}>
+                {p}
+              </span>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  })()}
+</div>
                       {m.producto?.codigoProducto && (
                         <p className="text-xs text-primary-600 dark:text-primary-400">{m.producto.codigoProducto}</p>
                       )}

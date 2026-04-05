@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
           id: true, nombre: true, precio: true, stock: true,stockMinimo: true,
           imagen: true, codigoBarras: true, codigoProducto: true,
           categoriaId: true,
+          tieneVariantes: true,
           categoria: { select: { id: true, nombre: true } },
         }
       : {
@@ -96,6 +97,7 @@ export async function GET(req: NextRequest) {
           stock: true, stockMinimo: true, unidad: true, imagen: true, imagenes: true,
           activo: true, categoriaId: true, proveedorId: true,
           codigoProducto: true, codigoBarras: true, createdAt: true,
+          tieneVariantes: true,
           categoria: { select: { id: true, nombre: true } },
           proveedor:  { select: { id: true, nombre: true } },
         };

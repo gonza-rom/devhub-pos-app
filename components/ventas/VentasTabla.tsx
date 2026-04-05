@@ -2,7 +2,7 @@
 // components/ventas/VentasTabla.tsx
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Package, Receipt, Ban, AlertTriangle, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Package, Receipt, Ban, AlertTriangle, X, CreditCard } from "lucide-react";
 import { formatPrecio } from "@/lib/utils";
 import { fmtFecha24HoraAR } from "@/lib/dateAR";
 import { useRouter } from "next/navigation";
@@ -14,6 +14,8 @@ type ItemVenta = {
   cantidad:   number;
   precioUnit: number;
   subtotal:   number;
+  talle?:     string | null;
+  color?:     string | null;
   producto:   { id: string; imagen: string | null } | null;
 };
 
@@ -34,6 +36,8 @@ type Venta = {
 };
 
 type Props = { ventas: Venta[] };
+
+const METODOS_PAGO = ["EFECTIVO", "DEBITO", "CREDITO", "TRANSFERENCIA", "QR", "MERCADOPAGO"];
 
 const METODO_LABEL: Record<string, string> = {
   EFECTIVO:      "Efectivo",
@@ -67,37 +71,40 @@ export default function VentasTabla({ ventas }: Props) {
   const toast  = useToast();
 
   const [expandido,         setExpandido]         = useState<string | null>(null);
+
+  // — Cancelar —
   const [modalCancelar,     setModalCancelar]     = useState<Venta | null>(null);
   const [motivoCancelacion, setMotivoCancelacion] = useState("");
   const [cancelando,        setCancelando]        = useState(false);
+
+  // — Cambiar método de pago —
+  const [modalMetodoPago,   setModalMetodoPago]   = useState<Venta | null>(null);
+  const [nuevoMetodo,       setNuevoMetodo]       = useState("");
+  const [cambiandoMetodo,   setCambiandoMetodo]   = useState(false);
 
   function toggle(id: string) {
     setExpandido((prev) => (prev === id ? null : id));
   }
 
+  // ── Cancelar venta ────────────────────────────────────────────────────
   async function confirmarCancelacion() {
     if (!modalCancelar) return;
     setCancelando(true);
-
     const toastId = toast.loading("Cancelando venta...");
     try {
-      const res = await fetch(`/api/ventas/${modalCancelar.id}/cancelar`, {
-        method: "POST",
+      const res  = await fetch(`/api/ventas/${modalCancelar.id}/cancelar`, {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          motivoCancelacion: motivoCancelacion || "Cancelado por administrador",
-        }),
+        body:    JSON.stringify({ motivoCancelacion: motivoCancelacion || "Cancelado por administrador" }),
       });
       const data = await res.json();
-
       if (!data.ok) {
         toast.update(toastId, { type: "error", title: "Error al cancelar", description: data.error ?? "Intentá de nuevo" });
         return;
       }
-
       toast.update(toastId, {
-        type: "success",
-        title: "Venta cancelada",
+        type:        "success",
+        title:       "Venta cancelada",
         description: `Stock restaurado · ${formatPrecio(modalCancelar.total)}`,
       });
       setModalCancelar(null);
@@ -107,6 +114,54 @@ export default function VentasTabla({ ventas }: Props) {
       toast.update(toastId, { type: "error", title: "Error de conexión" });
     } finally {
       setCancelando(false);
+    }
+  }
+
+  // ── Cambiar método de pago ────────────────────────────────────────────
+  function abrirModalMetodo(venta: Venta, e: React.MouseEvent) {
+    e.stopPropagation();
+    setNuevoMetodo(venta.metodoPago); // pre-seleccionar el actual
+    setModalMetodoPago(venta);
+  }
+
+  async function confirmarCambioMetodo() {
+    if (!modalMetodoPago || !nuevoMetodo) return;
+    if (nuevoMetodo === modalMetodoPago.metodoPago) {
+      const toastId = toast.loading("Sin cambios");
+      toast.update(toastId, { type: "warning", title: "Sin cambios", description: "El método de pago ya es el mismo" });
+      return;
+    }
+
+    // ✅ Guardar ANTES del fetch, porque el modal se cierra y pierde la referencia
+    const metodoAnterior = modalMetodoPago.metodoPago;
+    const metodoNuevoLabel = METODO_LABEL[nuevoMetodo] ?? nuevoMetodo;
+
+    setCambiandoMetodo(true);
+    const toastId = toast.loading("Actualizando método de pago...");
+    try {
+      const res  = await fetch(`/api/ventas/${modalMetodoPago.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ metodoPago: nuevoMetodo }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        toast.update(toastId, { type: "error", title: "Error al actualizar", description: data.error ?? "Intentá de nuevo" });
+        return;
+      }
+      toast.update(toastId, {
+        type:        data.cajaYaCerrada ? "warning" : "success",
+        title:       "Método de pago actualizado",
+        description: data.cajaYaCerrada
+          ? `${METODO_LABEL[metodoAnterior]} → ${metodoNuevoLabel} · La caja ya estaba cerrada, no se modificó`
+          : `${METODO_LABEL[metodoAnterior]} → ${metodoNuevoLabel}`,
+      });
+      setModalMetodoPago(null);
+      router.refresh();
+    } catch {
+      toast.update(toastId, { type: "error", title: "Error de conexión" });
+    } finally {
+      setCambiandoMetodo(false);
     }
   }
 
@@ -218,21 +273,39 @@ export default function VentasTabla({ ventas }: Props) {
                       )}
                     </td>
 
-                    {/* Toggle + Botón cancelar */}
+                    {/* Acciones */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {!venta.cancelado && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setModalCancelar(venta);
-                              setMotivoCancelacion("");
-                            }}
-                            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            style={{ border: "1px solid rgba(220,38,38,0.3)" }}
-                          >
-                            <Ban className="h-3 w-3" /> Cancelar
-                          </button>
+                          <>
+                            {/* ── Cambiar método de pago ── */}
+                            <button
+                              onClick={(e) => abrirModalMetodo(venta, e)}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors"
+                              style={{
+                                color:  "#60a5fa",
+                                border: "1px solid rgba(96,165,250,0.3)",
+                              }}
+                              title="Cambiar método de pago"
+                            >
+                              <CreditCard className="h-3 w-3" />
+                              <span className="hidden sm:inline">Pago</span>
+                            </button>
+
+                            {/* ── Cancelar ── */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModalCancelar(venta);
+                                setMotivoCancelacion("");
+                              }}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                              style={{ border: "1px solid rgba(220,38,38,0.3)" }}
+                            >
+                              <Ban className="h-3 w-3" />
+                              <span className="hidden sm:inline">Cancelar</span>
+                            </button>
+                          </>
                         )}
                         <button
                           className="flex items-center justify-center h-7 w-7 rounded-lg transition-colors"
@@ -299,7 +372,25 @@ export default function VentasTabla({ ventas }: Props) {
                                           <Package className="h-3.5 w-3.5" style={{ color: "var(--text-faint)" }} />
                                         </div>
                                       )}
-                                      <span style={{ color: "var(--text-primary)" }}>{item.nombre}</span>
+                                      <div>
+                                        <span style={{ color: "var(--text-primary)" }}>{item.nombre}</span>
+                                        {(item.talle || item.color) && (
+                                          <div className="flex gap-1 mt-0.5">
+                                            {item.talle && (
+                                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                                                style={{ background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.3)" }}>
+                                                {item.talle}
+                                              </span>
+                                            )}
+                                            {item.color && (
+                                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                                                style={{ background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.3)" }}>
+                                                {item.color}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                   </td>
                                   <td className="px-4 py-2.5 text-right text-base" style={{ color: "var(--text-secondary)" }}>
@@ -353,7 +444,128 @@ export default function VentasTabla({ ventas }: Props) {
         </div>
       </div>
 
-      {/* Modal cancelar venta — sin estado de error inline */}
+      {/* ── Modal: Cambiar método de pago ─────────────────────────────────── */}
+      {modalMetodoPago && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => !cambiandoMetodo && setModalMetodoPago(null)}
+          />
+          <div
+            className="relative z-10 w-full max-w-md rounded-2xl shadow-xl p-6 space-y-4"
+            style={{ background: "var(--bg-card)", border: "1px solid var(--border-base)" }}
+          >
+            {/* Header */}
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full flex-shrink-0" style={{ background: "rgba(96,165,250,0.12)" }}>
+                <CreditCard className="h-6 w-6" style={{ color: "#60a5fa" }} />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
+                  Cambiar método de pago
+                </h2>
+                <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  Si hay una caja abierta, el movimiento se actualizará automáticamente.
+                </p>
+              </div>
+              <button onClick={() => setModalMetodoPago(null)} style={{ color: "var(--text-muted)" }}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Resumen de la venta */}
+            <div
+              className="rounded-xl p-4 text-sm space-y-1"
+              style={{ background: "var(--bg-surface)", border: "1px solid var(--border-base)" }}
+            >
+              <p className="font-medium" style={{ color: "var(--text-primary)" }}>
+                Venta #{modalMetodoPago.id.slice(0, 8).toUpperCase()}
+              </p>
+              <p style={{ color: "var(--text-muted)" }}>
+                {fmtFecha24HoraAR(
+                  typeof modalMetodoPago.createdAt === "string"
+                    ? modalMetodoPago.createdAt
+                    : modalMetodoPago.createdAt.toISOString()
+                )}
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs" style={{ color: "var(--text-faint)" }}>Método actual:</span>
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
+                  style={{
+                    background: METODO_COLOR[modalMetodoPago.metodoPago] ?? "rgba(150,150,150,0.12)",
+                    color:      METODO_TEXT[modalMetodoPago.metodoPago]  ?? "var(--text-muted)",
+                  }}
+                >
+                  {METODO_LABEL[modalMetodoPago.metodoPago] ?? modalMetodoPago.metodoPago}
+                </span>
+              </div>
+              <p className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
+                {formatPrecio(modalMetodoPago.total)}
+              </p>
+            </div>
+
+            {/* Select nuevo método */}
+            <div>
+              <label className="text-xs font-medium block mb-2" style={{ color: "var(--text-muted)" }}>
+                Nuevo método de pago
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {METODOS_PAGO.map((metodo) => {
+                  const seleccionado = nuevoMetodo === metodo;
+                  return (
+                    <button
+                      key={metodo}
+                      onClick={() => setNuevoMetodo(metodo)}
+                      disabled={cambiandoMetodo}
+                      className="rounded-xl py-2.5 px-3 text-xs font-semibold transition-all disabled:opacity-50"
+                      style={{
+                        background: seleccionado
+                          ? (METODO_COLOR[metodo] ?? "rgba(96,165,250,0.15)")
+                          : "var(--bg-surface)",
+                        color: seleccionado
+                          ? (METODO_TEXT[metodo] ?? "#60a5fa")
+                          : "var(--text-secondary)",
+                        border: seleccionado
+                          ? `1.5px solid ${METODO_TEXT[metodo] ?? "#60a5fa"}`
+                          : "1px solid var(--border-base)",
+                      }}
+                    >
+                      {METODO_LABEL[metodo]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={confirmarCambioMetodo}
+                disabled={cambiandoMetodo || nuevoMetodo === modalMetodoPago.metodoPago}
+                className="flex-1 rounded-xl py-2.5 text-sm font-bold transition-colors disabled:opacity-40"
+                style={{ background: "#2563eb", color: "#fff" }}
+              >
+                {cambiandoMetodo ? "Actualizando..." : "Confirmar cambio"}
+              </button>
+              <button
+                onClick={() => setModalMetodoPago(null)}
+                disabled={cambiandoMetodo}
+                className="flex-1 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+                style={{
+                  background: "var(--bg-hover)",
+                  color:      "var(--text-secondary)",
+                  border:     "1px solid var(--border-base)",
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Cancelar venta ─────────────────────────────────────────── */}
       {modalCancelar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
