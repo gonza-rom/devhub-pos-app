@@ -13,6 +13,7 @@ const PUBLIC_PATHS = [
   "/api/webhooks",
   "/_next",
   "/favicon.ico",
+  "/api/catalogo"
 ];
 
 const ADMIN_PATHS = [

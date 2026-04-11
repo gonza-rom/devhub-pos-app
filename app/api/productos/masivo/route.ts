@@ -228,6 +228,14 @@ export async function PATCH(req: NextRequest) {
         break;
       }
 
+      case "catalogo": {
+        resultado = await prisma.producto.updateMany({
+          where: whereClause,
+          data:  { visibleCatalogo: Boolean(body.valor) },
+        });
+        break;
+      }
+      
       default:
         return NextResponse.json(
           { ok: false, error: "Acción no válida" },

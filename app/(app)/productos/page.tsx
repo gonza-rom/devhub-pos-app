@@ -5,7 +5,7 @@ import { headers }        from "next/headers";
 import { unstable_cache } from "next/cache";
 import Link               from "next/link";
 import { prisma }         from "@/lib/prisma";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import ProductosTabla, { NuevoProductoBtn } from "@/components/productos/ProductosTabla";
 import ExportarImportar from "@/components/productos/ExportarImportar";
 
@@ -20,7 +20,7 @@ const getProductosCached = unstable_cache(
     const where: any = { tenantId, activo: true };
     if (soloStockBajo) where.stock = { lte: 5 };
     if (categoriaId === "sin-categoria") {
-      where.categoriaId = { equals: null };  // ← correcto
+      where.categoriaId = { equals: null };
     } else if (categoriaId) {
       where.categoriaId = categoriaId;
     }
@@ -41,16 +41,15 @@ const getProductosCached = unstable_cache(
       prisma.producto.findMany({
         where,
         select: {
-          id: true, nombre: true, codigoProducto: true, codigoBarras: true,
-          descripcion: true, precio: true, costo: true,
+          id: true, nombre: true, codigoProducto: true,
+          precio: true,
           stock: true, stockMinimo: true, unidad: true,
-          imagen: true, imagenes: true, categoriaId: true, proveedorId: true,
-          tieneVariantes: true,  // ← agregar
+          imagen: true, categoriaId: true,
           categoria: { select: { id: true, nombre: true } },
         },
         orderBy,
-        skip:    (page - 1) * PAGE_SIZE,
-        take:    PAGE_SIZE,
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
       }),
       prisma.producto.count({ where }),
     ]);
@@ -99,6 +98,12 @@ export default async function ProductosPage({
   const page          = Math.max(1, parseInt(params.page ?? "1"));
   const ordenar       = params.ordenar ?? "nombre";
 
+  // ── Obtener slug del tenant para el link al catálogo ──
+  const tenant = await prisma.tenant.findUnique({
+    where:  { id: tenantId },
+    select: { slug: true },
+  });
+
   const [{ productos, total, totalPages }, categorias, proveedores] = await Promise.all([
     getProductosCached(tenantId, page, busqueda, categoriaId, soloStockBajo, ordenar),
     getCategoriasCached(tenantId),
@@ -131,6 +136,19 @@ export default async function ProductosPage({
         </div>
         <div className="flex items-center gap-2">
           <ExportarImportar />
+          {/* ── Botón Ver catálogo ── */}
+          {tenant?.slug && (
+            <a
+              href={`/catalogo/${tenant.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-ghost flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors"
+              style={{ border: "1px solid var(--border-base)", color: "var(--text-secondary)" }}
+            >
+              <ExternalLink className="h-4 w-4" />
+              Ver catálogo
+            </a>
+          )}
           <NuevoProductoBtn categorias={categorias} proveedores={proveedores} />
         </div>
       </div>
@@ -149,7 +167,6 @@ export default async function ProductosPage({
               <option key={cat.id} value={cat.id}>{cat.nombre}</option>
             ))}
           </select>
-          {/* ✅ Selector de orden */}
           <select name="ordenar" defaultValue={ordenar} className="input-base max-w-[180px]">
             <option value="nombre">Nombre A→Z</option>
             <option value="recientes">Más recientes</option>
@@ -174,21 +191,17 @@ export default async function ProductosPage({
         </form>
       </div>
 
-      {/* Tabla — Client Component */}
+      {/* Tabla */}
       <ProductosTabla
         productos={productos}
         categorias={categorias}
         proveedores={proveedores}
         totalProductos={total}
         ordenar={ordenar}
-        filtrosActivos={{
-          busqueda,
-          categoriaId,
-          soloStockBajo,
-        }}
+        filtrosActivos={{ busqueda, categoriaId, soloStockBajo }}
       />
 
-      {/* Paginación — se queda en el Server Component */}
+      {/* Paginación */}
       {totalPages > 1 && (
         <div className="card">
           <div className="flex items-center justify-between px-4 py-3">

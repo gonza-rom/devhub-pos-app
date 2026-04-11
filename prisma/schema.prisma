@@ -131,6 +131,7 @@ model Producto {
   imagen         String?
   imagenes       String[]          @default([])
   activo         Boolean           @default(true)
+  visibleCatalogo Boolean @default(false)
   categoriaId    String?
   proveedorId    String?
   createdAt      DateTime          @default(now())

@@ -103,6 +103,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
           categoriaId:    categoriaId || null,
           proveedorId:    proveedorId || null,
           tieneVariantes,
+          visibleCatalogo: body.visibleCatalogo ?? false,
         },
         include: {
           categoria: { select: { id: true, nombre: true } },
@@ -252,6 +253,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         ...(codigoProducto !== undefined && { codigoProducto: codigoProducto.trim() || null }),
         ...(precio         !== undefined && { precio:         parseFloat(precio) }),
         ...(stock          !== undefined && { stock:          parseInt(stock) }),
+        visibleCatalogo: body.visibleCatalogo ?? false,
       },
     });
 

@@ -187,6 +187,7 @@ export async function POST(req: NextRequest) {
           proveedorId:    toNullIfEmpty(proveedorId),
           codigoProducto: codigoProductoFinal,
           codigoBarras:   codigoBarrasFinal,
+          visibleCatalogo: body.visibleCatalogo ?? false,
         },
         include: {
           categoria: { select: { id: true, nombre: true } },

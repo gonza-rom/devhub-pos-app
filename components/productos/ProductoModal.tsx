@@ -14,7 +14,7 @@ type FormData = {
   nombre: string; descripcion: string; codigoProducto: string; codigoBarras: string;
   precio: string; costo: string; stock: string; stockMinimo: string; unidad: string;
   imagen: string; imagenes: string[]; categoriaId: string; proveedorId: string;
-  tieneVariantes: boolean;
+  tieneVariantes: boolean;visibleCatalogo: boolean;
 };
 
 type Variante = {
@@ -32,7 +32,8 @@ const FORM_VACIO: FormData = {
   nombre: "", descripcion: "", codigoProducto: "", codigoBarras: "",
   precio: "", costo: "", stock: "0", stockMinimo: "1",
   unidad: "", imagen: "", imagenes: [], categoriaId: "", proveedorId: "",
-  tieneVariantes: false,
+  tieneVariantes: false,visibleCatalogo: false,
+
 };
 
 function productoToForm(p: Producto): FormData {
@@ -47,10 +48,11 @@ function productoToForm(p: Producto): FormData {
     stockMinimo:     String(p.stockMinimo),
     unidad:          p.unidad   ?? "",
     imagen:          p.imagen   ?? "",
-    imagenes:        p.imagenes ?? [],
+    imagenes: p.imagenes?.length ? p.imagenes : (p.imagen ? [p.imagen] : []),
     categoriaId:     p.categoriaId  ?? "",
     proveedorId:     p.proveedorId  ?? "",
     tieneVariantes:  (p as any).tieneVariantes ?? false,
+    visibleCatalogo: (p as any).visibleCatalogo ?? false,
   };
 }
 
@@ -160,6 +162,7 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
       categoriaId:    form.categoriaId || undefined,
       proveedorId:    form.proveedorId || undefined,
       tieneVariantes: form.tieneVariantes,
+      visibleCatalogo: form.visibleCatalogo,
       variantes: form.tieneVariantes ? variantes.map(v => ({
         id:     v.id,
         talle:  v.talle || null,
@@ -357,7 +360,28 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
             </div>
 
             <div className="h-px" style={{ background: "var(--border-subtle)" }} />
-
+            {/* Catálogo público */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--text-primary)" }}>
+                  Catálogo público
+                </h3>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>
+                  Mostrar este producto en el catálogo web
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm(prev => ({ ...prev, visibleCatalogo: !prev.visibleCatalogo }))}
+                className="relative flex-shrink-0 h-6 w-11 rounded-full transition-colors duration-200"
+                style={{ background: form.visibleCatalogo ? "var(--color-red)" : "rgba(220,38,38,0.3)" }}
+              >
+                <span
+                  className="absolute top-0.5 h-5 w-5 rounded-full shadow toggle-thumb transition-transform duration-200"
+                  style={{ transform: form.visibleCatalogo ? "translateX(-22px)" : "translateX(2px)" }}
+                />
+              </button>
+            </div>
             {/* Toggle variantes */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">

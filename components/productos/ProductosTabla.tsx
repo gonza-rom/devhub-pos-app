@@ -1,11 +1,11 @@
 "use client";
 // components/productos/ProductosTabla.tsx
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect} from "react";
 import { useRouter }               from "next/navigation";
 import {
   Package, AlertTriangle, Trash2, CheckSquare, Square,
-  Tag, DollarSign, PackagePlus, Building2, X,
+  Tag, DollarSign, PackagePlus, Building2, X,Globe
 } from "lucide-react";
 import { formatPrecio }           from "@/lib/utils";
 import { useFetch }               from "@/hooks/useFetch";
@@ -14,12 +14,18 @@ import { useToast }               from "@/components/toast";
 import ProductoModal              from "@/components/productos/ProductoModal";
 import type { Categoria, Proveedor, Producto } from "@/types";
 
-type ProductoFila = Pick<
-  Producto,
-  | "id" | "nombre" | "codigoProducto" | "codigoBarras" | "descripcion"
-  | "precio" | "costo" | "stock" | "stockMinimo" | "unidad"
-  | "imagen" | "imagenes" | "categoriaId" | "proveedorId"
-> & { categoria?: { id: string; nombre: string } | null };
+type ProductoFila = {
+  id: string;
+  nombre: string;
+  codigoProducto: string | null;
+  precio: number;
+  stock: number;
+  stockMinimo: number;
+  unidad: string | null;
+  imagen: string | null;
+  categoriaId: string | null;
+  categoria?: { id: string; nombre: string } | null;
+};
 
 type Props = {
   productos:   ProductoFila[];
@@ -50,9 +56,14 @@ export default function ProductosTabla({
   const [productos, setProductos] = useState<ProductoFila[]>(productosProp);
   const [totalProductos, setTotalProductos] = useState(totalProp);
 
+  useEffect(() => {
+    setProductos(productosProp);
+    setTotalProductos(totalProp);
+  }, [productosProp, totalProp]);
+
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [modoSeleccion, setModoSeleccion] = useState<"pagina" | "todos">("pagina");
-  const [accionMasiva, setAccionMasiva]   = useState<"categoria" | "proveedor" | "stock" | "precio" | null>(null);
+  const [accionMasiva, setAccionMasiva] = useState<"categoria" | "proveedor" | "stock" | "precio" | "catalogo" | null>(null);
   const [cargandoMasivo, setCargandoMasivo] = useState(false);
 
   const [nuevaCategoria, setNuevaCategoria] = useState("");
@@ -291,6 +302,9 @@ export default function ProductosTabla({
               <button onClick={() => setAccionMasiva("precio")} className="btn-ghost px-3 py-2 text-xs">
                 <DollarSign className="h-4 w-4" /> Precio
               </button>
+              <button onClick={() => setAccionMasiva("catalogo")} className="btn-ghost px-3 py-2 text-xs">
+                <Globe className="h-4 w-4" /> Catálogo
+              </button>
             </div>
           </div>
         </div>
@@ -446,6 +460,7 @@ export default function ProductosTabla({
                 {accionMasiva === "proveedor" && "Cambiar proveedor"}
                 {accionMasiva === "stock"     && "Ajustar stock"}
                 {accionMasiva === "precio"    && "Ajustar precios"}
+                {accionMasiva === "catalogo"  && "Visibilidad en catálogo"}
               </h3>
               <button onClick={() => setAccionMasiva(null)}>
                 <X className="h-5 w-5" style={{ color: "var(--text-muted)" }} />
@@ -528,29 +543,58 @@ export default function ProductosTabla({
                 </div>
               </>
             )}
+            {accionMasiva === "catalogo" && (
+              <div className="space-y-3">
+                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                  Elegí si estos productos deben aparecer en el catálogo público.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => ejecutarAccionMasiva("catalogo", { valor: true }, "catálogo")}
+                    disabled={cargandoMasivo}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-colors disabled:opacity-50"
+                    style={{ background: "#111827", color: "#fff" }}
+                  >
+                    <Globe className="h-4 w-4" />
+                    Mostrar en catálogo
+                  </button>
+                  <button
+                    onClick={() => ejecutarAccionMasiva("catalogo", { valor: false }, "catálogo")}
+                    disabled={cargandoMasivo}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-colors disabled:opacity-50"
+                    style={{ background: "var(--bg-hover)", color: "var(--text-muted)", border: "1px solid var(--border-base)" }}
+                  >
+                    <X className="h-4 w-4" />
+                    Ocultar del catálogo
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-3 pt-2">
               <button onClick={() => setAccionMasiva(null)} className="flex-1 btn-ghost" disabled={cargandoMasivo}>
                 Cancelar
               </button>
-              <button
-                onClick={
-                  accionMasiva === "categoria" ? aplicarCambioCategoria :
-                  accionMasiva === "proveedor" ? aplicarCambioProveedor :
-                  accionMasiva === "stock"     ? aplicarCambioStock     :
-                  aplicarCambioPrecio
-                }
-                disabled={
-                  cargandoMasivo ||
-                  (accionMasiva === "categoria" && !nuevaCategoria) ||
-                  (accionMasiva === "proveedor" && !nuevoProveedor) ||
-                  (accionMasiva === "stock"     && !valorStock)     ||
-                  (accionMasiva === "precio"    && !valorPrecio)
-                }
-                className="flex-1 btn-primary disabled:opacity-50"
-              >
-                {cargandoMasivo ? "Aplicando..." : "Aplicar"}
-              </button>
+              {accionMasiva !== "catalogo" && (
+                <button
+                  onClick={
+                    accionMasiva === "categoria" ? aplicarCambioCategoria :
+                    accionMasiva === "proveedor" ? aplicarCambioProveedor :
+                    accionMasiva === "stock"     ? aplicarCambioStock     :
+                    aplicarCambioPrecio
+                  }
+                  disabled={
+                    cargandoMasivo ||
+                    (accionMasiva === "categoria" && !nuevaCategoria) ||
+                    (accionMasiva === "proveedor" && !nuevoProveedor) ||
+                    (accionMasiva === "stock"     && !valorStock)     ||
+                    (accionMasiva === "precio"    && !valorPrecio)
+                  }
+                  className="flex-1 btn-primary disabled:opacity-50"
+                >
+                  {cargandoMasivo ? "Aplicando..." : "Aplicar"}
+                </button>
+              )}
             </div>
           </div>
         </div>
