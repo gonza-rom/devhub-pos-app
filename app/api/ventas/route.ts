@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
   try {
     const { tenantId, usuarioId, nombreUsuario } = await getTenantContext();
     const body: CreateVentaInput = await req.json();
-    const { items, metodoPago, descuento = 0, clienteNombre, clienteDni, observaciones, vendedorId, vendedorNombre, fechaManual } = body;
+    const { items, metodoPago, descuento = 0, recargo = 0, clienteNombre, clienteDni, observaciones, vendedorId, vendedorNombre, fechaManual } = body;
 
     if (!items?.length)
       return NextResponse.json({ ok: false, error: "La venta debe tener al menos un producto" }, { status: 400 });
@@ -184,12 +184,12 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      const total = subtotal - descuento;
+      const total = subtotal + recargo - descuento;
 
       const ventaCreada = await tx.venta.create({
         data: {
           tenantId,
-          total, subtotal, descuento, metodoPago,
+          total, subtotal, descuento, recargo, metodoPago,
           clienteNombre: clienteNombre?.trim() || null,
           clienteDni:    clienteDni?.trim()    || null,
           observaciones: observaciones?.trim() || null,

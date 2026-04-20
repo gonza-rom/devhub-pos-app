@@ -188,6 +188,7 @@ model Venta {
   total             Float
   subtotal          Float?
   descuento         Float?       @default(0)
+  recargo           Float?       @default(0)
   metodoPago        String
   clienteNombre     String?
   clienteDni        String?

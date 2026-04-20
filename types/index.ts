@@ -79,6 +79,7 @@ export type CreateVentaInput = {
   }[];
   metodoPago:      string;
   descuento?:      number;
+  recargo?:        number;
   clienteNombre?:  string;
   clienteDni?:     string;
   observaciones?:  string;

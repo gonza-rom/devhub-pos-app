@@ -680,6 +680,7 @@ export default function POSClient({
             })),
           metodoPago,
           descuento,
+          recargo,
           clienteNombre:  clienteNombre.trim() || undefined,
           vendedorId:     vendedorId || undefined,
           vendedorNombre: usuarios.find(u => u.supabaseId === vendedorId)?.nombre || undefined,

@@ -24,6 +24,7 @@ type Venta = {
   total:             number;
   subtotal:          number | null;
   descuento:         number | null;
+  recargo:           number | null;
   metodoPago:        string;
   clienteNombre:     string | null;
   clienteDni:        string | null;
@@ -297,6 +298,11 @@ export default function VentasTabla({ ventas }: Props) {
                       <p className={`font-bold ${venta.cancelado ? "line-through" : ""}`} style={{ color: "var(--text-primary)" }}>
                         {formatPrecio(venta.total)}
                       </p>
+                      {(venta.recargo ?? 0) > 0 && (
+                        <p className="text-xs" style={{ color: "#fb923c" }}>
+                          +{formatPrecio(venta.recargo!)}
+                        </p>
+                      )}
                       {(venta.descuento ?? 0) > 0 && (
                         <p className="text-xs" style={{ color: "#f87171" }}>
                           -{formatPrecio(venta.descuento!)}
@@ -464,17 +470,21 @@ export default function VentasTabla({ ventas }: Props) {
                               )}
                             </div>
                             <div className="text-right space-y-0.5">
-                              {(venta.descuento ?? 0) > 0 && (
-                                <p className="text-xs" style={{ color: "var(--text-faint)" }}>
-                                  Subtotal: {formatPrecio(venta.subtotal ?? venta.total)}
-                                  {" · "}Descuento:{" "}
-                                  <span style={{ color: "#f87171" }}>-{formatPrecio(venta.descuento!)}</span>
-                                </p>
-                              )}
-                              <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
-                                Total: {formatPrecio(venta.total)}
+                            {((venta.descuento ?? 0) > 0 || (venta.recargo ?? 0) > 0) && (
+                              <p className="text-xs" style={{ color: "var(--text-faint)" }}>
+                                Subtotal: {formatPrecio(venta.subtotal ?? venta.total)}
+                                {(venta.recargo ?? 0) > 0 && (
+                                  <> · Recargo: <span style={{ color: "#fb923c" }}>+{formatPrecio(venta.recargo!)}</span></>
+                                )}
+                                {(venta.descuento ?? 0) > 0 && (
+                                  <> · Descuento: <span style={{ color: "#f87171" }}>-{formatPrecio(venta.descuento!)}</span></>
+                                )}
                               </p>
-                            </div>
+                            )}
+                            <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>
+                              Total: {formatPrecio(venta.total)}
+                            </p>
+                          </div>
                           </div>
                         </div>
                       </td>

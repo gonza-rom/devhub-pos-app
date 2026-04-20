@@ -62,6 +62,7 @@ export default async function HistorialVentasPage({
         total: true,
         subtotal: true,
         descuento: true,
+        recargo: true,
         metodoPago: true,
         clienteNombre: true,
         clienteDni: true,
