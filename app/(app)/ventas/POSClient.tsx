@@ -41,7 +41,7 @@ type ProductoConCategoria = {
   tieneVariantes?: boolean;
 };
 
-type CategoriaSimple = { id: string; nombre: string };
+type CategoriaSimple = { id: string; nombre: string; hijas?: CategoriaSimple[] };
 
 type Variante = {
   id: string;
@@ -269,6 +269,8 @@ export default function POSClient({
   const [scannerAbierto,   setScannerAbierto]   = useState(false);
   const [descuentoPct,    setDescuentoPct]    = useState(0);
   const [ajusteRedondeo,  setAjusteRedondeo]  = useState(0);
+  const [recargo,         setRecargo]         = useState(0);
+  const [recargoPct,      setRecargoPct]      = useState(0);
 
   // Refs
   const gridContainerRef      = useRef<HTMLDivElement>(null);
@@ -614,6 +616,8 @@ export default function POSClient({
     setItemManualPrecio("");
     setDescuentoPct(0);
     setAjusteRedondeo(0);
+    setRecargo(0);
+    setRecargoPct(0);
   }, []);
 
   const handleCodigoEscaneado = useCallback((codigo: string) => {
@@ -634,7 +638,7 @@ export default function POSClient({
   // ── Totales ─────────────────────────────────────────────────────────────────
 
   const subtotal      = carrito.reduce((acc, i) => acc + i.subtotal, 0);
-  const total         = Math.max(0, subtotal - descuento);
+  const total         = Math.max(0, subtotal + recargo - descuento);
   const cantidadTotal = carrito.reduce((a, i) => a + i.cantidad, 0);
   const vuelto        =
     metodoPago === "efectivo" && efectivoRecibido
@@ -1246,7 +1250,7 @@ export default function POSClient({
           {/* Descuento */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Desc. %</label>
+            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Descuento %</label>
             <input
               type="number" min="0" max="100"
               value={descuentoPct || ""}
@@ -1255,7 +1259,7 @@ export default function POSClient({
                 setDescuentoPct(pct);
                 setDescuento(Math.round((subtotal * pct) / 100));
               }}
-              placeholder="0" className="input-base text-sm" style={{ width: "60px" }}
+              placeholder="0" className="input-base text-sm" style={{ width: "70px" }}
               onWheel={(e) => e.currentTarget.blur()}
             />
             <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>$ </label>
@@ -1267,33 +1271,37 @@ export default function POSClient({
                 setDescuento(monto);
                 setDescuentoPct(subtotal > 0 ? Math.round((monto / subtotal) * 100) : 0);
               }}
-              placeholder="0" className="input-base text-sm" style={{ width: "72px" }}
+              placeholder="0" className="input-base text-sm" style={{ width: "90px" }}
               onWheel={(e) => e.currentTarget.blur()}
             />
           </div>
 
-          {/* Redondeo manual del total */}
+          {/* Recargo */}
           <div className="flex items-center gap-2">
-            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Redondear</label>
+            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Recargo %</label>
             <input
-              type="number" min="0"
-              value={ajusteRedondeo || ""}
-              onChange={(e) => setAjusteRedondeo(Math.max(0, parseFloat(e.target.value) || 0))}
-              placeholder="0" className="input-base text-sm" style={{ width: "72px" }}
+              type="number" min="0" max="100"
+              value={recargoPct || ""}
+              onChange={(e) => {
+                const pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+                setRecargoPct(pct);
+                setRecargo(Math.round((subtotal * pct) / 100));
+              }}
+              placeholder="0" className="input-base text-sm" style={{ width: "70px" }}
               onWheel={(e) => e.currentTarget.blur()}
             />
-            <button
-              onClick={() => setDescuento(Math.max(0, descuento - ajusteRedondeo))}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold"
-              style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.3)" }}
-              title="Subir total (bajar descuento)"
-            >+</button>
-            <button
-              onClick={() => setDescuento(Math.min(subtotal, descuento + ajusteRedondeo))}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold"
-              style={{ background: "rgba(220,38,38,0.15)", color: "#f87171", border: "1px solid rgba(220,38,38,0.3)" }}
-              title="Bajar total (subir descuento)"
-            >−</button>
+            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>$ </label>
+            <input
+              type="number" min="0"
+              value={recargo || ""}
+              onChange={(e) => {
+                const monto = Math.max(0, parseFloat(e.target.value) || 0);
+                setRecargo(monto);
+                setRecargoPct(subtotal > 0 ? Math.round((monto / subtotal) * 100) : 0);
+              }}
+              placeholder="0" className="input-base text-sm" style={{ width: "90px" }}
+              onWheel={(e) => e.currentTarget.blur()}
+            />
           </div>
         </div>
 
@@ -1327,14 +1335,21 @@ export default function POSClient({
           )}
 
           <div className="space-y-1 pt-1 border-t" style={{ borderColor: "var(--border-base)" }}>
-            {descuento > 0 && (
+            {(descuento > 0 || recargo > 0) && (
               <>
                 <div className="flex justify-between text-xs" style={{ color: "var(--text-faint)" }}>
                   <span>Subtotal</span><span>{formatPrecio(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-xs text-green-400">
-                  <span>Descuento</span><span>- {formatPrecio(descuento)}</span>
-                </div>
+                {recargo > 0 && (
+                  <div className="flex justify-between text-xs text-orange-400">
+                    <span>Recargo</span><span>+ {formatPrecio(recargo)}</span>
+                  </div>
+                )}
+                {descuento > 0 && (
+                  <div className="flex justify-between text-xs text-green-400">
+                    <span>Descuento</span><span>- {formatPrecio(descuento)}</span>
+                  </div>
+                )}
               </>
             )}
             <div className="flex justify-between font-bold text-base" style={{ color: "var(--text-primary)" }}>

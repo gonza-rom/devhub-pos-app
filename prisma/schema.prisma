@@ -86,17 +86,21 @@ model UsuarioTenant {
 }
 
 model Categoria {
-  id          String     @id @default(cuid())
+  id          String      @id @default(cuid())
   tenantId    String
   nombre      String
   descripcion String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  padreId     String?     // ← NUEVO
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  padre       Categoria?  @relation("SubCategorias", fields: [padreId], references: [id])
+  hijas       Categoria[] @relation("SubCategorias")
   productos   Producto[]
 
   @@unique([tenantId, nombre])
   @@index([tenantId])
+  @@index([padreId])  // ← NUEVO
 }
 
 model Proveedor {

@@ -59,11 +59,30 @@ const getProductosCached = unstable_cache(
   { revalidate: 30, tags: ["productos"] }
 );
 
+function aplanarCategorias(
+  cats: any[], nivel = 0
+): { id: string; nombre: string }[] {
+  return cats.flatMap(cat => [
+    { id: cat.id, nombre: `${"  ".repeat(nivel)}${nivel > 0 ? "└ " : ""}${cat.nombre}` },
+    ...aplanarCategorias(cat.hijas ?? [], nivel + 1),
+  ]);
+}
+
 const getCategoriasCached = unstable_cache(
   async (tenantId: string) =>
     prisma.categoria.findMany({
-      where:   { tenantId },
-      select:  { id: true, nombre: true },
+      where:   { tenantId, padreId: null }, // solo raíces
+      select:  {
+        id: true, nombre: true,
+        hijas: {
+          select: { id: true, nombre: true,
+            hijas: { select: { id: true, nombre: true,
+              hijas: { select: { id: true, nombre: true } }
+            }}
+          },
+          orderBy: { nombre: "asc" },
+        },
+      },
       orderBy: { nombre: "asc" },
     }),
   ["categorias-list"],

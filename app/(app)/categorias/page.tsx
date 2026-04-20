@@ -2,29 +2,185 @@
 // app/(app)/categorias/page.tsx
 
 import { useEffect, useState } from "react";
-import { FolderTree, Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
+import {
+  FolderTree, Plus, Edit, Trash2, AlertTriangle,
+  ChevronRight, ChevronDown, Folder, FolderOpen, FolderPlus,
+} from "lucide-react";
 import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/toast";
 
+// ── Tipos ────────────────────────────────────────────────────
+
 type Categoria = {
-  id: string;
-  nombre: string;
+  id:          string;
+  nombre:      string;
   descripcion: string | null;
-  _count: { productos: number };
+  padreId:     string | null;
+  _count:      { productos: number };
+  hijas:       Categoria[];
 };
 
-const FORM_VACIO = { nombre: "", descripcion: "" };
+const FORM_VACIO = { nombre: "", descripcion: "", padreId: "" };
+
+// ── Helper: aplanar árbol para selectores ────────────────────
+
+function aplanarCategorias(cats: Categoria[], nivel = 0): { id: string; nombre: string; nivel: number }[] {
+  const resultado: { id: string; nombre: string; nivel: number }[] = [];
+  for (const cat of cats) {
+    resultado.push({ id: cat.id, nombre: cat.nombre, nivel });
+    if (cat.hijas?.length) {
+      resultado.push(...aplanarCategorias(cat.hijas, nivel + 1));
+    }
+  }
+  return resultado;
+}
+
+// ── Contar todos los productos del árbol ─────────────────────
+
+function contarProductosTotal(cat: Categoria): number {
+  return cat._count.productos + (cat.hijas ?? []).reduce((acc, h) => acc + contarProductosTotal(h), 0);
+}
+
+// ── Componente de nodo del árbol ─────────────────────────────
+
+function NodoCategoria({
+  categoria,
+  nivel,
+  todasPlanas,
+  onEditar,
+  onEliminar,
+  onAgregarHija,
+}: {
+  categoria:    Categoria;
+  nivel:        number;
+  todasPlanas:  { id: string; nombre: string; nivel: number }[];
+  onEditar:     (cat: Categoria) => void;
+  onEliminar:   (cat: Categoria) => void;
+  onAgregarHija:(cat: Categoria) => void;
+}) {
+  const [expandido, setExpandido] = useState(nivel === 0);
+  const tieneHijas = categoria.hijas?.length > 0;
+  const totalProductos = contarProductosTotal(categoria);
+
+  return (
+    <div>
+      <div
+        className="group flex items-center gap-2 rounded-xl px-3 py-2.5 transition-colors"
+        style={{
+          marginLeft: nivel * 20,
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-base)",
+          marginBottom: 6,
+        }}
+      >
+        {/* Expandir/colapsar */}
+        <button
+          onClick={() => tieneHijas && setExpandido(v => !v)}
+          className="flex-shrink-0 flex items-center justify-center h-6 w-6 rounded-md transition-colors"
+          style={{ color: tieneHijas ? "var(--text-secondary)" : "transparent", cursor: tieneHijas ? "pointer" : "default" }}
+        >
+          {tieneHijas
+            ? expandido
+              ? <ChevronDown className="h-4 w-4" />
+              : <ChevronRight className="h-4 w-4" />
+            : <span className="h-4 w-4" />
+          }
+        </button>
+
+        {/* Ícono carpeta */}
+        <div className="flex-shrink-0" style={{ color: nivel === 0 ? "#DC2626" : "#f87171" }}>
+          {tieneHijas && expandido
+            ? <FolderOpen className="h-4 w-4" />
+            : <Folder className="h-4 w-4" />
+          }
+        </div>
+
+        {/* Nombre y contador */}
+        <div className="flex-1 min-w-0">
+          <span className="font-medium text-sm truncate" style={{ color: "var(--text-primary)" }}>
+            {categoria.nombre}
+          </span>
+          {categoria.descripcion && (
+            <p className="text-xs truncate mt-0.5" style={{ color: "var(--text-faint)" }}>
+              {categoria.descripcion}
+            </p>
+          )}
+        </div>
+
+        {/* Badge productos */}
+        <span className="flex-shrink-0 text-xs font-medium px-2 py-0.5 rounded-full"
+          style={{ background: "rgba(220,38,38,0.1)", color: "#DC2626" }}>
+          {totalProductos} prod.
+        </span>
+
+        {/* Acciones */}
+        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => onAgregarHija(categoria)}
+            className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+            style={{ color: "var(--text-faint)" }}
+            title="Agregar subcategoría"
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#22c55e"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-faint)"}
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => onEditar(categoria)}
+            className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+            style={{ color: "var(--text-faint)" }}
+            title="Editar"
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-faint)"}
+          >
+            <Edit className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => onEliminar(categoria)}
+            className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+            style={{ color: "var(--text-faint)" }}
+            title="Eliminar"
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "#f87171"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-faint)"}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Hijas */}
+      {tieneHijas && expandido && (
+        <div>
+          {categoria.hijas.map(hija => (
+            <NodoCategoria
+              key={hija.id}
+              categoria={hija}
+              nivel={nivel + 1}
+              todasPlanas={todasPlanas}
+              onEditar={onEditar}
+              onEliminar={onEliminar}
+              onAgregarHija={onAgregarHija}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Componente principal ─────────────────────────────────────
 
 export default function CategoriasPage() {
   const toast   = useToast();
   const confirm = useConfirm();
-  const [categorias, setCategorias]   = useState<Categoria[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [showForm, setShowForm]       = useState(false);
-  const [editingId, setEditingId]     = useState<string | null>(null);
-  const [formData, setFormData]       = useState(FORM_VACIO);
-  const [guardando, setGuardando]     = useState(false);
-  const [errorForm, setErrorForm]     = useState("");
+
+  const [categorias,  setCategorias]  = useState<Categoria[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [showForm,    setShowForm]    = useState(false);
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [formData,    setFormData]    = useState(FORM_VACIO);
+  const [guardando,   setGuardando]   = useState(false);
+  const [errorForm,   setErrorForm]   = useState("");
 
   useEffect(() => { fetchCategorias(); }, []);
 
@@ -40,6 +196,13 @@ export default function CategoriasPage() {
     }
   }
 
+  const todasPlanas = aplanarCategorias(categorias);
+
+  // Contar total de categorías (incluyendo hijas)
+  function contarTotal(cats: Categoria[]): number {
+    return cats.reduce((acc, c) => acc + 1 + contarTotal(c.hijas ?? []), 0);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setGuardando(true);
@@ -52,7 +215,11 @@ export default function CategoriasPage() {
       fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          nombre:      formData.nombre,
+          descripcion: formData.descripcion,
+          padreId:     formData.padreId || null,
+        }),
       }).then(async (res) => {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error ?? "Error al guardar");
@@ -74,8 +241,20 @@ export default function CategoriasPage() {
   }
 
   function handleEditar(categoria: Categoria) {
-    setFormData({ nombre: categoria.nombre, descripcion: categoria.descripcion ?? "" });
+    setFormData({
+      nombre:      categoria.nombre,
+      descripcion: categoria.descripcion ?? "",
+      padreId:     categoria.padreId ?? "",
+    });
     setEditingId(categoria.id);
+    setErrorForm("");
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleAgregarHija(padre: Categoria) {
+    setFormData({ nombre: "", descripcion: "", padreId: padre.id });
+    setEditingId(null);
     setErrorForm("");
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -89,11 +268,17 @@ export default function CategoriasPage() {
   }
 
   async function handleEliminar(categoria: Categoria) {
+    const tieneHijas   = (categoria.hijas?.length ?? 0) > 0;
+    const totalProds   = contarProductosTotal(categoria);
+    const descripcion  = [
+      tieneHijas && `Las ${categoria.hijas.length} subcategoría(s) pasarán a ser categorías raíz.`,
+      totalProds > 0 && `${totalProds} producto(s) quedarán sin categoría.`,
+      "Esta acción no se puede deshacer.",
+    ].filter(Boolean).join(" ");
+
     const ok = await confirm({
       title:        `¿Eliminar "${categoria.nombre}"?`,
-      description:  categoria._count.productos > 0
-        ? `Los ${categoria._count.productos} producto(s) asociados quedarán sin categoría.`
-        : "Esta acción no se puede deshacer.",
+      description:  descripcion,
       confirmLabel: "Eliminar",
       cancelLabel:  "Cancelar",
       variant:      "danger",
@@ -123,16 +308,21 @@ export default function CategoriasPage() {
     );
   }
 
+  const totalCategorias = contarTotal(categorias);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: "var(--text-primary)" }}>
             <FolderTree className="h-6 w-6" />
             Categorías
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{categorias.length} categorías</p>
+          <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
+            {totalCategorias} categorías en total
+          </p>
         </div>
         <button
           onClick={() => {
@@ -141,7 +331,10 @@ export default function CategoriasPage() {
             setFormData(FORM_VACIO);
             setErrorForm("");
           }}
-          className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
+          className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+          style={{ background: "#DC2626" }}
+          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#b91c1c"}
+          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#DC2626"}
         >
           <Plus className="h-4 w-4" />
           Nueva categoría
@@ -151,52 +344,83 @@ export default function CategoriasPage() {
       {/* Formulario */}
       {showForm && (
         <div className="card p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {editingId ? "Editar categoría" : "Nueva categoría"}
+          <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+            {editingId ? "Editar categoría" : formData.padreId
+              ? `Nueva subcategoría de: ${todasPlanas.find(c => c.id === formData.padreId)?.nombre}`
+              : "Nueva categoría"
+            }
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
+
+            {/* Categoría padre */}
             <div>
-              <label className="label-base">Nombre *</label>
+              <label className="label-base" style={{ color: "var(--text-primary)" }}>
+                Categoría padre <span style={{ color: "var(--text-faint)" }}>(opcional)</span>
+              </label>
+              <select
+                value={formData.padreId}
+                onChange={e => setFormData({ ...formData, padreId: e.target.value })}
+                className="input-base"
+                disabled={guardando}
+              >
+                <option value="">— Sin padre (categoría raíz) —</option>
+                {todasPlanas
+                  .filter(c => c.id !== editingId) // no puede ser su propio padre
+                  .map(c => (
+                    <option key={c.id} value={c.id}>
+                      {"  ".repeat(c.nivel)}{c.nivel > 0 ? "└ " : ""}{c.nombre}
+                    </option>
+                  ))
+                }
+              </select>
+            </div>
+
+            {/* Nombre */}
+            <div>
+              <label className="label-base" style={{ color: "var(--text-primary)" }}>Nombre *</label>
               <input
                 type="text"
                 value={formData.nombre}
-                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                onChange={e => setFormData({ ...formData, nombre: e.target.value })}
                 required
-                placeholder="Ej: Bebidas"
+                placeholder="Ej: Remeras"
                 className="input-base"
                 autoFocus
+                disabled={guardando}
               />
             </div>
+
+            {/* Descripción */}
             <div>
-              <label className="label-base">Descripción</label>
+              <label className="label-base" style={{ color: "var(--text-primary)" }}>Descripción</label>
               <textarea
                 value={formData.descripcion}
-                onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                rows={3}
+                onChange={e => setFormData({ ...formData, descripcion: e.target.value })}
+                rows={2}
                 placeholder="Descripción opcional..."
                 className="input-base resize-none"
+                disabled={guardando}
               />
             </div>
+
             {errorForm && (
-              <div className="flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-3 py-2.5">
-                <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
-                <p className="text-sm text-red-600 dark:text-red-400">{errorForm}</p>
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)" }}>
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" style={{ color: "#f87171" }} />
+                <p className="text-sm" style={{ color: "#f87171" }}>{errorForm}</p>
               </div>
             )}
+
             <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={guardando}
-                className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
+              <button type="submit" disabled={guardando}
+                className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50"
+                style={{ background: "#DC2626" }}>
                 {guardando && <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                 {editingId ? "Guardar cambios" : "Crear categoría"}
               </button>
-              <button
-                type="button"
-                onClick={handleCancelar}
-                className="rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              >
+              <button type="button" onClick={handleCancelar}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors"
+                style={{ border: "1px solid var(--border-base)", color: "var(--text-secondary)", background: "var(--bg-hover)" }}>
                 Cancelar
               </button>
             </div>
@@ -207,54 +431,29 @@ export default function CategoriasPage() {
       {/* Estado vacío */}
       {categorias.length === 0 ? (
         <div className="card py-20 text-center">
-          <FolderTree className="h-12 w-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">Sin categorías</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          <FolderTree className="h-12 w-12 mx-auto mb-4" style={{ color: "var(--text-faint)" }} />
+          <h3 className="text-lg font-medium mb-1" style={{ color: "var(--text-primary)" }}>Sin categorías</h3>
+          <p className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
             Creá tu primera categoría para organizar los productos
           </p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium"
-          >
+          <button onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-2 text-sm font-medium"
+            style={{ color: "#DC2626" }}>
             <Plus className="h-4 w-4" /> Crear categoría
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {categorias.map((categoria) => (
-            <div key={categoria.id} className="card p-5 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
-                    {categoria.nombre}
-                  </h3>
-                  <span className="mt-1 inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400">
-                    {categoria._count.productos} producto{categoria._count.productos !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="flex gap-1 ml-2 flex-shrink-0">
-                  <button
-                    onClick={() => handleEditar(categoria)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-                    title="Editar"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleEliminar(categoria)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    title="Eliminar"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-              {categoria.descripcion && (
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
-                  {categoria.descripcion}
-                </p>
-              )}
-            </div>
+        <div className="space-y-1">
+          {categorias.map(categoria => (
+            <NodoCategoria
+              key={categoria.id}
+              categoria={categoria}
+              nivel={0}
+              todasPlanas={todasPlanas}
+              onEditar={handleEditar}
+              onEliminar={handleEliminar}
+              onAgregarHija={handleAgregarHija}
+            />
           ))}
         </div>
       )}

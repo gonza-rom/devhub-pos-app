@@ -54,8 +54,19 @@ const getVentasData = cache(async (tenantId: string) => {
         }),
 
         prisma.categoria.findMany({
-          where: { tenantId },
-          select: { id: true, nombre: true },
+          where:   { tenantId, padreId: null },
+          select:  {
+            id: true, nombre: true,
+            hijas: {
+              select: {
+                id: true, nombre: true,
+                hijas: {
+                  select: { id: true, nombre: true, hijas: { select: { id: true, nombre: true } } }
+                }
+              },
+              orderBy: { nombre: "asc" },
+            },
+          },
           orderBy: { nombre: "asc" },
         }),
       ]);

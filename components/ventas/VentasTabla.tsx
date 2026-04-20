@@ -2,7 +2,7 @@
 // components/ventas/VentasTabla.tsx
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Package, Receipt, Ban, AlertTriangle, X, CreditCard } from "lucide-react";
+import { ChevronDown, ChevronUp, Package, Receipt, Ban, AlertTriangle, X, CreditCard, RotateCcw } from "lucide-react";
 import { formatPrecio } from "@/lib/utils";
 import { fmtFecha24HoraAR } from "@/lib/dateAR";
 import { useRouter } from "next/navigation";
@@ -77,6 +77,9 @@ export default function VentasTabla({ ventas }: Props) {
   const [motivoCancelacion, setMotivoCancelacion] = useState("");
   const [cancelando,        setCancelando]        = useState(false);
 
+  const [modalReactivar,  setModalReactivar]  = useState<Venta | null>(null);
+  const [reactivando,     setReactivando]     = useState(false);
+
   // — Cambiar método de pago —
   const [modalMetodoPago,   setModalMetodoPago]   = useState<Venta | null>(null);
   const [nuevoMetodo,       setNuevoMetodo]       = useState("");
@@ -116,6 +119,34 @@ export default function VentasTabla({ ventas }: Props) {
       setCancelando(false);
     }
   }
+
+  // ── Reactivar venta ────────────────────────────────────────────────────
+  async function confirmarReactivacion() {
+  if (!modalReactivar) return;
+  setReactivando(true);
+  const toastId = toast.loading("Reactivando venta...");
+  try {
+    const res  = await fetch(`/api/ventas/${modalReactivar.id}/reactivar`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      toast.update(toastId, { type: "error", title: "Error al reactivar", description: data.error ?? "Intentá de nuevo" });
+      return;
+    }
+    toast.update(toastId, {
+      type:        "success",
+      title:       "Venta reactivada",
+      description: `Stock descontado · ${formatPrecio(modalReactivar.total)}`,
+    });
+    setModalReactivar(null);
+    router.refresh();
+  } catch {
+    toast.update(toastId, { type: "error", title: "Error de conexión" });
+  } finally {
+    setReactivando(false);
+  }
+}
 
   // ── Cambiar método de pago ────────────────────────────────────────────
   function abrirModalMetodo(venta: Venta, e: React.MouseEvent) {
@@ -306,6 +337,20 @@ export default function VentasTabla({ ventas }: Props) {
                               <span className="hidden sm:inline">Cancelar</span>
                             </button>
                           </>
+                        )}
+                        {/* ── Reactivar — solo si está cancelada ── */}
+                        {venta.cancelado && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setModalReactivar(venta);
+                            }}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors"
+                            style={{ color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                            <span className="hidden sm:inline">Reactivar</span>
+                          </button>
                         )}
                         <button
                           className="flex items-center justify-center h-7 w-7 rounded-lg transition-colors"
@@ -640,6 +685,67 @@ export default function VentasTabla({ ventas }: Props) {
                 style={{ background: "var(--bg-hover)", color: "var(--text-secondary)", border: "1px solid var(--border-base)" }}
               >
                 No, volver
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {modalReactivar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => !reactivando && setModalReactivar(null)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl shadow-xl p-6 space-y-4"
+            style={{ background: "var(--bg-card)", border: "1px solid var(--border-base)" }}>
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full flex-shrink-0" style={{ background: "rgba(34,197,94,0.12)" }}>
+                <RotateCcw className="h-6 w-6" style={{ color: "#22c55e" }} />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>Reactivar venta</h2>
+                <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  Esto descontará el stock de los productos y registrará el ingreso en caja si hay una abierta.
+                </p>
+              </div>
+              <button onClick={() => setModalReactivar(null)} style={{ color: "var(--text-muted)" }}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="rounded-xl p-4 text-sm space-y-1"
+              style={{ background: "var(--bg-surface)", border: "1px solid var(--border-base)" }}>
+              <p className="font-medium" style={{ color: "var(--text-primary)" }}>
+                Venta #{modalReactivar.id.slice(0, 8).toUpperCase()}
+              </p>
+              <p style={{ color: "var(--text-muted)" }}>
+                {fmtFecha24HoraAR(
+                  typeof modalReactivar.createdAt === "string"
+                    ? modalReactivar.createdAt
+                    : modalReactivar.createdAt.toISOString()
+                )}
+              </p>
+              <p className="text-lg font-bold" style={{ color: "#22c55e" }}>
+                {formatPrecio(modalReactivar.total)}
+              </p>
+              <p className="text-xs" style={{ color: "var(--text-faint)" }}>
+                {modalReactivar.items.length} {modalReactivar.items.length === 1 ? "producto" : "productos"}
+              </p>
+              {modalReactivar.motivoCancelacion && (
+                <p className="text-xs" style={{ color: "var(--text-faint)" }}>
+                  Motivo de cancelación: {modalReactivar.motivoCancelacion}
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={confirmarReactivacion} disabled={reactivando}
+                className="flex-1 rounded-xl py-2.5 text-sm font-bold transition-colors disabled:opacity-50"
+                style={{ background: "#16a34a", color: "#fff" }}>
+                {reactivando ? "Reactivando..." : "Sí, reactivar venta"}
+              </button>
+              <button onClick={() => setModalReactivar(null)} disabled={reactivando}
+                className="flex-1 rounded-xl py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+                style={{ background: "var(--bg-hover)", color: "var(--text-secondary)", border: "1px solid var(--border-base)" }}>
+                Cancelar
               </button>
             </div>
           </div>
