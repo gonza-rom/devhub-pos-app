@@ -267,11 +267,11 @@ export default function VentasTabla({ ventas }: Props) {
                       <span
                         className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold"
                         style={{
-                          background: METODO_COLOR[venta.metodoPago] ?? "rgba(150,150,150,0.12)",
-                          color:      METODO_TEXT[venta.metodoPago]  ?? "var(--text-muted)",
+                          background: METODO_COLOR[venta.metodoPago.toUpperCase()] ?? "rgba(150,150,150,0.12)",
+                          color:      METODO_TEXT[venta.metodoPago.toUpperCase()]  ?? "var(--text-muted)",
                         }}
                       >
-                        {METODO_LABEL[venta.metodoPago] ?? venta.metodoPago}
+                        {METODO_LABEL[venta.metodoPago.toUpperCase()] ?? venta.metodoPago}
                       </span>
                     </td>
 
@@ -299,14 +299,24 @@ export default function VentasTabla({ ventas }: Props) {
                         {formatPrecio(venta.total)}
                       </p>
                       {(venta.recargo ?? 0) > 0 && (
-                        <p className="text-xs" style={{ color: "#fb923c" }}>
-                          +{formatPrecio(venta.recargo!)}
-                        </p>
+                        <>
+                          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                            {formatPrecio(venta.subtotal ?? venta.total)}
+                          </p>
+                          <p className="text-xs" style={{ color: "#fb923c" }}>
+                            +{formatPrecio(venta.recargo!)}
+                          </p>
+                        </>
                       )}
                       {(venta.descuento ?? 0) > 0 && (
-                        <p className="text-xs" style={{ color: "#f87171" }}>
-                          -{formatPrecio(venta.descuento!)}
-                        </p>
+                        <>
+                          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                            {formatPrecio(venta.subtotal ?? venta.total)}
+                          </p>
+                          <p className="text-xs" style={{ color: "#f87171" }}>
+                            -{formatPrecio(venta.descuento!)}
+                          </p>
+                        </>
                       )}
                     </td>
 
