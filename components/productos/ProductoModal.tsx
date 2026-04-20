@@ -14,7 +14,7 @@ import type { Proveedor, Producto } from "@/types";
 type CategoriaArbol = {
   id:     string;
   nombre: string;
-  hijas:  CategoriaArbol[];
+  hijas?: CategoriaArbol[];
 };
 
 type FormData = {
@@ -67,7 +67,7 @@ function productoToForm(p: Producto): FormData {
 function encontrarCategoria(cats: CategoriaArbol[], id: string): CategoriaArbol | null {
   for (const cat of cats) {
     if (cat.id === id) return cat;
-    const encontrada = encontrarCategoria(cat.hijas, id);
+    const encontrada = encontrarCategoria(cat.hijas ?? [], id);  // ← fix
     if (encontrada) return encontrada;
   }
   return null;

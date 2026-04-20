@@ -75,10 +75,11 @@ const getCategoriasCached = unstable_cache(
       select:  {
         id: true, nombre: true,
         hijas: {
-          select: { id: true, nombre: true,
-            hijas: { select: { id: true, nombre: true,
-              hijas: { select: { id: true, nombre: true } }
-            }}
+          select: {
+            id: true, nombre: true,
+            hijas: {
+              select: { id: true, nombre: true, hijas: { select: { id: true, nombre: true } } }
+            }
           },
           orderBy: { nombre: "asc" },
         },

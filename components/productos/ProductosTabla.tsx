@@ -27,9 +27,15 @@ type ProductoFila = {
   categoria?: { id: string; nombre: string } | null;
 };
 
+type CategoriaArbol = {
+  id:     string;
+  nombre: string;
+  hijas?: CategoriaArbol[];
+};
+
 type Props = {
   productos:   ProductoFila[];
-  categorias:  Pick<Categoria, "id" | "nombre">[];
+  categorias:  CategoriaArbol[];
   proveedores: Pick<Proveedor, "id" | "nombre">[];
   totalProductos: number;
   ordenar?: string;
@@ -654,7 +660,7 @@ export default function ProductosTabla({
 export function NuevoProductoBtn({
   categorias, proveedores,
 }: {
-  categorias:  Pick<Categoria, "id" | "nombre">[];
+  categorias:  CategoriaArbol[];
   proveedores: Pick<Proveedor, "id" | "nombre">[];
 }) {
   const router = useRouter();
