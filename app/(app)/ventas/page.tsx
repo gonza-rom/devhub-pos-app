@@ -19,6 +19,7 @@ const SELECT_PRODUCTO_POS = {
   codigoProducto: true,
   categoriaId: true,
   tieneVariantes: true,
+  unidad: true,
   categoria: {
     select: { id: true, nombre: true },
   },

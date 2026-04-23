@@ -39,6 +39,8 @@ type ProductoConCategoria = {
   categoriaId: string | null;
   categoria: { id: string; nombre: string } | null;
   tieneVariantes?: boolean;
+  unidad: string | null;
+
 };
 
 type CategoriaSimple = { id: string; nombre: string; hijas?: CategoriaSimple[] };
@@ -107,7 +109,6 @@ const GAP            = 6;
 // Cache de productos por clave (categoría + búsqueda) — persiste entre renders
 const _productosCache: Record<string, { productos: ProductoConCategoria[]; ts: number }> = {};
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
-
 
 function ModalVariante({ producto, variantes, cargando, onConfirmar, onCerrar }: {
   producto: ProductoConCategoria;
@@ -225,6 +226,12 @@ function ModalVariante({ producto, variantes, cargando, onConfirmar, onCerrar }:
   );
 }
 
+const UNIDADES_PESO = ["kg", "g", "gr", "gramo", "kilo", "litro", "lt", "l"];
+
+function esPorPeso(unidad: string | null | undefined) {
+  return UNIDADES_PESO.includes((unidad ?? "").toLowerCase().trim());
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function POSClient({
@@ -309,6 +316,12 @@ export default function POSClient({
   const [modalVariante,     setModalVariante]     = useState<ProductoConCategoria | null>(null);
   const [variantesModal,    setVariantesModal]    = useState<Variante[]>([]);
   const [cargandoVariantes, setCargandoVariantes] = useState(false);
+
+  //PESO
+  const [modalPeso, setModalPeso] = useState<ProductoConCategoria | null>(null);
+  const [pesoIngresado, setPesoIngresado] = useState("");
+  const [precioAjustado, setPrecioAjustado] = useState<string>("");
+
   // ── Columnas dinámicas ──────────────────────────────────────────────────────
 
   const columnCount   = Math.max(2, Math.min(8, Math.floor(gridWidth / (MIN_CARD_WIDTH + GAP))));
@@ -526,6 +539,7 @@ export default function POSClient({
   const agregarAlCarrito = useCallback((producto: ProductoConCategoria) => {
     if (producto.stock <= 0 && !producto.tieneVariantes) return;
 
+    
     if (producto.tieneVariantes) {
     setModalVariante(producto);
     setCargandoVariantes(true);
@@ -536,6 +550,12 @@ export default function POSClient({
       .finally(() => setCargandoVariantes(false));
     return;
   }
+    if (esPorPeso(producto.unidad)) {
+      setModalPeso(producto);
+      setPesoIngresado("");
+      setPrecioAjustado("");
+      return;
+    }
     setCarrito((prev) => {
       const existente = prev.find((i) => i.productoId === producto.id);
       if (existente) {
@@ -560,6 +580,7 @@ export default function POSClient({
       ];
     });
   }, [toast]);
+
 
   const agregarVarianteAlCarrito = useCallback((producto: ProductoConCategoria, variante: Variante) => {
   const precio = variante.precio ?? producto.precio;
@@ -856,6 +877,7 @@ export default function POSClient({
       codigoProducto: nuevoProducto.codigoProducto,
       categoriaId:    nuevoProducto.categoriaId,
       categoria:      nuevoProducto.categoria || null,
+      unidad:         nuevoProducto.unidad ?? null,
     };
     setProductos((prev) => [productoConCategoria, ...prev]);
     productosInicialesRef.current = [productoConCategoria, ...productosInicialesRef.current];
@@ -1476,6 +1498,35 @@ export default function POSClient({
     </div>
   );
 
+  // ── Peso ────────────────────────────────────────────────────────────────────
+  function confirmarPeso() {
+    if (!modalPeso) return;
+    const peso = parseFloat(pesoIngresado.replace(",", "."));
+    if (!peso || peso <= 0) return;
+
+    const precioCalculado = Math.round(modalPeso.precio * peso * 100) / 100;
+    // Tomar el precio ajustado del estado, si está vacío o es 0 usar el calculado
+    const precioFinal = parseFloat(precioAjustado) > 0 
+      ? parseFloat(precioAjustado) 
+      : precioCalculado;
+
+    const nombre = `${modalPeso.nombre} (${peso} ${modalPeso.unidad ?? "kg"})`;
+
+    setCarrito(prev => [...prev, {
+      productoId: `${modalPeso.id}_${Date.now()}`,
+      nombre,
+      precio:   precioFinal,
+      cantidad: 1,
+      subtotal: precioFinal,
+      stock:    999,
+      imagen:   modalPeso.imagen,
+    }]);
+
+    setModalPeso(null);
+    setPesoIngresado("");
+    setPrecioAjustado("");
+  }
+    
   // ── Layout ──────────────────────────────────────────────────────────────────
 
   const alturaBase = isModal ? "h-full" : "h-[calc(100vh-4rem)] sm:h-[calc(100vh-3.5rem)]";
@@ -1618,6 +1669,143 @@ export default function POSClient({
                 {editando ? "Guardando..." : "Guardar"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Peso Producto */}
+      {modalPeso && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          onClick={() => setModalPeso(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-2xl p-5 space-y-4"
+            style={{ background: "var(--bg-surface)", border: "1px solid var(--border-base)" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm" style={{ color: "var(--text-primary)" }}>
+                  {modalPeso.nombre}
+                </h3>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-faint)" }}>
+                  {formatPrecio(modalPeso.precio)} / {modalPeso.unidad ?? "kg"}
+                </p>
+              </div>
+              <button onClick={() => setModalPeso(null)} style={{ color: "var(--text-faint)" }}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: "var(--text-muted)" }}>
+                Peso ({modalPeso.unidad ?? "kg"})
+              </label>
+              <input
+                type="number"
+                value={pesoIngresado}
+                onChange={e => {
+                  setPesoIngresado(e.target.value);
+                  const p = parseFloat(e.target.value.replace(",", "."));
+                  if (p > 0) {
+                    const calculado = Math.round(modalPeso.precio * p * 100) / 100;
+                    setPrecioAjustado(String(calculado));
+                  } else {
+                    setPrecioAjustado("");
+                  }
+                }}
+                onKeyDown={e => e.key === "Enter" && confirmarPeso()}
+                placeholder="0.000"
+                step="0.001"
+                min="0"
+                className="input-base w-full text-lg text-center font-bold"
+                autoFocus
+                onWheel={e => e.currentTarget.blur()}
+              />
+            </div>
+
+            {/* ← AQUÍ, después del input de peso */}
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                { label: "¼ kg", valor: 0.25 },
+                { label: "½ kg", valor: 0.5 },
+                { label: "¾ kg", valor: 0.75 },
+                { label: "1 kg",  valor: 1 },
+              ].map(({ label, valor }) => (
+                <button
+                  key={valor}
+                  onClick={() => {
+                    setPesoIngresado(String(valor));
+                    const calculado = Math.round(modalPeso.precio * valor * 100) / 100;
+                    setPrecioAjustado(String(calculado));
+                  }}
+                  className="py-2 rounded-lg text-xs font-bold transition-all"
+                  style={{
+                    background: pesoIngresado === String(valor)
+                      ? "rgba(220,38,38,0.2)"
+                      : "var(--bg-hover-md)",
+                    border: pesoIngresado === String(valor)
+                      ? "1px solid rgba(220,38,38,0.5)"
+                      : "1px solid var(--border-base)",
+                    color: pesoIngresado === String(valor)
+                      ? "#f87171"
+                      : "var(--text-secondary)",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {pesoIngresado && parseFloat(pesoIngresado.replace(",", ".")) > 0 && (
+              <div
+                className="rounded-xl px-4 py-3 space-y-2"
+                style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)" }}
+              >
+                <p className="text-xs text-center" style={{ color: "var(--text-faint)" }}>
+                  Sugerido: {formatPrecio(Math.round(modalPeso.precio * parseFloat(pesoIngresado.replace(",", ".")) * 100) / 100)}
+                </p>
+                <div>
+                  <label className="text-xs font-medium block mb-1 text-center" style={{ color: "var(--text-muted)" }}>
+                    Precio final $
+                  </label>
+                  <input
+                    type="number"
+                    value={precioAjustado}
+                    onChange={e => {
+                      setPrecioAjustado(e.target.value);
+                      // Recalcular el peso en base al precio ajustado
+                      const precioNuevo = parseFloat(e.target.value);
+                      if (precioNuevo > 0 && modalPeso.precio > 0) {
+                        const pesoEquivalente = Math.round((precioNuevo / modalPeso.precio) * 1000) / 1000;
+                        setPesoIngresado(String(pesoEquivalente));
+                      }
+                    }}
+                    onKeyDown={e => e.key === "Enter" && confirmarPeso()}
+                    placeholder={String(Math.round(modalPeso.precio * parseFloat(pesoIngresado.replace(",", ".")) * 100) / 100)}
+                    step="1"
+                    min="0"
+                    className="input-base w-full text-2xl text-center font-bold"
+                    style={{ color: "#f87171" }}
+                    onWheel={e => e.currentTarget.blur()}
+                  />
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={confirmarPeso}
+              disabled={!pesoIngresado || parseFloat(pesoIngresado.replace(",", ".")) <= 0}
+              className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold disabled:opacity-40"
+              style={{ background: "#DC2626", color: "#ffffff" }}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Agregar — {pesoIngresado && parseFloat(pesoIngresado) > 0
+                ? formatPrecio(parseFloat(precioAjustado) > 0 
+                    ? parseFloat(precioAjustado) 
+                    : Math.round(modalPeso.precio * parseFloat(pesoIngresado) * 100) / 100)
+                : "$0"
+              }
+            </button>
           </div>
         </div>
       )}
