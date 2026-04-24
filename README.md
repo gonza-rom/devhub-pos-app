@@ -2,8 +2,8 @@
 
 Sistema de gestión y punto de venta SaaS multi-tenant para comercios modernos. Gestión de productos, inventario, ventas, caja y reportes — todo en la nube.
 
-🌐 **Landing:** [devhub-pos.vercel.app](https://pos.devhub.com.ar/)
-🚀 **App:** [devhub-pos-app.vercel.app](https://app.pos.devhub.com.ar/)
+🌐 **Landing:** [pos.devhub.com.ar](https://pos.devhub.com.ar/)
+🚀 **App:** [app.pos.devhub.com.ar](https://app.pos.devhub.com.ar/)
 
 ---
 
