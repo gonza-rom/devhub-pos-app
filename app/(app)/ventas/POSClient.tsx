@@ -55,6 +55,7 @@ type Variante = {
 
 type ItemCarrito = {
   productoId: string;
+  carritoKey: string;
   nombre: string;
   precio: number;
   cantidad: number;
@@ -570,6 +571,7 @@ export default function POSClient({
         ...prev,
         {
           productoId: producto.id,
+          carritoKey: producto.id,  // ← agregar (productos normales no se repiten)
           nombre:     producto.nombre,
           precio:     producto.precio,
           cantidad:   1,
@@ -597,7 +599,7 @@ export default function POSClient({
       );
     }
     return [...prev, {
-      productoId: clave, varianteId: variante.id, nombre, precio,
+      productoId: clave, varianteId: variante.id, nombre, precio,carritoKey: clave,
       cantidad: 1, subtotal: precio, stock: variante.stock,
       imagen: producto.imagen, talle: variante.talle, color: variante.color,
     }];
@@ -607,11 +609,11 @@ export default function POSClient({
   setVariantesModal([]);
 }, []);
 
-  const cambiarCantidad = useCallback((productoId: string, delta: number) => {
+  const cambiarCantidad = useCallback((carritoKey: string, delta: number) => {
     setCarrito((prev) =>
       prev
         .map((i) => {
-          if (i.productoId !== productoId) return i;
+          if (i.carritoKey !== carritoKey) return i;  // ← cambiar
           const nuevaCantidad = i.cantidad + delta;
           if (nuevaCantidad <= 0) return null as unknown as ItemCarrito;
           if (nuevaCantidad > i.stock) return i;
@@ -621,8 +623,8 @@ export default function POSClient({
     );
   }, []);
 
-  const eliminarDelCarrito = useCallback((productoId: string) => {
-    setCarrito((prev) => prev.filter((i) => i.productoId !== productoId));
+  const eliminarDelCarrito = useCallback((carritoKey: string) => {
+    setCarrito((prev) => prev.filter((i) => i.carritoKey !== carritoKey));
   }, []);
 
   const limpiarCarrito = useCallback(() => {
@@ -1196,6 +1198,7 @@ export default function POSClient({
               if (!itemManualNombre.trim()) return;
               setCarrito(prev => [...prev, {
                 productoId: `manual_${Date.now()}`,
+                carritoKey: `manual_${Date.now()}`,  // ← agregar (mismo valor está bien)
                 nombre:     itemManualNombre.trim(),
                 precio,
                 cantidad:   1,
@@ -1228,13 +1231,13 @@ export default function POSClient({
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
             {carrito.map((item) => (
-              <div key={item.productoId} className="flex items-center gap-2 px-2 py-2.5">
+              <div key={item.carritoKey} className="flex items-center gap-2 px-2 py-2.5">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.nombre}</p>
                   <p className="text-xs" style={{ color: "var(--text-faint)" }}>{formatPrecio(item.precio)} c/u</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => cambiarCantidad(item.productoId, -1)}
+                  <button onClick={() => cambiarCantidad(item.carritoKey, -1)}
                     className="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
                     style={{ border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
                     onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-primary)")}
@@ -1242,7 +1245,7 @@ export default function POSClient({
                     <Minus className="h-3 w-3" />
                   </button>
                   <span className="w-6 text-center text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.cantidad}</span>
-                  <button onClick={() => cambiarCantidad(item.productoId, 1)}
+                  <button onClick={() => cambiarCantidad(item.carritoKey, 1)}
                     disabled={item.cantidad >= item.stock}
                     className="flex h-6 w-6 items-center justify-center rounded-md transition-colors disabled:opacity-30"
                     style={{ border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
@@ -1513,7 +1516,8 @@ export default function POSClient({
     const nombre = `${modalPeso.nombre} (${peso} ${modalPeso.unidad ?? "kg"})`;
 
     setCarrito(prev => [...prev, {
-      productoId: `${modalPeso.id}_${Date.now()}`,
+      productoId: modalPeso.id,                        // ← ID real
+      carritoKey: `${modalPeso.id}_${Date.now()}`,     // ← clave única
       nombre,
       precio:   precioFinal,
       cantidad: 1,
