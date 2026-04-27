@@ -23,6 +23,7 @@ type ProductoFila = {
   stockMinimo: number;
   unidad: string | null;
   imagen: string | null;
+  imagenes: string[];
   categoriaId: string | null;
   categoria?: { id: string; nombre: string } | null;
 };

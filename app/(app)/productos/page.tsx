@@ -40,13 +40,14 @@ const getProductosCached = unstable_cache(
     const [productos, total] = await Promise.all([
       prisma.producto.findMany({
         where,
-        select: {
-          id: true, nombre: true, codigoProducto: true,
-          precio: true,
-          stock: true, stockMinimo: true, unidad: true,
-          imagen: true, categoriaId: true,
-          categoria: { select: { id: true, nombre: true } },
-        },
+          select: {
+            id: true, nombre: true, codigoProducto: true,
+            precio: true,
+            stock: true, stockMinimo: true, unidad: true,
+            imagen: true, imagenes: true,   // ← agregar imagenes: true
+            categoriaId: true,
+            categoria: { select: { id: true, nombre: true } },
+          },
         orderBy,
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,

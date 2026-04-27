@@ -105,7 +105,7 @@ export default function MultipleImageUpload({
     }
 
     if (urls.length > 0) {
-      onChange([...imagenes, ...urls]);
+      onChange([...value, ...urls]); 
     }
     if (errores.length > 0) {
       setError(errores.join(" · "));
