@@ -2,7 +2,7 @@
 // components/productos/ProductoModal.tsx
 
 import { useState, useEffect } from "react";
-import { X, Package, Plus, Trash2 } from "lucide-react";
+import { X, Package, Plus, Trash2, ExternalLink } from "lucide-react";
 import MultipleImageUpload from "@/components/ui/MultipleImageUpload";
 import { useFetch }        from "@/hooks/useFetch";
 import { useToast }        from "@/components/toast";
@@ -321,6 +321,22 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
               value={form.imagenes}
               onChange={imagenes => setForm(prev => ({ ...prev, imagenes, imagen: imagenes[0] ?? "" }))}
             />
+            {form.nombre && (
+              <a
+                href={`https://www.google.com/search?q=${encodeURIComponent(form.nombre + " " + (form.codigoProducto ?? ""))}&tbm=isch`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-lg transition-colors"
+                style={{ 
+                  background: "rgba(59,130,246,0.08)", 
+                  border: "1px solid rgba(59,130,246,0.2)", 
+                  color: "#60a5fa" 
+                }}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Buscar imagen en Google
+              </a>
+            )}
             <div className="h-px" style={{ background: "var(--border-subtle)" }} />
 
             {/* Información */}
@@ -455,7 +471,7 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
                 className="relative flex-shrink-0 h-6 w-11 rounded-full transition-colors duration-200"
                 style={{ background: form.visibleCatalogo ? "var(--color-red)" : "rgba(220,38,38,0.3)" }}>
                 <span className="absolute top-0.5 h-5 w-5 rounded-full shadow toggle-thumb transition-transform duration-200"
-                  style={{ transform: form.visibleCatalogo ? "translateX(22px)" : "translateX(2px)" }} />
+                  style={{ transform: form.visibleCatalogo ? "translateX(-22px)" : "translateX(2px)" }} />
               </button>
             </div>
 
@@ -471,7 +487,7 @@ export default function ProductoModal({ producto, categorias, proveedores, onClo
                   className="relative flex-shrink-0 h-6 w-11 rounded-full transition-colors duration-200"
                   style={{ background: form.tieneVariantes ? "var(--color-red)" : "rgba(220,38,38,0.3)" }}>
                   <span className="absolute top-0.5 h-5 w-5 rounded-full shadow toggle-thumb transition-transform duration-200"
-                    style={{ transform: form.tieneVariantes ? "translateX(22px)" : "translateX(2px)" }} />
+                    style={{ transform: form.tieneVariantes ? "translateX(-22px)" : "translateX(2px)" }} />
                 </button>
               </div>
 

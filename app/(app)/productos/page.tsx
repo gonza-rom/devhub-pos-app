@@ -45,6 +45,7 @@ const getProductosCached = unstable_cache(
             precio: true,
             stock: true, stockMinimo: true, unidad: true,
             imagen: true, imagenes: true,   // ← agregar imagenes: true
+            visibleCatalogo: true,
             categoriaId: true,
             categoria: { select: { id: true, nombre: true } },
           },
