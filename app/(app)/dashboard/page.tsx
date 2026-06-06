@@ -365,8 +365,7 @@ export default async function DashboardPage() {
   const meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 
   return (
-    <div className="space-y-6 max-w-6xl">
-
+    <div className="space-y-6 max-w-6xl mx-auto w-full">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>

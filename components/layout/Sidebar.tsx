@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useFetch } from "@/hooks/useFetch";
 import {
-  Store, Crown, ChevronRight, ChevronDown, AlertTriangle,
+  Store, Crown, ChevronRight, ChevronDown, AlertTriangle, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/theme/ThemeToggle";
@@ -57,10 +57,10 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
   const [logoLocal,   setLogoLocal]   = useState<string | null | undefined>(logoUrl);
   const [nombreLocal, setNombreLocal] = useState(nombreTenant);
   const [uso,         setUso]         = useState<UsoData>(null);
+  const [colapsado,   setColapsado]   = useState(false);
 
   const items = filtrarNavItems(NAV_ITEMS, rol, tieneAFIP);
 
-  // Grupos expandidos — arranca con el grupo activo según la ruta
   const [expandidos, setExpandidos] = useState<Set<string>>(() => {
     const inicial = new Set<string>();
     NAV_ITEMS.forEach((item) => {
@@ -74,7 +74,6 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
   useEffect(() => { setLogoLocal(logoUrl); },        [logoUrl]);
   useEffect(() => { setNombreLocal(nombreTenant); }, [nombreTenant]);
 
-  // Expandir grupo automáticamente si la ruta cambia hacia él
   useEffect(() => {
     NAV_ITEMS.forEach((item) => {
       if (item.children && pathname.startsWith(item.href)) {
@@ -85,24 +84,12 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
 
   useEffect(() => {
     if (plan !== "FREE") return;
-
     const cached = getPlanUsoCache();
-    if (cached) {
-      setUso({ ...cached.uso, trial: cached.trial });
-      return;
-    }
-
+    if (cached) { setUso({ ...cached.uso, trial: cached.trial }); return; }
     apiFetch("/api/plan/uso")
       .then((r) => r.json())
-      .then((d) => {
-        if (d.ok) {
-          setPlanUsoCache(d.data);
-          setUso({ ...d.data.uso, trial: d.data.trial });
-        }
-      })
-      .catch((err) => {
-        if (err?.message !== "SESSION_EXPIRED") console.error(err);
-      });
+      .then((d) => { if (d.ok) { setPlanUsoCache(d.data); setUso({ ...d.data.uso, trial: d.data.trial }); } })
+      .catch((err) => { if (err?.message !== "SESSION_EXPIRED") console.error(err); });
   }, [plan]);
 
   useEffect(() => {
@@ -123,14 +110,82 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
   function toggleGrupo(href: string) {
     setExpandidos((prev) => {
       const next = new Set(prev);
-      if (next.has(href)) next.delete(href);
-      else next.add(href);
+      if (next.has(href)) next.delete(href); else next.add(href);
       return next;
     });
   }
 
   const productosAlerta = plan === "FREE" && uso !== null && uso.productos >= 45;
 
+  // ── Vista colapsada ─────────────────────────────────────────────────────────
+  if (colapsado) {
+    return (
+      <aside
+        className="hidden md:flex flex-col items-center h-screen flex-shrink-0 py-4 gap-3"
+        style={{
+          width: "56px",
+          background: "var(--bg-surface)",
+          borderRight: "1px solid var(--border-base)",
+          transition: "width 0.2s ease",
+        }}
+      >
+        {/* Logo */}
+        <div className="h-9 w-9 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0"
+          style={{ background: logoLocal ? "transparent" : "rgba(220,38,38,0.15)", border: "1px solid rgba(220,38,38,0.3)" }}>
+          {logoLocal
+            ? <img src={logoLocal} alt={nombreLocal} className="h-9 w-9 object-cover" />
+            : <Store className="h-4 w-4" style={{ color: "#DC2626" }} />}
+        </div>
+
+        {/* Separador */}
+        <div className="w-8 border-t flex-shrink-0" style={{ borderColor: "var(--border-base)" }} />
+
+        {/* Botón expandir */}
+        <button
+          onClick={() => setColapsado(false)}
+          className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
+          style={{ border: "1px solid var(--border-md)", color: "var(--text-muted)" }}
+          title="Expandir sidebar"
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
+
+        {/* Separador */}
+        <div className="w-8 border-t flex-shrink-0" style={{ borderColor: "var(--border-base)" }} />
+
+        {/* Nav items — solo iconos */}
+        <nav className="flex-1 min-h-0 flex flex-col items-center gap-1 overflow-y-auto w-full px-2 sidebar-scroll">
+          {items.map((item) => {
+            const Icon    = item.icon;
+            const activo  = !item.children
+              ? (pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/")))
+              : pathname.startsWith(item.href);
+            const href    = item.children ? item.children[0].href : item.href;
+
+            return (
+              <Link key={item.href} href={href}
+                title={item.label}
+                className="flex h-9 w-9 items-center justify-center rounded-lg transition-all flex-shrink-0"
+                style={activo
+                  ? { background: "rgba(220,38,38,0.14)", border: "1px solid rgba(220,38,38,0.28)", color: "#ef4444" }
+                  : { border: "1px solid transparent", color: "var(--text-secondary)" }
+                }
+                onMouseEnter={e => { if (!activo) (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"; }}
+                onMouseLeave={e => { if (!activo) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              >
+                <Icon className="h-4 w-4" />
+              </Link>
+            );
+          })}
+        </nav>
+
+      </aside>
+    );
+  }
+
+  // ── Vista expandida ─────────────────────────────────────────────────────────
   return (
     <aside
       className="hidden md:flex flex-col w-64 h-screen flex-shrink-0"
@@ -159,6 +214,17 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
             {badge.label}
           </span>
         </div>
+        {/* Botón colapsar */}
+        <button
+          onClick={() => setColapsado(true)}
+          className="flex-shrink-0 flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+          style={{ border: "1px solid var(--border-md)", color: "var(--text-muted)" }}
+          title="Colapsar sidebar"
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; (e.currentTarget as HTMLElement).style.background = "var(--bg-hover-md)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+        >
+          <PanelLeftClose className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       {/* ── Uso FREE ── */}
@@ -199,7 +265,7 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
       )}
 
       {/* ── Nav ── */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5 sidebar-scroll">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-0.5 sidebar-scroll">
         {items.map((item) => {
           const Icon          = item.icon;
           const estaExpandido = expandidos.has(item.href);
@@ -209,7 +275,6 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
 
           return (
             <div key={item.href}>
-              {/* ── Fila del item ── */}
               <div
                 className="relative flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 select-none"
                 style={activo
@@ -223,8 +288,6 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-full"
                     style={{ background: "#DC2626" }} />
                 )}
-
-                {/* Icono + label → siempre navega */}
                 <Link
                   href={item.children ? item.children[0].href : item.href}
                   className="flex items-center gap-3 flex-1 min-w-0"
@@ -233,8 +296,6 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
                     style={{ color: activo ? "#ef4444" : "var(--color-red)" }} />
                   <span className="flex-1 truncate">{item.label}</span>
                 </Link>
-
-                {/* Flecha → solo despliega, NO navega */}
                 {item.children ? (
                   <button
                     onClick={() => toggleGrupo(item.href)}
@@ -250,7 +311,6 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
                 ) : null}
               </div>
 
-              {/* ── Subitems ── */}
               {item.children && estaExpandido && (
                 <div className="ml-3 mt-0.5 mb-1 pl-3 space-y-0.5"
                   style={{ borderLeft: "1px solid rgba(220,38,38,0.2)" }}>
@@ -261,7 +321,6 @@ export default function Sidebar({ nombreTenant, plan, logoUrl, rol, tieneAFIP = 
                       const subActivo =
                         sub.href === "/configuracion" ? pathname === "/configuracion" :
                         pathname.startsWith(sub.href);
-
                       return (
                         <Link key={sub.href} href={sub.href}
                           className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-all duration-150"

@@ -44,7 +44,7 @@ const getProductosCached = unstable_cache(
             id: true, nombre: true, codigoProducto: true,
             precio: true,
             stock: true, stockMinimo: true, unidad: true,
-            imagen: true, imagenes: true,   // ← agregar imagenes: true
+            imagen: true, imagenes: true,
             visibleCatalogo: true,
             categoriaId: true,
             categoria: { select: { id: true, nombre: true } },
@@ -61,19 +61,10 @@ const getProductosCached = unstable_cache(
   { revalidate: 30, tags: ["productos"] }
 );
 
-function aplanarCategorias(
-  cats: any[], nivel = 0
-): { id: string; nombre: string }[] {
-  return cats.flatMap(cat => [
-    { id: cat.id, nombre: `${"  ".repeat(nivel)}${nivel > 0 ? "└ " : ""}${cat.nombre}` },
-    ...aplanarCategorias(cat.hijas ?? [], nivel + 1),
-  ]);
-}
-
 const getCategoriasCached = unstable_cache(
   async (tenantId: string) =>
     prisma.categoria.findMany({
-      where:   { tenantId, padreId: null }, // solo raíces
+      where:   { tenantId, padreId: null },
       select:  {
         id: true, nombre: true,
         hijas: {
@@ -120,7 +111,6 @@ export default async function ProductosPage({
   const page          = Math.max(1, parseInt(params.page ?? "1"));
   const ordenar       = params.ordenar ?? "nombre";
 
-  // ── Obtener slug del tenant para el link al catálogo ──
   const tenant = await prisma.tenant.findUnique({
     where:  { id: tenantId },
     select: { slug: true },
@@ -146,29 +136,32 @@ export default async function ProductosPage({
   const hasta = Math.min(page * PAGE_SIZE, total);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: "var(--text-primary)" }}>Productos</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold" style={{ color: "var(--text-primary)" }}>
+            Productos
+          </h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
             {total} productos en total
           </p>
         </div>
+
+        {/* Acciones */}
         <div className="flex items-center gap-2">
           <ExportarImportar />
-          {/* ── Botón Ver catálogo ── */}
           {tenant?.slug && (
             <a
               href={`/catalogo/${tenant.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-ghost flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors"
+              className="btn-ghost hidden sm:flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-colors"
               style={{ border: "1px solid var(--border-base)", color: "var(--text-secondary)" }}
             >
               <ExternalLink className="h-4 w-4" />
-              Ver catálogo
+              <span>Ver catálogo</span>
             </a>
           )}
           <NuevoProductoBtn categorias={categorias} proveedores={proveedores} />
@@ -176,61 +169,79 @@ export default async function ProductosPage({
       </div>
 
       {/* Filtros */}
-      <div className="card p-4">
-        <form className="flex flex-wrap gap-3 w-full">
+      <div className="card p-3 sm:p-4">
+        <form className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 w-full">
+
+          {/* Búsqueda — full width en mobile */}
           <input
             type="search" name="q" defaultValue={busqueda}
-            placeholder="Buscar por nombre o código..." className="input-base max-w-xs"
+            placeholder="Buscar por nombre o código..."
+            className="input-base w-full sm:w-auto sm:max-w-xs"
           />
-          <select name="categoriaId" defaultValue={categoriaId} className="input-base max-w-[200px]">
-            <option value="">Todas las categorías</option>
-            <option value="sin-categoria">Sin categoría</option>
-            {categorias.map((cat) => (
-              <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-            ))}
-          </select>
-          <select name="ordenar" defaultValue={ordenar} className="input-base max-w-[180px]">
-            <option value="nombre">Nombre A→Z</option>
-            <option value="recientes">Más recientes</option>
-            <option value="precio-asc">Precio menor</option>
-            <option value="precio-desc">Precio mayor</option>
-            <option value="stock-asc">Menor stock</option>
-          </select>
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none"
-            style={{ color: "var(--text-secondary)" }}>
-            <input type="checkbox" name="stockBajo" value="true"
-              defaultChecked={soloStockBajo} className="rounded" />
-            Solo stock bajo
-          </label>
-          <input type="hidden" name="page" value="1" />
-          <button type="submit" className="btn-ghost px-4 py-2">Filtrar</button>
-          {(busqueda || categoriaId || soloStockBajo || ordenar !== "nombre") && (
-            <Link href="/productos" className="btn-ghost px-4 py-2 text-sm"
+
+          {/* Fila secundaria en mobile */}
+          <div className="flex gap-2 flex-wrap">
+            <select name="categoriaId" defaultValue={categoriaId}
+              className="input-base flex-1 min-w-0 sm:max-w-[200px]">
+              <option value="">Todas las categorías</option>
+              <option value="sin-categoria">Sin categoría</option>
+              {categorias.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+              ))}
+            </select>
+
+            <select name="ordenar" defaultValue={ordenar}
+              className="input-base flex-1 min-w-0 sm:max-w-[180px]">
+              <option value="nombre">Nombre A→Z</option>
+              <option value="recientes">Más recientes</option>
+              <option value="precio-asc">Precio menor</option>
+              <option value="precio-desc">Precio mayor</option>
+              <option value="stock-asc">Menor stock</option>
+            </select>
+          </div>
+
+          {/* Checkbox + botones */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none"
               style={{ color: "var(--text-secondary)" }}>
-              Limpiar
-            </Link>
-          )}
+              <input type="checkbox" name="stockBajo" value="true"
+                defaultChecked={soloStockBajo} className="rounded" />
+              Solo stock bajo
+            </label>
+            <input type="hidden" name="page" value="1" />
+            <button type="submit" className="btn-ghost px-4 py-2 text-sm">Filtrar</button>
+            {(busqueda || categoriaId || soloStockBajo || ordenar !== "nombre") && (
+              <Link href="/productos" className="btn-ghost px-4 py-2 text-sm"
+                style={{ color: "var(--text-secondary)" }}>
+                Limpiar
+              </Link>
+            )}
+          </div>
         </form>
       </div>
 
-      {/* Tabla */}
-      <ProductosTabla
-        productos={productos}
-        categorias={categorias}
-        proveedores={proveedores}
-        totalProductos={total}
-        ordenar={ordenar}
-        filtrosActivos={{ busqueda, categoriaId, soloStockBajo }}
-      />
+      {/* Tabla — con scroll horizontal en mobile */}
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <div className="min-w-[640px] sm:min-w-0 px-4 sm:px-0">
+          <ProductosTabla
+            productos={productos}
+            categorias={categorias}
+            proveedores={proveedores}
+            totalProductos={total}
+            ordenar={ordenar}
+            filtrosActivos={{ busqueda, categoriaId, soloStockBajo }}
+          />
+        </div>
+      </div>
 
       {/* Paginación */}
       {totalPages > 1 && (
         <div className="card">
-          <div className="flex items-center justify-between px-4 py-3">
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              {desde}–{hasta} de {total} productos
+          <div className="flex items-center justify-between px-3 sm:px-4 py-3 gap-2">
+            <p className="text-xs sm:text-sm flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
+              {desde}–{hasta} de {total}
             </p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap justify-end">
               {page > 1 ? (
                 <Link href={buildQuery(page - 1)} className="btn-ghost px-2 py-1.5">
                   <ChevronLeft className="h-4 w-4" />
@@ -250,11 +261,11 @@ export default async function ProductosPage({
                 }, [])
                 .map((p, i) =>
                   p === "..." ? (
-                    <span key={`ellipsis-${i}`} className="px-2 py-1 text-sm"
+                    <span key={`ellipsis-${i}`} className="px-1.5 py-1 text-sm hidden sm:inline"
                       style={{ color: "var(--text-faint)" }}>…</span>
                   ) : (
                     <Link key={p} href={buildQuery(p as number)}
-                      className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                      className="px-2.5 sm:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
                       style={{
                         background: p === page ? "#DC2626" : "transparent",
                         color:      p === page ? "#ffffff" : "var(--text-secondary)",

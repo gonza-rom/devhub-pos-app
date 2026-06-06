@@ -4,14 +4,11 @@
 
 import { useState, useCallback, useEffect, useRef, useLayoutEffect } from "react";
 import { debounce } from "lodash";
-import InfiniteLoader from "react-window-infinite-loader";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const Grid = require("react-window").FixedSizeGrid;
 import {
-  ShoppingCart, Search, X, Plus, Minus, Trash2,
-  CreditCard, Banknote, Smartphone, QrCode, ChevronRight,
-  Package, CheckCircle2, AlertCircle, Tag, Loader2,
-  ScanLine, ChevronDown,
+  ShoppingCart, X,
+  Package, Loader2,
+  ScanLine, 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatPrecio } from "@/lib/utils";
@@ -23,6 +20,8 @@ import { useConfigAFIP } from "@/hooks/UseConfigAFIP";
 import { ModalCrearProductoRapido } from "@/components/ventas/ModalCrearProductoRapido";
 import { fechaHoyAR, horaAhoraAR } from "@/lib/dateAR";
 import { useToast } from "@/components/toast";
+import POSCatalogo from "@/components/ventas/POSCatalogo";
+import POSCarrito  from "@/components/ventas/POSCarrito";
 
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -83,13 +82,6 @@ type Usuario = { id: string; nombre: string; supabaseId: string; activo: boolean
 
 type MetodoPago = "efectivo" | "debito" | "credito" | "transferencia" | "qr";
 
-const METODOS_PAGO: { value: MetodoPago; label: string; icono: React.ElementType }[] = [
-  { value: "efectivo",      label: "Efectivo", icono: Banknote },
-  { value: "debito",        label: "Débito",   icono: CreditCard },
-  { value: "credito",       label: "Crédito",  icono: CreditCard },
-  { value: "transferencia", label: "Transfer", icono: Smartphone },
-  { value: "qr",            label: "QR / MP",  icono: QrCode },
-];
 
 type Props = {
   productosIniciales: ProductoConCategoria[];
@@ -100,12 +92,6 @@ type Props = {
   telefonoTenant?: string | null;
   direccionTenant?: string | null;
 };
-
-// ─── Configuración del grid ───────────────────────────────────────────────────
-
-const MIN_CARD_WIDTH = 160;
-const CARD_HEIGHT    = 200;
-const GAP            = 6;
 
 // Cache de productos por clave (categoría + búsqueda) — persiste entre renders
 const _productosCache: Record<string, { productos: ProductoConCategoria[]; ts: number }> = {};
@@ -323,11 +309,9 @@ export default function POSClient({
   const [pesoIngresado, setPesoIngresado] = useState("");
   const [precioAjustado, setPrecioAjustado] = useState<string>("");
 
-  // ── Columnas dinámicas ──────────────────────────────────────────────────────
+  const [carritoColapsado, setCarritoColapsado] = useState(false);
 
-  const columnCount   = Math.max(2, Math.min(8, Math.floor(gridWidth / (MIN_CARD_WIDTH + GAP))));
-  const totalGapWidth = GAP * (columnCount + 1);
-  const cardWidth     = Math.floor((gridWidth - totalGapWidth) / columnCount);
+  // ── Columnas dinámicas ──────────────────────────────────────────────────────
 
   useEffect(() => {
     fetch("/api/usuarios")
@@ -887,620 +871,87 @@ export default function POSClient({
     toast.success("Producto creado", nuevoProducto.nombre);
   }, [agregarAlCarrito, toast]);
 
-  // ── Cell del grid ───────────────────────────────────────────────────────────
-
-  const Cell = useCallback(
-    ({ columnIndex, rowIndex, style }: { columnIndex: number; rowIndex: number; style: React.CSSProperties }) => {
-      const index = rowIndex * columnCount + columnIndex;
-      if (index >= productos.length) return <div style={style} />;
-
-      const producto  = productos[index];
-      const enCarrito = carrito.find((i) => i.productoId === producto.id);
-      const stockBajo = producto.stock <= producto.stockMinimo;
-
-      return (
-        <div style={{ ...style, padding: GAP / 2, boxSizing: "border-box" }}>
-          <button
-            onClick={() => agregarAlCarrito(producto)}
-            className="relative flex flex-col rounded-lg p-2 text-left transition-all active:scale-95 w-full h-full overflow-hidden"
-            style={{
-              background: enCarrito ? "rgba(220,38,38,0.12)" : "var(--bg-card)",
-              border:     enCarrito ? "1px solid rgba(220,38,38,0.4)" : "1px solid var(--border-base)",
-            }}
-            onMouseEnter={(e) => {
-              if (!enCarrito) (e.currentTarget as HTMLElement).style.borderColor = "var(--border-strong)";
-            }}
-            onMouseLeave={(e) => {
-              if (!enCarrito) (e.currentTarget as HTMLElement).style.borderColor = "var(--border-base)";
-            }}
-          >
-            {/* Imagen */}
-            <div
-              className="mb-2 flex items-center justify-center rounded-lg overflow-hidden w-full flex-shrink-0"
-              style={{ background: "var(--bg-hover-md)", height: "72px" }}
-            >
-              {producto.imagen ? (
-                <img
-                  src={producto.imagen.replace("/upload/", "/upload/f_auto,q_auto,w_200/")}
-                  alt={producto.nombre}
-                  loading="lazy"
-                  className="h-full w-full object-cover rounded-lg"
-                />
-              ) : (
-                <Package className="h-6 w-6" style={{ color: "var(--text-muted)" }} />
-              )}
-            </div>
-
-            <p className="text-base font-semibold line-clamp-2 leading-tight mb-1" style={{ color: "var(--text-primary)" }}>
-              {producto.nombre}
-            </p>
-            <p className="text-base font-bold text-red-400 mt-1">{formatPrecio(producto.precio)}</p>
-            {producto.tieneVariantes && (
-              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full mt-1 inline-block"
-                style={{ background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.3)" }}>
-                Talles/Colores
-              </span>
-            )}
-            <div className="flex items-center justify-between mt-0.5 gap-1">
-              <span className="text-xs font-mono truncate" style={{ color: "var(--text-primary)" }}>
-                {producto.codigoProducto || ""}
-              </span>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                {producto.stock > 0 && (
-                  <span className="text-xs" style={{ color: "var(--text-primary)" }}>
-                    Stock: {producto.stock}
-                  </span>
-                )}
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setProductoEditando(producto);
-                    setFormEdicion({
-                      stock:          String(producto.stock),
-                      precio:         String(producto.precio),
-                      nombre:         producto.nombre,
-                      codigoProducto: producto.codigoProducto || "",
-                    });
-                  }}
-                  className="flex h-4 w-6 items-center justify-center rounded flex-shrink-0 cursor-pointer"
-                  style={{ background: "var(--bg-hover-md)", color: "var(--text-muted)" }}
-                >
-                  <svg className="h-5.5 w-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828A2 2 0 0111 16H9v-2a2 2 0 01.172-.768z" />
-                  </svg>
-                </span>
-              </div>
-            </div>
-
-            {/* Badge stock */}
-            {producto.stock <= 0 ? (
-              <span
-                className="absolute top-2 right-2 text-xs font-medium px-1.5 py-0.5 rounded-full"
-                style={{ background: "rgba(220,38,38,0.15)", color: "#f87171", border: "1px solid rgba(220,38,38,0.3)" }}
-              >
-                Sin stock
-              </span>
-            ) : stockBajo ? (
-              <span
-                className="absolute top-2 right-2 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-                style={{ background: "rgba(245,158,11,0.15)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.3)" }}
-              >
-                {producto.stock}
-              </span>
-            ) : null}
-
-            {/* Badge cantidad en carrito */}
-            {enCarrito && (
-              <span
-                className="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white"
-                style={{ background: "#DC2626", boxShadow: "0 0 0 2px var(--bg-card)" }}
-              >
-                {enCarrito.cantidad}
-              </span>
-            )}
-          </button>
-        </div>
-      );
-    },
-    [columnCount, cardWidth, productos, carrito, agregarAlCarrito],
-  );
-
   // ── Panel Catálogo ──────────────────────────────────────────────────────────
 
-  const itemCount = hayMas ? productos.length + 30 : productos.length;
-  const rowCount  = Math.ceil(itemCount / columnCount);
+const panelCatalogo = (
+  <POSCatalogo
+    productos={productos}
+    categorias={categorias}
+    carrito={carrito.map(i => ({ productoId: i.productoId, cantidad: i.cantidad }))}
+    busqueda={busqueda}
+    categoriaActiva={categoriaActiva}
+    buscandoRemoto={buscandoRemoto}
+    cargandoMas={cargandoMas}
+    hayMas={hayMas}
+    gridWidth={gridWidth}
+    gridHeight={gridHeight}
+    gridContainerRef={gridContainerRef}
+    gridRef={gridRef}
+    onBusqueda={handleBusqueda}
+    onCategoriaChange={handleCategoriaChange}
+    onAgregarProducto={agregarAlCarrito}
+    onEditarProducto={(p) => { setProductoEditando(p); setFormEdicion({ stock: String(p.stock), precio: String(p.precio), nombre: p.nombre, codigoProducto: p.codigoProducto || "" }); }}
+    onCargarMas={cargarMasProductos}
+    onAbrirScanner={() => setScannerAbierto(true)}
+    onAbrirCrearProducto={() => setModalCrearProducto(true)}
+  />
+);
 
-  const panelCatalogo = (
-    <div className="flex flex-col h-full min-w-0 overflow-hidden" style={{ background: "var(--bg-base)" }}>
-      <div
-        className="p-2 md:p-3 border-b flex-shrink-0"
-        style={{ background: "var(--bg-surface)", borderColor: "var(--border-base)" }}
-      >
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: "var(--text-primary)" }} />
-            <input
-              type="text"
-              value={busqueda}
-              onChange={(e) => handleBusqueda(e.target.value)}
-              placeholder="Buscar producto o código..."
-              className="input-base pl-9 pr-9 w-full"
-              autoFocus
-            />
-            {busqueda && (
-              <button onClick={() => handleBusqueda("")} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-primary)" }}>
-                <X className="h-4 w-4" />
-              </button>
-            )}
-            {buscandoRemoto && (
-              <div className="absolute right-10 top-1/2 -translate-y-1/2">
-                <Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--text-muted)" }} />
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => setModalCrearProducto(true)}
-            className="ml-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            style={{ background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.3)", color: "#f87171" }}
-            title="Crear producto rápido"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nuevo
-          </button>
-
-          <button
-            onClick={() => setScannerAbierto(true)}
-            className="flex-shrink-0 flex h-9 w-9 items-center justify-center rounded-lg transition-colors"
-            style={{ background: "var(--bg-hover-md)", border: "1px solid var(--border-md)", color: "var(--text-secondary)" }}
-            title="Escanear código de barras"
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(220,38,38,0.4)"; (e.currentTarget as HTMLElement).style.color = "#DC2626"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border-md)"; (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}
-          >
-            <ScanLine className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {categorias.length > 0 && (
-        <div
-          className="flex gap-2 px-2 md:px-3 py-2 overflow-x-auto border-b flex-shrink-0 scrollbar-hide"
-          style={{ background: "var(--bg-surface)", borderColor: "var(--border-base)" }}
-        >
-          <button
-            onClick={() => handleCategoriaChange(null)}
-            className={cn("flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors", !categoriaActiva ? "bg-red-600 text-white" : "")}
-            style={!categoriaActiva ? {} : { background: "var(--bg-hover-md)", border: "1px solid var(--border-md)", color: "var(--text-secondary)" }}
-          >
-            Todos
-          </button>
-          {categorias.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => handleCategoriaChange(categoriaActiva === cat.id ? null : cat.id)}
-              className={cn("flex-shrink-0 flex items-center gap-1.5 px-2 py-1.5 rounded-full text-xs font-medium transition-colors", categoriaActiva === cat.id ? "bg-red-600 text-white" : "")}
-              style={categoriaActiva === cat.id ? {} : { background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-secondary)" }}
-            >
-              <Tag className="h-3 w-3" />
-              {cat.nombre}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="flex-1 relative" style={{ minHeight: 0 }} ref={gridContainerRef}>
-        {buscandoRemoto && productos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-20">
-            <Loader2 className="h-12 w-12 animate-spin mb-3" style={{ color: "var(--text-muted)" }} />
-            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>Buscando productos...</p>
-          </div>
-        ) : productos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-20">
-            <Package className="h-12 w-12 mb-3" style={{ color: "var(--text-muted)" }} />
-            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>Sin productos</p>
-            <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>
-              {busqueda ? "Probá con otro término" : "No hay productos disponibles"}
-            </p>
-          </div>
-        ) : (
-          <InfiniteLoader
-            isItemLoaded={(index) => !hayMas || index < productos.length}
-            itemCount={itemCount}
-            loadMoreItems={cargarMasProductos}
-            threshold={15}
-          >
-            {({ onItemsRendered }) => (
-              <Grid
-                ref={gridRef}
-                columnCount={columnCount}
-                columnWidth={cardWidth + GAP}
-                height={gridHeight}
-                rowCount={rowCount}
-                rowHeight={CARD_HEIGHT}
-                width={gridWidth}
-                onItemsRendered={(gridProps: { visibleRowStartIndex: number; visibleRowStopIndex: number }) => {
-                  (onItemsRendered as (args: { visibleStartIndex: number; visibleStopIndex: number }) => void)({
-                    visibleStartIndex: gridProps.visibleRowStartIndex * columnCount,
-                    visibleStopIndex:  gridProps.visibleRowStopIndex  * columnCount + columnCount - 1,
-                  });
-                }}
-                style={{ overflowX: "hidden", overflowY: "auto" }}
-              >
-                {Cell}
-              </Grid>
-            )}
-          </InfiniteLoader>
-        )}
-
-        {cargandoMas && (
-          <div
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full z-10"
-            style={{ background: "var(--bg-surface)", border: "1px solid var(--border-md)", boxShadow: "0 4px 24px rgba(0,0,0,0.12)", color: "var(--text-secondary)" }}
-          >
-            <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: "#DC2626" }} />
-            <span className="text-xs font-medium">Cargando productos...</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // ── Panel Carrito ───────────────────────────────────────────────────────────
-
-  const panelCarrito = (
-    <div className="flex flex-col h-full" style={{ background: "var(--bg-surface)" }}>
-      <div className="hidden md:flex flex-col border-b flex-shrink-0" style={{ borderColor: "var(--border-base)" }}>
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5" style={{ color: "var(--text-muted)" }} />
-            <span className="font-semibold" style={{ color: "var(--text-primary)" }}>Carrito</span>
-            {cantidadTotal > 0 && (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold"
-                style={{ background: "rgba(220,38,38,0.8)", color: "#ffffff" }}>
-                {cantidadTotal}
-              </span>
-            )}
-          </div>
-          {carrito.length > 0 && (
-            <button
-              onClick={limpiarCarrito}
-              className="text-xs transition-colors"
-              style={{ color: "var(--text-muted)" }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f87171")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-muted)")}
-            >
-              Limpiar
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5 px-3 pb-2">
-          <input
-            type="text"
-            value={itemManualNombre}
-            onChange={e => setItemManualNombre(e.target.value)}
-            placeholder="Ítem manual..."
-            className="input-base text-xs flex-1 min-w-0"
-            style={{ padding: "4px 8px" }}
-          />
-          <input
-            type="number"
-            value={itemManualPrecio}
-            onChange={e => setItemManualPrecio(e.target.value)}
-            placeholder="$"
-            className="input-base text-xs"
-            style={{ width: "64px", padding: "4px 8px" }}
-            onWheel={(e) => e.currentTarget.blur()}
-          />
-          <button
-            onClick={() => {
-              const precio = parseFloat(itemManualPrecio) || 0;
-              if (!itemManualNombre.trim()) return;
-              setCarrito(prev => [...prev, {
-                productoId: `manual_${Date.now()}`,
-                carritoKey: `manual_${Date.now()}`,  // ← agregar (mismo valor está bien)
-                nombre:     itemManualNombre.trim(),
-                precio,
-                cantidad:   1,
-                subtotal:   precio,
-                stock:      999,
-              }]);
-              setItemManualNombre("");
-              setItemManualPrecio("");
-            }}
-            className="flex h-7 w-7 items-center justify-center rounded-lg font-bold flex-shrink-0"
-            style={{ background: "#DC2626", color: "#fff" }}
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {carrito.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full py-16 text-center px-6">
-            <div className="h-16 w-16 rounded-full flex items-center justify-center mb-4" style={{ background: "var(--bg-hover)" }}>
-              <ShoppingCart className="h-7 w-7" style={{ color: "var(--text-muted)" }} />
-            </div>
-            <p className="text-sm font-medium" style={{ color: "var(--text-muted)" }}>El carrito está vacío</p>
-            <p className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>
-              <span className="md:hidden">Tocá "Catálogo" para agregar productos</span>
-              <span className="hidden md:inline">Tocá un producto para agregarlo</span>
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
-            {carrito.map((item) => (
-              <div key={item.carritoKey} className="flex items-center gap-2 px-2 py-2.5">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>{item.nombre}</p>
-                  <p className="text-xs" style={{ color: "var(--text-faint)" }}>{formatPrecio(item.precio)} c/u</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => cambiarCantidad(item.carritoKey, -1)}
-                    className="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
-                    style={{ border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
-                    onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-primary)")}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-secondary)")}>
-                    <Minus className="h-3 w-3" />
-                  </button>
-                  <span className="w-6 text-center text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{item.cantidad}</span>
-                  <button onClick={() => cambiarCantidad(item.carritoKey, 1)}
-                    disabled={item.cantidad >= item.stock}
-                    className="flex h-6 w-6 items-center justify-center rounded-md transition-colors disabled:opacity-30"
-                    style={{ border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}
-                    onMouseEnter={(e) => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; }}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-secondary)")}>
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-bold w-16 md:w-20 text-right" style={{ color: "var(--text-primary)" }}>
-                    {formatPrecio(item.subtotal)}
-                  </span>
-                  <button onClick={() => eliminarDelCarrito(item.productoId)}
-                    style={{ color: "var(--text-muted)" }}
-                    onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = "#f87171")}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = "var(--text-muted)")}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {carrito.length > 0 && (
-        <div className="border-t p-3 space-y-3 flex-shrink-0" style={{ borderColor: "var(--border-base)" }}>
-          {/* Descuento */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Descuento %</label>
-            <input
-              type="number" min="0" max="100"
-              value={descuentoPct || ""}
-              onChange={(e) => {
-                const pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
-                setDescuentoPct(pct);
-                setDescuento(Math.round((subtotal * pct) / 100));
-              }}
-              placeholder="0" className="input-base text-sm" style={{ width: "70px" }}
-              onWheel={(e) => e.currentTarget.blur()}
-            />
-            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>$ </label>
-            <input
-              type="number" min="0" max={subtotal}
-              value={descuento || ""}
-              onChange={(e) => {
-                const monto = Math.max(0, parseFloat(e.target.value) || 0);
-                setDescuento(monto);
-                setDescuentoPct(subtotal > 0 ? Math.round((monto / subtotal) * 100) : 0);
-              }}
-              placeholder="0" className="input-base text-sm" style={{ width: "90px" }}
-              onWheel={(e) => e.currentTarget.blur()}
-            />
-          </div>
-
-          {/* Recargo */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Recargo %</label>
-            <input
-              type="number" min="0" max="100"
-              value={recargoPct || ""}
-              onChange={(e) => {
-                const pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
-                setRecargoPct(pct);
-                setRecargo(Math.round((subtotal * pct) / 100));
-              }}
-              placeholder="0" className="input-base text-sm" style={{ width: "70px" }}
-              onWheel={(e) => e.currentTarget.blur()}
-            />
-            <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>$ </label>
-            <input
-              type="number" min="0"
-              value={recargo || ""}
-              onChange={(e) => {
-                const monto = Math.max(0, parseFloat(e.target.value) || 0);
-                setRecargo(monto);
-                setRecargoPct(subtotal > 0 ? Math.round((monto / subtotal) * 100) : 0);
-              }}
-              placeholder="0" className="input-base text-sm" style={{ width: "90px" }}
-              onWheel={(e) => e.currentTarget.blur()}
-            />
-          </div>
-        </div>
-
-          <div className="grid grid-cols-5 gap-1">
-            {METODOS_PAGO.map((mp) => {
-              const Icon   = mp.icono;
-              const activo = metodoPago === mp.value;
-              return (
-                <button key={mp.value} onClick={() => setMetodoPago(mp.value)}
-                  className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg text-center transition-colors"
-                  style={{
-                    background: activo ? "rgba(220,38,38,0.15)" : "var(--bg-hover)",
-                    border:     activo ? "1px solid rgba(220,38,38,0.4)" : "1px solid var(--border-base)",
-                    color:      activo ? "#f87171" : "var(--text-muted)",
-                  }}>
-                  <Icon className="h-4 w-4" />
-                  <span className="text-[10px] font-medium leading-tight">{mp.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {metodoPago === "efectivo" && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--text-muted)" }}>Recibido $</label>
-              <input type="number" min={total} value={efectivoRecibido}
-                onChange={(e) => setEfectivoRecibido(e.target.value)}
-                placeholder={String(total)} className="input-base flex-1"
-                onWheel={(e) => e.currentTarget.blur()} />
-            </div>
-          )}
-
-          <div className="space-y-1 pt-1 border-t" style={{ borderColor: "var(--border-base)" }}>
-            {(descuento > 0 || recargo > 0) && (
-              <>
-                <div className="flex justify-between text-xs" style={{ color: "var(--text-faint)" }}>
-                  <span>Subtotal</span><span>{formatPrecio(subtotal)}</span>
-                </div>
-                {recargo > 0 && (
-                  <div className="flex justify-between text-xs text-orange-400">
-                    <span>Recargo</span><span>+ {formatPrecio(recargo)}</span>
-                  </div>
-                )}
-                {descuento > 0 && (
-                  <div className="flex justify-between text-xs text-green-400">
-                    <span>Descuento</span><span>- {formatPrecio(descuento)}</span>
-                  </div>
-                )}
-              </>
-            )}
-            <div className="flex justify-between font-bold text-base" style={{ color: "var(--text-primary)" }}>
-              <span>Total</span>
-              <span className="text-red-400">{formatPrecio(total)}</span>
-            </div>
-            {metodoPago === "efectivo" && vuelto > 0 && (
-              <div className="flex justify-between text-sm font-semibold text-green-400">
-                <span>Vuelto</span><span>{formatPrecio(vuelto)}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border-base)" }}>
-            <button
-              onClick={() => setOpcionesAbiertas(v => !v)}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium transition-colors"
-              style={{ background: "var(--bg-hover)", color: "var(--text-muted)" }}
-              onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"}
-              onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
-            >
-              <span className="flex items-center gap-1.5">
-                Opciones
-                {(imprimirTicket || generarFactura || fechaManual || clienteNombre || (usuarios.length > 1 && vendedorId)) && (
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                    style={{ background: "#DC2626" }}>
-                    {[imprimirTicket, generarFactura, fechaManual, !!clienteNombre, !!(usuarios.length > 1 && vendedorId)].filter(Boolean).length}
-                  </span>
-                )}
-              </span>
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${opcionesAbiertas ? "" : "-rotate-90"}`} />
-            </button>
-
-            {opcionesAbiertas && (
-              <div className="px-3 py-2.5 space-y-2.5" style={{ borderTop: "1px solid var(--border-base)" }}>
-                <input type="text" value={clienteNombre} onChange={(e) => setClienteNombre(e.target.value)}
-                  placeholder="Nombre del cliente (opcional)"
-                  className="input-base w-full text-xs" style={{ padding: "5px 10px" }} />
-
-                {/* Vendedor */}
-                {usuarios.length > 1 && (
-                  <select value={vendedorId} onChange={e => setVendedorId(e.target.value)}
-                    className="input-base w-full text-xs" style={{ padding: "5px 10px" }}>
-                    <option value="">— Vendedor: mi cuenta —</option>
-                    {usuarios.map(u => <option key={u.id} value={u.supabaseId}>{u.nombre}</option>)}
-                  </select>
-                )}
-
-                {/* Checkboxes */}
-                {[
-                  { label: "Generar ticket de venta", value: imprimirTicket, setter: (v: boolean) => {
-                    setImprimirTicket(v);
-                    localStorage.setItem("pos_imprimir_ticket", String(v));
-                  }},
-                  { label: "Generar factura electrónica (AFIP)", value: generarFactura, setter: setGenerarFactura },
-                  { label: "Cargar con fecha pasada",            value: fechaManual,    setter: (v: boolean) => { setFechaManual(v); setFechaVenta(v ? `${fechaHoyAR()}T${horaAhoraAR()}` : ""); } },
-                ].map(({ label, value, setter }) => (
-                  <label key={label} className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setter(!value)}>
-                    <div className="flex h-3.5 w-3.5 items-center justify-center rounded flex-shrink-0"
-                      style={{ background: value ? "#DC2626" : "transparent", border: value ? "1px solid #DC2626" : "1px solid var(--border-strong)" }}>
-                      {value && (
-                        <svg className="h-2 w-2" fill="none" viewBox="0 0 12 12" stroke="#ffffff" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2 6l3 3 5-5" />
-                        </svg>
-                      )}
-                    </div>
-                    <span className="text-xs" style={{ color: "var(--text-muted)" }}>{label}</span>
-                  </label>
-                ))}
-
-                {/* Fecha si está activada */}
-                {fechaManual && (
-                  <input type="datetime-local" value={fechaVenta}
-                    max={`${fechaHoyAR()}T${horaAhoraAR()}`}
-                    onChange={e => setFechaVenta(e.target.value)}
-                    className="input-base w-full text-xs" style={{ padding: "5px 10px" }} />
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Feedback inline — se mantiene para referencia visual inmediata en el carrito */}
-          {resultado === "error" && (
-            <div className="flex items-start gap-2 rounded-lg px-2 py-2.5"
-              style={{ background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.2)" }}>
-              <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-red-300">{mensajeError}</p>
-            </div>
-          )}
-          {resultado === "exito" && (
-            <div className="flex items-center gap-2 rounded-lg px-2 py-2.5"
-              style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)" }}>
-              <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
-              <p className="text-xs font-medium text-green-300">¡Venta registrada!</p>
-            </div>
-          )}
-          <p className="text-[10px] text-center" style={{ color: "var(--text-faint)" }}>
-            Enter para cobrar · Esc para cerrar
-          </p>
-          {/* Botón cobrar */}
-          <button
-            onClick={() => handleVenta()}
-            disabled={cargando || carrito.length === 0 || resultado === "exito"}
-            className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: "#DC2626", color: "#ffffff" }}
-            onMouseEnter={(e) => { if (!cargando) (e.currentTarget as HTMLElement).style.background = "#B91C1C"; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#DC2626"; }}
-          >
-            {cargando ? (
-              <>
-                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Procesando...
-              </>
-            ) : (
-              <>
-                Cobrar {formatPrecio(total)}
-                <ChevronRight className="h-4 w-4" />
-              </>
-            )}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-
+const panelCarrito = (
+  <POSCarrito
+    carrito={carrito}
+    onCambiarCantidad={cambiarCantidad}
+    onEliminar={eliminarDelCarrito}
+    onLimpiar={limpiarCarrito}
+    subtotal={subtotal}
+    total={total}
+    descuento={descuento}
+    descuentoPct={descuentoPct}
+    recargo={recargo}
+    recargoPct={recargoPct}
+    vuelto={vuelto}
+    onDescuento={(m) => { setDescuento(m); setDescuentoPct(subtotal > 0 ? Math.round((m / subtotal) * 100) : 0); }}
+    onDescuentoPct={(p) => { setDescuentoPct(p); setDescuento(Math.round((subtotal * p) / 100)); }}
+    onRecargo={(m) => { setRecargo(m); setRecargoPct(subtotal > 0 ? Math.round((m / subtotal) * 100) : 0); }}
+    onRecargoPct={(p) => { setRecargoPct(p); setRecargo(Math.round((subtotal * p) / 100)); }}
+    metodoPago={metodoPago}
+    onMetodoPago={setMetodoPago}
+    efectivoRecibido={efectivoRecibido}
+    onEfectivoRecibido={setEfectivoRecibido}
+    clienteNombre={clienteNombre}
+    onClienteNombre={setClienteNombre}
+    usuarios={usuarios}
+    vendedorId={vendedorId}
+    onVendedorId={setVendedorId}
+    imprimirTicket={imprimirTicket}
+    onImprimirTicket={(v) => { setImprimirTicket(v); localStorage.setItem("pos_imprimir_ticket", String(v)); }}
+    generarFactura={generarFactura}
+    onGenerarFactura={setGenerarFactura}
+    fechaManual={fechaManual}
+    onFechaManual={(v) => { setFechaManual(v); setFechaVenta(v ? `${fechaHoyAR()}T${horaAhoraAR()}` : ""); }}
+    fechaVenta={fechaVenta}
+    onFechaVenta={setFechaVenta}
+    opcionesAbiertas={opcionesAbiertas}
+    onOpcionesAbiertas={setOpcionesAbiertas}
+    itemManualNombre={itemManualNombre}
+    itemManualPrecio={itemManualPrecio}
+    onItemManualNombre={setItemManualNombre}
+    onItemManualPrecio={setItemManualPrecio}
+    colapsado={carritoColapsado}
+    onToggleColapso={() => setCarritoColapsado(v => !v)}
+    onAgregarItemManual={() => {
+      const precio = parseFloat(itemManualPrecio) || 0;
+      if (!itemManualNombre.trim()) return;
+      const ts = Date.now();
+      setCarrito(prev => [...prev, { productoId: `manual_${ts}`, carritoKey: `manual_${ts}`, nombre: itemManualNombre.trim(), precio, cantidad: 1, subtotal: precio, stock: 999 }]);
+      setItemManualNombre(""); setItemManualPrecio("");
+    }}
+    cargando={cargando}
+    resultado={resultado}
+    mensajeError={mensajeError}
+    onVenta={() => handleVenta()}
+  />
+);
   // ── Peso ────────────────────────────────────────────────────────────────────
   function confirmarPeso() {
     if (!modalPeso) return;
@@ -1537,13 +988,17 @@ export default function POSClient({
 
   return (
     <>
-      {/* DESKTOP */}
-      <div className={cn("hidden md:flex overflow-hidden", alturaBase, !isModal && "-m-4 md:-m-6")}>
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden" style={{ borderRight: "1px solid var(--border-base)" }}>
-          {panelCatalogo}
-        </div>
-        <div className="flex flex-col w-72 lg:w-64 xl:w-96 flex-shrink-0 overflow-hidden">
-          {panelCarrito}
+    {/* DESKTOP */}
+    <div className={cn("hidden md:flex overflow-hidden", alturaBase, !isModal && "-m-4 md:-m-6")}>
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden"
+      style={{ borderRight: "1px solid var(--border-base)" }}>
+        {panelCatalogo}
+      </div>
+        <div className={cn(
+            "flex-shrink-0 overflow-hidden transition-all duration-200",
+            carritoColapsado ? "w-12" : "w-72 lg:w-72 xl:w-96"
+          )}>
+            {panelCarrito}
         </div>
       </div>
 
