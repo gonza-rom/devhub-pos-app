@@ -5,7 +5,7 @@ import { useState, useTransition, useEffect} from "react";
 import { useRouter }               from "next/navigation";
 import {
   Package, AlertTriangle, Trash2, CheckSquare, Square,
-  Tag, DollarSign, PackagePlus, Building2, X,Globe
+  Tag, DollarSign, PackagePlus, Building2, X, Globe,
 } from "lucide-react";
 import { formatPrecio }           from "@/lib/utils";
 import { useFetch }               from "@/hooks/useFetch";
@@ -48,6 +48,21 @@ type Props = {
   };
 };
 
+// ── Helper: aplana el árbol de categorías en una lista de <option> con indentación ──
+// Padres aparecen como opciones seleccionables también (por si el producto no tiene subcategoría asignada)
+function renderOpcionesCategoria(categorias: CategoriaArbol[]) {
+  const opciones: { id: string; label: string; esPadre: boolean }[] = [];
+  for (const padre of categorias) {
+    opciones.push({ id: padre.id, label: padre.nombre, esPadre: true });
+    if (padre.hijas && padre.hijas.length > 0) {
+      for (const hija of padre.hijas) {
+        opciones.push({ id: hija.id, label: `— ${hija.nombre}`, esPadre: false });
+      }
+    }
+  }
+  return opciones;
+}
+
 export default function ProductosTabla({
   productos: productosProp,
   categorias,
@@ -71,10 +86,16 @@ export default function ProductosTabla({
 
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [modoSeleccion, setModoSeleccion] = useState<"pagina" | "todos">("pagina");
-  const [accionMasiva, setAccionMasiva] = useState<"categoria" | "proveedor" | "stock" | "precio" | "catalogo" | null>(null);
+  const [accionMasiva, setAccionMasiva] = useState<"categoria" | "subcategoria" | "proveedor" | "stock" | "precio" | "catalogo" | null>(null);
   const [cargandoMasivo, setCargandoMasivo] = useState(false);
 
   const [nuevaCategoria, setNuevaCategoria] = useState("");
+
+  // ── NUEVO: estado para el flujo de subcategoría ──
+  // Primero elegís la categoría padre, después la subcategoría dentro de esa categoría
+  const [padreSeleccionado, setPadreSeleccionado] = useState("");
+  const [nuevaSubcategoria, setNuevaSubcategoria] = useState("");
+
   const [nuevoProveedor, setNuevoProveedor] = useState("");
   const [ajusteStock,    setAjusteStock]    = useState<"sumar" | "restar" | "establecer">("establecer");
   const [valorStock,     setValorStock]     = useState("");
@@ -113,6 +134,8 @@ export default function ProductosTabla({
     setModoSeleccion("pagina");
     setAccionMasiva(null);
     setNuevaCategoria("");
+    setPadreSeleccionado("");
+    setNuevaSubcategoria("");
     setNuevoProveedor("");
     setValorStock("");
     setValorPrecio("");
@@ -141,19 +164,29 @@ export default function ProductosTabla({
       if (!data.ok) throw new Error(data.error);
 
       // ── Actualizar estado local ──────────────────────────────
-      if (accion === "categoria") {
-        // payload.valor puede ser null (sin categoría) o un id de categoría
-        const cat = payload.valor
-          ? categorias.find(c => c.id === payload.valor) ?? null
-          : null;
+      // "categoria" y "subcategoria" comparten la misma lógica: el backend siempre
+      // recibe el id final en payload.valor (sea padre o hija) y lo guarda en categoriaId
+      if (accion === "categoria" || accion === "subcategoria") {
+        const valorId = payload.valor as string | null;
+        let cat: { id: string; nombre: string } | null = null;
+
+        if (valorId) {
+          // Buscar primero entre los padres
+          const padre = categorias.find(c => c.id === valorId);
+          if (padre) {
+            cat = { id: padre.id, nombre: padre.nombre };
+          } else {
+            // Buscar entre las hijas de todos los padres
+            for (const p of categorias) {
+              const hija = p.hijas?.find(h => h.id === valorId);
+              if (hija) { cat = { id: hija.id, nombre: hija.nombre }; break; }
+            }
+          }
+        }
 
         setProductos(prev => prev.map(p =>
           seleccionados.has(p.id) || modoSeleccion === "todos"
-            ? {
-                ...p,
-                categoriaId: (payload.valor as string | null),
-                categoria:   cat ? { id: cat.id, nombre: cat.nombre } : null,
-              }
+            ? { ...p, categoriaId: valorId, categoria: cat }
             : p
         ));
       }
@@ -181,14 +214,28 @@ export default function ProductosTabla({
     }
   };
 
-  // ── CAMBIO PRINCIPAL: soporta "sin-categoria" → envía null ──
   const aplicarCambioCategoria = () => {
     if (!nuevaCategoria) return;
     const esSinCategoria = nuevaCategoria === "sin-categoria";
     const nombre = esSinCategoria
       ? "Sin categoría"
       : (categorias.find(c => c.id === nuevaCategoria)?.nombre ?? "categoría");
+    // El backend recibe el id de categoría (padre o hija, según lo que elija el usuario en el select jerárquico)
     ejecutarAccionMasiva("categoria", { valor: esSinCategoria ? null : nuevaCategoria }, nombre);
+  };
+
+  // ── NUEVO: aplicar cambio de subcategoría ──
+  const aplicarCambioSubcategoria = () => {
+    if (!nuevaSubcategoria) return;
+    const padre = categorias.find(c => c.id === padreSeleccionado);
+    const esSinSub = nuevaSubcategoria === "sin-subcategoria";
+    const hija  = padre?.hijas?.find(h => h.id === nuevaSubcategoria);
+    const nombre = esSinSub
+      ? `Sin subcategoría (${padre?.nombre ?? "categoría"})`
+      : (hija?.nombre ?? "subcategoría");
+    // Si elige "sin subcategoría" volvemos al id de la categoría padre; si elige una hija, usamos el id de la hija
+    const valorFinal = esSinSub ? padreSeleccionado : nuevaSubcategoria;
+    ejecutarAccionMasiva("subcategoria", { valor: valorFinal }, nombre);
   };
 
   const aplicarCambioProveedor = () => {
@@ -278,6 +325,10 @@ export default function ProductosTabla({
   const todosSeleccionados   = seleccionados.size === productos.length;
   const algunosSeleccionados = seleccionados.size > 0 && seleccionados.size < productos.length;
 
+  // ── Subcategorías disponibles según el padre elegido en el modal de subcategoría ──
+  const padreActivo       = categorias.find(c => c.id === padreSeleccionado);
+  const hijasDisponibles  = padreActivo?.hijas ?? [];
+
   return (
     <>
       {/* Barra de acciones masivas */}
@@ -300,6 +351,10 @@ export default function ProductosTabla({
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={() => setAccionMasiva("categoria")} className="btn-ghost px-3 py-2 text-xs">
                 <Tag className="h-4 w-4" /> Categoría
+              </button>
+              {/* ── NUEVO: botón de subcategoría ── */}
+              <button onClick={() => setAccionMasiva("subcategoria")} className="btn-ghost px-3 py-2 text-xs">
+                <Tag className="h-4 w-4" /> Subcategoría
               </button>
               <button onClick={() => setAccionMasiva("proveedor")} className="btn-ghost px-3 py-2 text-xs">
                 <Building2 className="h-4 w-4" /> Proveedor
@@ -473,11 +528,12 @@ export default function ProductosTabla({
 
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold" style={{ color: "var(--text-primary)" }}>
-                {accionMasiva === "categoria" && "Cambiar categoría"}
-                {accionMasiva === "proveedor" && "Cambiar proveedor"}
-                {accionMasiva === "stock"     && "Ajustar stock"}
-                {accionMasiva === "precio"    && "Ajustar precios"}
-                {accionMasiva === "catalogo"  && "Visibilidad en catálogo"}
+                {accionMasiva === "categoria"    && "Cambiar categoría"}
+                {accionMasiva === "subcategoria" && "Cambiar subcategoría"}
+                {accionMasiva === "proveedor"    && "Cambiar proveedor"}
+                {accionMasiva === "stock"        && "Ajustar stock"}
+                {accionMasiva === "precio"       && "Ajustar precios"}
+                {accionMasiva === "catalogo"     && "Visibilidad en catálogo"}
               </h3>
               <button onClick={() => setAccionMasiva(null)}>
                 <X className="h-5 w-5" style={{ color: "var(--text-muted)" }} />
@@ -488,15 +544,62 @@ export default function ProductosTabla({
               Aplicar a <strong>{cantidadSeleccionada}</strong> producto{cantidadSeleccionada !== 1 ? "s" : ""}
             </p>
 
-            {/* ── CAMBIO: opción "Sin categoría" agregada ── */}
             {accionMasiva === "categoria" && (
               <div>
                 <label className="label-base">Nueva categoría</label>
                 <select value={nuevaCategoria} onChange={(e) => setNuevaCategoria(e.target.value)} className="input-base">
                   <option value="">Seleccionar categoría</option>
                   <option value="sin-categoria">— Sin categoría —</option>
-                  {categorias.map((cat) => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
+                  {renderOpcionesCategoria(categorias).map((opt) => (
+                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                  ))}
                 </select>
+                <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                  Podés elegir una categoría principal o una subcategoría directamente.
+                </p>
+              </div>
+            )}
+
+            {/* ── NUEVO: flujo en 2 pasos para subcategoría ── */}
+            {accionMasiva === "subcategoria" && (
+              <div className="space-y-3">
+                <div>
+                  <label className="label-base">1. Elegí la categoría principal</label>
+                  <select
+                    value={padreSeleccionado}
+                    onChange={(e) => { setPadreSeleccionado(e.target.value); setNuevaSubcategoria(""); }}
+                    className="input-base"
+                  >
+                    <option value="">Seleccionar categoría</option>
+                    {categorias
+                      .filter((c) => c.hijas && c.hijas.length > 0)
+                      .map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                      ))}
+                  </select>
+                  {categorias.every((c) => !c.hijas || c.hijas.length === 0) && (
+                    <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
+                      Ninguna categoría tiene subcategorías creadas todavía.
+                    </p>
+                  )}
+                </div>
+
+                {padreSeleccionado && (
+                  <div>
+                    <label className="label-base">2. Elegí la subcategoría</label>
+                    <select
+                      value={nuevaSubcategoria}
+                      onChange={(e) => setNuevaSubcategoria(e.target.value)}
+                      className="input-base"
+                    >
+                      <option value="">Seleccionar subcategoría</option>
+                      <option value="sin-subcategoria">— Sin subcategoría ({padreActivo?.nombre}) —</option>
+                      {hijasDisponibles.map((hija) => (
+                        <option key={hija.id} value={hija.id}>{hija.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
 
@@ -595,17 +698,19 @@ export default function ProductosTabla({
               {accionMasiva !== "catalogo" && (
                 <button
                   onClick={
-                    accionMasiva === "categoria" ? aplicarCambioCategoria :
-                    accionMasiva === "proveedor" ? aplicarCambioProveedor :
-                    accionMasiva === "stock"     ? aplicarCambioStock     :
+                    accionMasiva === "categoria"    ? aplicarCambioCategoria :
+                    accionMasiva === "subcategoria" ? aplicarCambioSubcategoria :
+                    accionMasiva === "proveedor"    ? aplicarCambioProveedor :
+                    accionMasiva === "stock"        ? aplicarCambioStock :
                     aplicarCambioPrecio
                   }
                   disabled={
                     cargandoMasivo ||
-                    (accionMasiva === "categoria" && !nuevaCategoria) ||
-                    (accionMasiva === "proveedor" && !nuevoProveedor) ||
-                    (accionMasiva === "stock"     && !valorStock)     ||
-                    (accionMasiva === "precio"    && !valorPrecio)
+                    (accionMasiva === "categoria"    && !nuevaCategoria) ||
+                    (accionMasiva === "subcategoria" && !nuevaSubcategoria) ||
+                    (accionMasiva === "proveedor"    && !nuevoProveedor) ||
+                    (accionMasiva === "stock"        && !valorStock)     ||
+                    (accionMasiva === "precio"       && !valorPrecio)
                   }
                   className="flex-1 btn-primary disabled:opacity-50"
                 >

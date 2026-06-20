@@ -55,11 +55,14 @@ export async function PATCH(req: NextRequest) {
 
     switch (accion) {
       // ───────────────────────────────────────────────────────
-      // CAMBIAR CATEGORÍA — soporta null para quitar categoría
+      // CAMBIAR CATEGORÍA / SUBCATEGORÍA — ambas escriben en categoriaId
+      // "categoria"    → valor puede ser null (Sin categoría), id de padre, o id de hija
+      // "subcategoria" → valor siempre es un id (padre si "sin subcategoría", o hija)
       // ───────────────────────────────────────────────────────
-      case "categoria": {
-        // valor === null  → quitar categoría (Sin categoría)
-        // valor === string → asignar categoría existente
+      case "categoria":
+      case "subcategoria": {
+        // valor === null  → quitar categoría (Sin categoría) — solo aplica a "categoria"
+        // valor === string → asignar categoría/subcategoría existente
         if (valor === undefined) {
           return NextResponse.json(
             { ok: false, error: "Debe seleccionar una opción" },
@@ -235,7 +238,7 @@ export async function PATCH(req: NextRequest) {
         });
         break;
       }
-      
+
       default:
         return NextResponse.json(
           { ok: false, error: "Acción no válida" },
