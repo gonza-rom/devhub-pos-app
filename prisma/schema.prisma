@@ -90,7 +90,7 @@ model Categoria {
   tenantId    String
   nombre      String
   descripcion String?
-  padreId     String?     // ← NUEVO
+  padreId     String?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -98,9 +98,9 @@ model Categoria {
   hijas       Categoria[] @relation("SubCategorias")
   productos   Producto[]
 
-  @@unique([tenantId, nombre])
+  @@unique([tenantId, padreId, nombre])
   @@index([tenantId])
-  @@index([padreId])  // ← NUEVO
+  @@index([padreId])
 }
 
 model Proveedor {
