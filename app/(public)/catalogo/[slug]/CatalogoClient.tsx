@@ -1,12 +1,15 @@
 "use client";
 // app/(public)/catalogo/[slug]/CatalogoClient.tsx
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, type CSSProperties } from "react";
 import {
   Search, X, MapPin, Instagram, Facebook, MessageCircle,
   Package, Tag, ShoppingCart, ChevronDown, SlidersHorizontal,
   Plus, Minus, Trash2, Share2, Check, ExternalLink,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
+
+const PRODUCTOS_POR_PAGINA = 24;
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -422,6 +425,55 @@ function TarjetaProducto({
   );
 }
 
+// ── Paginación ───────────────────────────────────────────────
+
+function Paginacion({
+  pagina, totalPaginas, onCambiar,
+}: {
+  pagina: number;
+  totalPaginas: number;
+  onCambiar: (n: number) => void;
+}) {
+  const paginas = useMemo(() => {
+    const rango = new Set<number>([1, totalPaginas, pagina, pagina - 1, pagina + 1]);
+    return [...rango].filter(n => n >= 1 && n <= totalPaginas).sort((a, b) => a - b);
+  }, [pagina, totalPaginas]);
+
+  const botonBase: CSSProperties = {
+    minWidth: 34, height: 34, padding: "0 8px", borderRadius: 10, border: "1.5px solid #e5e7eb",
+    background: "#fff", color: "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-1.5" style={{ marginTop: 28 }}>
+      <button onClick={() => onCambiar(pagina - 1)} disabled={pagina === 1}
+        style={{ ...botonBase, opacity: pagina === 1 ? 0.4 : 1, cursor: pagina === 1 ? "default" : "pointer" }}>
+        <ChevronLeft style={{ width: 15, height: 15 }} />
+      </button>
+
+      {paginas.map((n, i) => {
+        const anterior = paginas[i - 1];
+        const saltoPrevio = anterior !== undefined && n - anterior > 1;
+        return (
+          <span key={n} className="flex items-center gap-1.5">
+            {saltoPrevio && <span style={{ color: "#9ca3af", fontSize: 13, padding: "0 2px" }}>…</span>}
+            <button onClick={() => onCambiar(n)}
+              style={{ ...botonBase, background: n === pagina ? "#111827" : "#fff", color: n === pagina ? "#fff" : "#374151", borderColor: n === pagina ? "#111827" : "#e5e7eb" }}>
+              {n}
+            </button>
+          </span>
+        );
+      })}
+
+      <button onClick={() => onCambiar(pagina + 1)} disabled={pagina === totalPaginas}
+        style={{ ...botonBase, opacity: pagina === totalPaginas ? 0.4 : 1, cursor: pagina === totalPaginas ? "default" : "pointer" }}>
+        <ChevronRight style={{ width: 15, height: 15 }} />
+      </button>
+    </div>
+  );
+}
+
 // ── Componente principal ─────────────────────────────────────
 
 export default function CatalogoClient({ tenant, productos, categorias }: Props) {
@@ -435,6 +487,8 @@ export default function CatalogoClient({ tenant, productos, categorias }: Props)
   const [carritoAbierto,  setCarritoAbierto]  = useState(false);
   const [carrito,         setCarrito]         = useState<ItemCarrito[]>([]);
   const [linkCopiado,     setLinkCopiado]     = useState(false);
+  const [pagina,          setPagina]          = useState(1);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const cantidadCarrito = carrito.reduce((a, i) => a + i.cantidad, 0);
 
@@ -453,6 +507,24 @@ export default function CatalogoClient({ tenant, productos, categorias }: Props)
     if (ordenar === "nombre")      lista = [...lista].sort((a, b) => a.nombre.localeCompare(b.nombre));
     return lista;
   }, [productos, busqueda, categoriaActiva, ordenar, precioMin, precioMax]);
+
+  useEffect(() => { setPagina(1); }, [busqueda, categoriaActiva, ordenar, precioMin, precioMax]);
+
+  const totalPaginas = Math.max(1, Math.ceil(productosFiltrados.length / PRODUCTOS_POR_PAGINA));
+
+  useEffect(() => {
+    if (pagina > totalPaginas) setPagina(totalPaginas);
+  }, [pagina, totalPaginas]);
+
+  const productosPagina = useMemo(() => {
+    const inicio = (pagina - 1) * PRODUCTOS_POR_PAGINA;
+    return productosFiltrados.slice(inicio, inicio + PRODUCTOS_POR_PAGINA);
+  }, [productosFiltrados, pagina]);
+
+  const irAPagina = useCallback((n: number) => {
+    setPagina(n);
+    gridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const agregarCarrito = useCallback((item: ItemCarrito) => {
     const key = `${item.productoId}_${item.varianteId ?? ""}`;
@@ -643,7 +715,7 @@ export default function CatalogoClient({ tenant, productos, categorias }: Props)
       </div>
 
       {/* ── GRID ── */}
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "8px 16px 100px" }}>
+      <main ref={gridRef} style={{ maxWidth: 1100, margin: "0 auto", padding: "8px 16px 100px", scrollMarginTop: 72 }}>
         <p style={{ fontSize: 12, color: "#9ca3af", marginBottom: 12 }}>
           {productosFiltrados.length === productos.length
             ? `${productos.length} productos`
@@ -657,17 +729,23 @@ export default function CatalogoClient({ tenant, productos, categorias }: Props)
             <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 4 }}>Probá con otros filtros</p>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-            {productosFiltrados.map(producto => (
-              <TarjetaProducto
-                key={producto.id}
-                producto={producto}
-                enCarrito={carrito.some(i => i.productoId === producto.id)}
-                onVerDetalle={() => setProductoModal(producto)}
-                onAgregarRapido={() => agregarRapido(producto)}
-              />
-            ))}
-          </div>
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+              {productosPagina.map(producto => (
+                <TarjetaProducto
+                  key={producto.id}
+                  producto={producto}
+                  enCarrito={carrito.some(i => i.productoId === producto.id)}
+                  onVerDetalle={() => setProductoModal(producto)}
+                  onAgregarRapido={() => agregarRapido(producto)}
+                />
+              ))}
+            </div>
+
+            {totalPaginas > 1 && (
+              <Paginacion pagina={pagina} totalPaginas={totalPaginas} onCambiar={irAPagina} />
+            )}
+          </>
         )}
       </main>
 
