@@ -48,10 +48,11 @@ const tenant = await prisma.tenant.findFirst({
   const categoriasMap = new Map<string, string>();
   
   for (const cat of CATEGORIAS) {
-    const categoria = await prisma.categoria.upsert({
-      where: { tenantId_nombre: { tenantId: tenant.id, nombre: cat } },
-      create: { tenantId: tenant.id, nombre: cat },
-      update: {},
+    const existente = await prisma.categoria.findFirst({
+      where: { tenantId: tenant.id, padreId: null, nombre: cat },
+    });
+    const categoria = existente ?? await prisma.categoria.create({
+      data: { tenantId: tenant.id, nombre: cat },
     });
     categoriasMap.set(cat, categoria.id);
   }

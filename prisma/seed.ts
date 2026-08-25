@@ -25,22 +25,18 @@ async function main() {
   console.log(`✅ Tenant creado: ${tenant.nombre} (ID: ${tenant.id})`);
 
   // ── 2. Crear categorías ──────────────────────────────────────
+  async function categoriaRaiz(nombre: string) {
+    const existente = await prisma.categoria.findFirst({
+      where: { tenantId: tenant.id, padreId: null, nombre },
+    });
+    if (existente) return existente;
+    return prisma.categoria.create({ data: { tenantId: tenant.id, nombre } });
+  }
+
   const categorias = await Promise.all([
-    prisma.categoria.upsert({
-      where: { tenantId_nombre: { tenantId: tenant.id, nombre: "Bebidas" } },
-      update: {},
-      create: { tenantId: tenant.id, nombre: "Bebidas" },
-    }),
-    prisma.categoria.upsert({
-      where: { tenantId_nombre: { tenantId: tenant.id, nombre: "Snacks" } },
-      update: {},
-      create: { tenantId: tenant.id, nombre: "Snacks" },
-    }),
-    prisma.categoria.upsert({
-      where: { tenantId_nombre: { tenantId: tenant.id, nombre: "Limpieza" } },
-      update: {},
-      create: { tenantId: tenant.id, nombre: "Limpieza" },
-    }),
+    categoriaRaiz("Bebidas"),
+    categoriaRaiz("Snacks"),
+    categoriaRaiz("Limpieza"),
   ]);
   console.log(`✅ Categorías creadas: ${categorias.length}`);
 
